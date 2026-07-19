@@ -1,0 +1,339 @@
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Plus, Trash2, X, RotateCcw, Save } from "lucide-react";
+import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+function StringList({
+  values,
+  onChange,
+  placeholder,
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {values.map((v, i) => (
+        <div key={i} className="flex gap-2">
+          <Input
+            value={v}
+            spellCheck={false}
+            className="font-mono text-xs"
+            onChange={(e) => onChange(values.map((x, j) => (j === i ? e.target.value : x)))}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground"
+            onClick={() => onChange(values.filter((_, j) => j !== i))}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" className="self-start" onClick={() => onChange([...values, ""])}>
+        <Plus className="size-3.5" /> {placeholder}
+      </Button>
+    </div>
+  );
+}
+
+export function SettingsPage({
+  onClose,
+  onConfigChanged,
+  projects,
+}: {
+  onClose: () => void;
+  onConfigChanged: () => void;
+  projects: ProjectSummary[];
+}) {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [draft, setDraft] = useState<AppConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => api.getConfig().then((c) => {
+    setConfig(c);
+    setDraft(c);
+  });
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  if (!draft || !config) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading settings…</div>;
+  }
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(config);
+  const set = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) =>
+    setDraft({ ...draft, [key]: value });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const next = await api.updateConfig({
+        parentDir: draft.parentDir.trim(),
+        maxScanDepth: draft.maxScanDepth,
+        envFiles: draft.envFiles.map((s) => s.trim()).filter(Boolean),
+        devScriptPriority: draft.devScriptPriority.map((s) => s.trim()).filter(Boolean),
+        maxLogLines: draft.maxLogLines,
+        showNonNodeProjects: draft.showNonNodeProjects,
+      });
+      setConfig(next);
+      setDraft(next);
+      onConfigChanged();
+      toast.success("Settings saved");
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = async () => {
+    try {
+      const next = await api.resetConfig();
+      setConfig(next);
+      setDraft(next);
+      onConfigChanged();
+      toast.success("Settings reset to defaults");
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
+  const clearOverride = async (name: string) => {
+    try {
+      await api.clearOverride(name);
+      await load();
+      onConfigChanged();
+      toast.success(`Cleared override for ${name}`);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
+  const overrideEntries = Object.entries(config.overrides).filter(
+    ([, v]) => v.devCommand && v.devCommand.trim(),
+  );
+  const nameForPath = (p: string) => projects.find((pr) => pr.path === p)?.name ?? p.split("/").pop() ?? p;
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div>
+          <h1 className="text-lg font-semibold">Settings</h1>
+          <p className="text-xs text-muted-foreground">
+            Stored at <code className="font-mono">~/.claude-management/config.json</code>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <RotateCcw className="size-4" /> Reset to defaults
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset settings to defaults?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This restores the scanning folder, env files, detection order, and log settings to
+                  their defaults. Your per-project command overrides are kept.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={reset}>Reset</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+          <Button size="sm" onClick={save} disabled={!dirty || saving}>
+            <Save className="size-4" /> {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <div className="px-6 border-b border-border">
+          <TabsList className="bg-transparent p-0 h-auto gap-1">
+            <TabsTrigger value="general" className="data-[state=active]:bg-accent">General</TabsTrigger>
+            <TabsTrigger value="detection" className="data-[state=active]:bg-accent">Detection &amp; Env</TabsTrigger>
+            <TabsTrigger value="overrides" className="data-[state=active]:bg-accent">
+              Project overrides {overrideEntries.length > 0 && `(${overrideEntries.length})`}
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scroll">
+          <div className="p-6 max-w-3xl flex flex-col gap-6">
+            <TabsContent value="general" className="mt-0 flex flex-col gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scanning folder</CardTitle>
+                  <CardDescription>Parent directory scanned for git repositories.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <Input
+                    value={draft.parentDir}
+                    spellCheck={false}
+                    className="font-mono text-xs"
+                    onChange={(e) => set("parentDir", e.target.value)}
+                  />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Search depth</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        How many folder levels deep to look for git repos. Use 2–3 for grouping
+                        folders like <code className="font-mono">sweet/frontend/app</code>.
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={draft.maxScanDepth}
+                      className="w-24"
+                      onChange={(e) => set("maxScanDepth", Number(e.target.value) || 1)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Project list</CardTitle>
+                  <CardDescription>Control which repos appear in the sidebar.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between">
+                  <div>
+                    <Label>Show non-Node projects</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Include git repos without a <code className="font-mono">package.json</code>.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={draft.showNonNodeProjects}
+                    onCheckedChange={(v) => set("showNonNodeProjects", v)}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Logs</CardTitle>
+                  <CardDescription>How many log lines to retain per server in memory.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={100}
+                    step={100}
+                    value={draft.maxLogLines}
+                    className="w-40"
+                    onChange={(e) => set("maxLogLines", Number(e.target.value) || 0)}
+                  />
+                  <span className="text-xs text-muted-foreground">lines</span>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="detection" className="mt-0 flex flex-col gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Environment files</CardTitle>
+                  <CardDescription>
+                    Filenames shown in each project's Environment editor, in order.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StringList
+                    values={draft.envFiles}
+                    onChange={(v) => set("envFiles", v)}
+                    placeholder="Add env file"
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dev command detection</CardTitle>
+                  <CardDescription>
+                    package.json script names tried in order when auto-detecting the dev command.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StringList
+                    values={draft.devScriptPriority}
+                    onChange={(v) => set("devScriptPriority", v)}
+                    placeholder="Add script name"
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="overrides" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Per-project command overrides</CardTitle>
+                  <CardDescription>
+                    Custom dev commands set from a project's Branches &amp; Worktrees tab.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  {overrideEntries.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No overrides set.</p>
+                  ) : (
+                    overrideEntries.map(([path, v], i) => (
+                      <div key={path}>
+                        {i > 0 && <Separator className="my-2" />}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm">{nameForPath(path)}</div>
+                            <div className="text-xs font-mono text-muted-foreground truncate">
+                              {v.devCommand}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive shrink-0"
+                            onClick={() => clearOverride(nameForPath(path))}
+                          >
+                            <Trash2 className="size-4" /> Clear
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </div>
+        </div>
+      </Tabs>
+    </>
+  );
+}
