@@ -13,6 +13,7 @@
     "preview": "npm run build && cross-env NODE_ENV=production tsx server/index.ts",
     "test:server": "node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
     "test:server:rust": "cargo build --manifest-path src-tauri/Cargo.toml --bin kablan-server --no-default-features && cross-env KABLAN_SERVER_CMD=\"./src-tauri/target/debug/kablan-server\" node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
