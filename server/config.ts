@@ -2,7 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const CONFIG_DIR = join(homedir(), ".claude-management");
+// Config location is overridable via KABLAN_CONFIG_DIR (used by tests for isolation).
+const CONFIG_DIR = process.env.KABLAN_CONFIG_DIR || join(homedir(), ".kablan");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 export interface ProjectOverride {
@@ -23,6 +24,8 @@ export interface AppConfig {
   maxLogLines: number;
   /** Show git repos even when they have no package.json / dev command. */
   showNonNodeProjects: boolean;
+  /** Linear workspace slug (the linear.app/<slug> part) for ticket links. Empty disables links. */
+  linearWorkspace: string;
   /** Per-project settings, keyed by absolute project path. */
   overrides: Record<string, ProjectOverride>;
 }
@@ -34,6 +37,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   devScriptPriority: ["dev", "start", "serve", "develop"],
   maxLogLines: 2000,
   showNonNodeProjects: true,
+  linearWorkspace: "",
   overrides: {},
 };
 

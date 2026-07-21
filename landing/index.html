@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kablan.dev — your local dev environment, under one roof</title>
+    <meta
+      name="description"
+      content="A fast, native desktop cockpit for your local dev environment: every repo, branch and worktree, env files, and dev servers with live logs — no terminal tab graveyard."
+    />
+    <meta property="og:title" content="Kablan.dev" />
+    <meta property="og:description" content="Your local dev environment, under one roof." />
+    <meta property="og:type" content="website" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%97%EF%B8%8F%3C/text%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --bg: #0e0d0b;
+        --bg-2: #17150f;
+        --panel: #1c1a14;
+        --panel-2: #232019;
+        --border: #322d22;
+        --text: #f2ede2;
+        --muted: #a89e8b;
+        --accent: #e8a34d;
+        --accent-2: #d98338;
+        --sky: #6bb6e6;
+        --violet: #b39ddb;
+        --emerald: #5fd39a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { scroll-behavior: smooth; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      a { color: inherit; text-decoration: none; }
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+      .glow {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background:
+          radial-gradient(60% 50% at 75% -10%, rgba(232,163,77,0.18), transparent 70%),
+          radial-gradient(50% 40% at 10% 0%, rgba(107,182,230,0.10), transparent 70%);
+      }
+      .grid-bg {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(circle at 50% 20%, black, transparent 75%);
+      }
+      main, nav { position: relative; z-index: 1; }
+
+      /* Nav */
+      nav {
+        position: sticky; top: 0; z-index: 50;
+        backdrop-filter: blur(12px);
+        background: rgba(14,13,11,0.7);
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-in { display: flex; align-items: center; gap: 16px; height: 60px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+      .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 12px var(--accent-2); }
+      .nav-links { margin-left: auto; display: flex; align-items: center; gap: 22px; font-size: 14px; color: var(--muted); }
+      .nav-links a:hover { color: var(--text); }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
+        cursor: pointer; border: 1px solid transparent; transition: transform .12s ease, box-shadow .2s ease, background .2s;
+      }
+      .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #241a0c; box-shadow: 0 6px 24px rgba(232,163,77,0.35); }
+      .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(232,163,77,0.45); }
+      .btn-ghost { border-color: var(--border); color: var(--text); background: rgba(255,255,255,0.02); }
+      .btn-ghost:hover { border-color: var(--accent-2); }
+
+      /* Hero */
+      .hero { text-align: center; padding: 90px 0 40px; }
+      .pill {
+        display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
+        border: 1px solid var(--border); background: rgba(255,255,255,0.02); padding: 6px 14px; border-radius: 999px; margin-bottom: 26px;
+      }
+      .pill b { color: var(--emerald); font-weight: 600; }
+      h1 { font-size: clamp(38px, 6vw, 68px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 800; }
+      h1 .grad { background: linear-gradient(120deg, var(--accent) 20%, #f4c98a 50%, var(--sky) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .sub { max-width: 660px; margin: 22px auto 0; font-size: clamp(16px, 2.2vw, 20px); color: var(--muted); }
+      .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+      .cta .hint { color: var(--muted); font-size: 12.5px; margin-top: 12px; width: 100%; }
+
+      /* App mockup */
+      .shot { margin: 56px auto 0; max-width: 940px; position: relative; }
+      .shot::after { content: ""; position: absolute; inset: -1px; border-radius: 14px; padding: 1px; background: linear-gradient(160deg, rgba(232,163,77,0.5), transparent 40%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+      .win { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 40px 120px rgba(0,0,0,0.6); }
+      .titlebar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+      .tl { width: 12px; height: 12px; border-radius: 50%; }
+      .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
+      .titlebar .t { margin-left: 10px; font-size: 12px; color: var(--muted); }
+      .app { display: grid; grid-template-columns: 220px 1fr; min-height: 380px; text-align: left; }
+      .side { background: var(--bg-2); border-right: 1px solid var(--border); padding: 14px 10px; font-size: 13px; }
+      .side .search { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+      .side .grp { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 4px 6px 8px; }
+      .prow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 7px; color: #d8d0c0; }
+      .prow.active { background: rgba(232,163,77,0.12); color: var(--text); }
+      .prow .ic { width: 15px; height: 15px; opacity: .8; }
+      .prow .run { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+      .main { padding: 16px 18px; }
+      .fbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+      .fbar .inp { flex: 1; max-width: 240px; border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; color: var(--muted); font-size: 12px; }
+      .fbar .chip { border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; color: var(--muted); font-size: 12px; }
+      .ghead { display: flex; align-items: center; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 10px; border-radius: 7px; margin: 10px 0 6px; font-weight: 700; }
+      .ghead.wt { background: rgba(179,157,219,0.12); color: var(--violet); }
+      .ghead.br { background: rgba(107,182,230,0.12); color: var(--sky); }
+      .item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+      .item:hover { background: rgba(255,255,255,0.03); }
+      .badge { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+      .b-cur { background: rgba(95,211,154,0.15); color: var(--emerald); }
+      .b-main { background: rgba(107,182,230,0.15); color: var(--sky); }
+      .b-run { color: var(--emerald); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+      .b-run .d { width: 7px; height: 7px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 7px var(--emerald); }
+      .item .meta { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
+      .av { width: 20px; height: 20px; border-radius: 50%; background: rgba(232,163,77,0.2); color: var(--accent); font-size: 9px; font-weight: 700; display: grid; place-items: center; }
+      .heat { display: flex; gap: 3px; margin-top: 4px; }
+      .heat .col { display: flex; flex-direction: column; gap: 3px; }
+      .heat i { width: 9px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.06); display: block; }
+      .heat i.l1 { background: rgba(95,211,154,0.35);} .heat i.l2{ background: rgba(95,211,154,0.6);} .heat i.l3{ background: rgba(95,211,154,0.85);} .heat i.l4{ background: var(--emerald);}
+
+      /* Sections */
+      section { padding: 72px 0; }
+      .eyebrow { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; text-align: center; }
+      h2 { text-align: center; font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.02em; margin: 10px 0 8px; font-weight: 800; }
+      .lead { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 46px; }
+      .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+      .card { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 14px; padding: 24px; transition: transform .15s, border-color .2s; }
+      .card:hover { transform: translateY(-3px); border-color: var(--accent-2); }
+      .card .emo { font-size: 24px; margin-bottom: 12px; }
+      .card h3 { font-size: 17px; margin-bottom: 6px; }
+      .card p { color: var(--muted); font-size: 14px; }
+
+      /* Download */
+      .dl { background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+      .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 12px; }
+      .dlcard { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 26px; text-align: center; }
+      .dlcard.match { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(232,163,77,0.15); }
+      .dlcard .os { font-size: 30px; }
+      .dlcard h3 { margin: 8px 0 4px; }
+      .dlcard .files { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+      .dlcard .btn { width: 100%; justify-content: center; }
+      .stack { display: grid; gap: 8px; }
+      .stack a { font-size: 13px; color: var(--muted); }
+      .stack a:hover { color: var(--accent); }
+
+      /* How */
+      .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; text-align: center; }
+      .how .step .n { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--accent-2); color: var(--accent); display: grid; place-items: center; margin: 0 auto 12px; font-weight: 700; }
+      .how .step p { color: var(--muted); font-size: 14px; }
+
+      footer { border-top: 1px solid var(--border); padding: 34px 0; color: var(--muted); font-size: 13px; }
+      .foot { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+      .foot a:hover { color: var(--text); }
+      .foot .r { margin-left: auto; display: flex; gap: 18px; }
+
+      @media (max-width: 860px) {
+        .features, .dls, .how { grid-template-columns: 1fr; }
+        .app { grid-template-columns: 1fr; }
+        .side { display: none; }
+        .nav-links a.hide { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="grid-bg"></div>
+
+    <nav>
+      <div class="wrap nav-in">
+        <div class="brand"><span class="dot"></span> Kablan.dev</div>
+        <div class="nav-links">
+          <a class="hide" href="#features">Features</a>
+          <a class="hide" href="#how">How it works</a>
+          <a href="https://github.com/AmarShaked/kablan.dev">GitHub</a>
+          <a class="btn btn-primary" href="#download">Download</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <header class="hero wrap">
+        <div class="pill">🏗️ Open source · <b>MIT</b> · macOS · Windows · Linux</div>
+        <h1>Your local dev environment,<br /><span class="grad">under one roof.</span></h1>
+        <p class="sub">
+          Every repo, branch and worktree at a glance. Edit env files, spin dev servers up and
+          down with live logs, pull and switch branches — one fast, native desktop app instead of
+          a terminal-tab graveyard.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" id="hero-dl" href="#download">⬇ Download for your OS</a>
+          <a class="btn btn-ghost" href="https://github.com/AmarShaked/kablan.dev">★ Star on GitHub</a>
+          <div class="hint" id="hero-hint">Free &amp; open source. No account, no telemetry.</div>
+        </div>
+
+        <div class="shot">
+          <div class="win">
+            <div class="titlebar">
+              <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+              <span class="t">Kablan.dev</span>
+            </div>
+            <div class="app">
+              <aside class="side">
+                <div class="search">🔍 Filter projects…</div>
+                <div class="grp">Projects</div>
+                <div class="prow active">📦 web-app <span class="run"></span></div>
+                <div class="prow">🚀 api-gateway</div>
+                <div class="prow">🧩 design-system</div>
+                <div class="prow">📊 analytics</div>
+                <div class="prow">🤖 agent-runtime</div>
+                <div class="prow">🛠️ infra</div>
+              </aside>
+              <div class="main">
+                <div class="fbar">
+                  <div class="inp">Search name, author, sha…</div>
+                  <div class="chip">All authors ▾</div>
+                  <div class="chip">● Running</div>
+                </div>
+                <div class="ghead wt">🌲 Worktrees <span style="opacity:.6">2</span></div>
+                <div class="item">
+                  main <span class="badge b-cur">✓ current</span><span class="badge b-main">main</span>
+                  <span class="b-run"><span class="d"></span>running</span>
+                  <span class="meta">1694c71 · 2m <span class="av">SA</span></span>
+                </div>
+                <div class="item">
+                  feat/checkout-flow
+                  <span class="meta">a41f0d2 · 3h <span class="av">DK</span></span>
+                </div>
+                <div class="ghead br">🔀 Branches <span style="opacity:.6">3</span></div>
+                <div class="item">
+                  main <span class="badge b-cur">✓ current</span>
+                  <span class="meta">1694c71 · 2m <span class="av">SA</span></span>
+                </div>
+                <div class="item">
+                  vk/2481-fix-reorder
+                  <span class="meta">↓2 · dad783a · 5d <span class="av">MB</span></span>
+                </div>
+                <div class="item">
+                  release/0.4
+                  <span class="meta">9f2c1a0 · 2w <span class="av">SA</span></span>
+                </div>
+                <div class="heat" style="margin-top:14px" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section id="features" class="wrap">
+        <div class="eyebrow">Everything, one window</div>
+        <h2>Stop juggling terminals</h2>
+        <p class="lead">Kablan.dev pulls your whole local workflow into a single, fast surface.</p>
+        <div class="features">
+          <div class="card"><div class="emo">🗂️</div><h3>Every repo at a glance</h3><p>Recursively discovers all git repos under a folder you pick. Nested repos like <code>acme/frontend/app</code> stay grouped and instantly searchable.</p></div>
+          <div class="card"><div class="emo">🌿</div><h3>Branches &amp; worktrees</h3><p>One unified, virtualized list — current branch, ahead/behind vs. upstream, and a commit-activity heatmap scoped to each branch's own work.</p></div>
+          <div class="card"><div class="emo">▶️</div><h3>Dev servers, one click</h3><p>Start or stop a dev server from any row. One per project — starting a new one replaces the old — with live console logs streamed in.</p></div>
+          <div class="card"><div class="emo">🔑</div><h3>Environment editor</h3><p>View and edit each project's and each worktree's <code>.env</code> files right in the app. No more <code>cd</code>-ing around to find them.</p></div>
+          <div class="card"><div class="emo">🔀</div><h3>Git without the terminal</h3><p>Check out branches and pull — including fast-forwarding branches that aren't even checked out — without dropping to a shell.</p></div>
+          <div class="card"><div class="emo">⚡</div><h3>Native &amp; fast</h3><p>A Rust backend (Axum) in a Tauri shell. Small footprint, instant startup, and a warm, focused UI in light or dark.</p></div>
+        </div>
+      </section>
+
+      <section id="how" class="wrap">
+        <div class="eyebrow">Under the hood</div>
+        <h2>Native where it counts</h2>
+        <p class="lead">A Rust core does the git, filesystem and process work; a React UI renders it. Shipped as one Tauri app.</p>
+        <div class="how">
+          <div class="step"><div class="n">1</div><h3>Point it at a folder</h3><p>Kablan.dev scans for git repos and builds your project list in seconds.</p></div>
+          <div class="step"><div class="n">2</div><h3>Work the way you already do</h3><p>Switch branches, edit envs, run dev servers — it drives real <code>git</code> and your package-manager scripts.</p></div>
+          <div class="step"><div class="n">3</div><h3>Stay in flow</h3><p>Live logs, running indicators and update notifications keep everything in view.</p></div>
+        </div>
+      </section>
+
+      <section id="download" class="dl">
+        <div class="wrap">
+          <div class="eyebrow">Download</div>
+          <h2>Get Kablan.dev</h2>
+          <p class="lead">Latest version: <b id="ver">…</b> · <a href="https://github.com/AmarShaked/kablan.dev/releases" style="color:var(--accent)">all releases</a></p>
+          <div class="dls">
+            <div class="dlcard" id="card-mac">
+              <div class="os">🍎</div><h3>macOS</h3><div class="files">.dmg — Apple Silicon &amp; Intel</div>
+              <a class="btn btn-primary" id="dl-mac" href="https://github.com/AmarShaked/kablan.dev/releases">Download</a>
+            </div>
+            <div class="dlcard" id="card-win">
+              <div class="os">🪟</div><h3>Windows</h3><div class="files">.msi / .exe installer</div>
+              <a class="btn btn-primary" id="dl-win" href="https://github.com/AmarShaked/kablan.dev/releases">Download</a>
+            </div>
+            <div class="dlcard" id="card-linux">
+              <div class="os">🐧</div><h3>Linux</h3><div class="files">.AppImage / .deb</div>
+              <a class="btn btn-primary" id="dl-linux" href="https://github.com/AmarShaked/kablan.dev/releases">Download</a>
+            </div>
+          </div>
+          <p class="lead" style="margin-top:26px;font-size:13px">
+            Builds are unsigned for now — on macOS right-click → Open the first time; on Windows choose “More info → Run anyway”.
+            Requires <code>git</code> and Node.js, the tools you already develop with.
+          </p>
+        </div>
+      </section>
+
+      <footer>
+        <div class="wrap foot">
+          <div class="brand"><span class="dot"></span> Kablan.dev</div>
+          <span>MIT © Shaked Amar</span>
+          <div class="r">
+            <a href="https://github.com/AmarShaked/kablan.dev">GitHub</a>
+            <a href="https://github.com/AmarShaked/kablan.dev/releases">Releases</a>
+            <a href="https://github.com/AmarShaked/kablan.dev/issues">Issues</a>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      // Fill the heatmap mockup deterministically.
+      (function () {
+        const heat = document.querySelector(".heat");
+        if (!heat) return;
+        const seed = [2, 3, 0, 1, 4, 2, 3, 1, 0, 2, 4, 3, 1, 2, 0, 3, 2, 4, 1, 2, 3, 0, 1, 2, 4, 3];
+        for (let w = 0; w < 26; w++) {
+          const col = document.createElement("div");
+          col.className = "col";
+          for (let d = 0; d < 7; d++) {
+            const cell = document.createElement("i");
+            const lvl = (seed[(w * 7 + d) % seed.length] + d) % 5;
+            if (lvl) cell.className = "l" + lvl;
+            col.appendChild(cell);
+          }
+          heat.appendChild(col);
+        }
+      })();
+
+      // OS detection → highlight the matching download card + hero button.
+      const REPO = "AmarShaked/kablan.dev";
+      const ua = navigator.userAgent;
+      const os = /Mac/i.test(ua) ? "mac" : /Win/i.test(ua) ? "win" : /Linux|X11/i.test(ua) ? "linux" : null;
+      const label = { mac: "macOS", win: "Windows", linux: "Linux" };
+      if (os) {
+        const card = document.getElementById("card-" + os);
+        if (card) card.classList.add("match");
+        const hero = document.getElementById("hero-dl");
+        if (hero) hero.textContent = "⬇ Download for " + label[os];
+      }
+
+      // Pull the latest release assets from GitHub and wire the buttons.
+      const RELEASES = "https://github.com/" + REPO + "/releases";
+      function pick(assets, patterns) {
+        for (const p of patterns) {
+          const a = assets.find((x) => p.test(x.name));
+          if (a) return a.browser_download_url;
+        }
+        return null;
+      }
+      fetch("https://api.github.com/repos/" + REPO + "/releases/latest", {
+        headers: { Accept: "application/vnd.github+json" },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((rel) => {
+          const assets = rel.assets || [];
+          document.getElementById("ver").textContent = (rel.tag_name || "").replace(/^v/, "") || "—";
+          const map = {
+            mac: [/\.dmg$/i, /\.app\.tar\.gz$/i],
+            win: [/\.msi$/i, /setup\.exe$/i, /\.exe$/i],
+            linux: [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i],
+          };
+          for (const k of Object.keys(map)) {
+            const url = pick(assets, map[k]);
+            const el = document.getElementById("dl-" + k);
+            if (el) el.href = url || RELEASES;
+          }
+          const heroUrl = os ? pick(assets, map[os]) : null;
+          const hero = document.getElementById("hero-dl");
+          if (hero) hero.href = heroUrl || "#download";
+        })
+        .catch(() => {
+          document.getElementById("ver").textContent = "coming soon";
+        });
+    </script>
+  </body>
+</html>

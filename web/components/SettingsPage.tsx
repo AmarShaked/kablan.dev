@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -97,6 +98,7 @@ export function SettingsPage({
         devScriptPriority: draft.devScriptPriority.map((s) => s.trim()).filter(Boolean),
         maxLogLines: draft.maxLogLines,
         showNonNodeProjects: draft.showNonNodeProjects,
+        linearWorkspace: draft.linearWorkspace.trim(),
       });
       setConfig(next);
       setDraft(next);
@@ -139,12 +141,15 @@ export function SettingsPage({
 
   return (
     <>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div>
-          <h1 className="text-lg font-semibold">Settings</h1>
-          <p className="text-xs text-muted-foreground">
-            Stored at <code className="font-mono">~/.claude-management/config.json</code>
-          </p>
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border">
+        <div className="flex items-center gap-3">
+          <SidebarTrigger className="shrink-0" />
+          <div>
+            <h1 className="text-lg font-semibold">Settings</h1>
+            <p className="text-xs text-muted-foreground">
+              Stored at <code className="font-mono">~/.kablan/config.json</code>
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <AlertDialog>
@@ -178,10 +183,10 @@ export function SettingsPage({
 
       <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden gap-0">
         <div className="px-6 border-b border-border">
-          <TabsList className="bg-transparent p-0 h-auto gap-1">
-            <TabsTrigger value="general" className="data-[state=active]:bg-accent">General</TabsTrigger>
-            <TabsTrigger value="detection" className="data-[state=active]:bg-accent">Detection &amp; Env</TabsTrigger>
-            <TabsTrigger value="overrides" className="data-[state=active]:bg-accent">
+          <TabsList variant="line" className="h-11">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="detection">Detection &amp; Env</TabsTrigger>
+            <TabsTrigger value="overrides">
               Project overrides {overrideEntries.length > 0 && `(${overrideEntries.length})`}
             </TabsTrigger>
           </TabsList>
@@ -207,7 +212,7 @@ export function SettingsPage({
                       <Label>Search depth</Label>
                       <p className="text-xs text-muted-foreground mt-1">
                         How many folder levels deep to look for git repos. Use 2–3 for grouping
-                        folders like <code className="font-mono">sweet/frontend/app</code>.
+                        folders like <code className="font-mono">acme/frontend/app</code>.
                       </p>
                     </div>
                     <Input
@@ -256,6 +261,26 @@ export function SettingsPage({
                     onChange={(e) => set("maxLogLines", Number(e.target.value) || 0)}
                   />
                   <span className="text-xs text-muted-foreground">lines</span>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Linear</CardTitle>
+                  <CardDescription>
+                    Workspace slug from your Linear URL (<code className="font-mono">linear.app/&lt;slug&gt;</code>).
+                    When set, branches/worktrees with a ticket id (e.g. <code className="font-mono">FE-3146</code>)
+                    show a link to Linear.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Input
+                    value={draft.linearWorkspace}
+                    spellCheck={false}
+                    placeholder="e.g. acme"
+                    className="font-mono text-xs"
+                    onChange={(e) => set("linearWorkspace", e.target.value)}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

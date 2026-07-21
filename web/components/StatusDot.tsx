@@ -2,11 +2,11 @@ import { cn } from "@/lib/utils";
 import type { ServerStatus } from "../api.ts";
 
 const COLORS: Record<string, string> = {
-  running: "bg-[var(--success)] shadow-[0_0_8px_var(--success)]",
+  running: "bg-[var(--success)] shadow-[0_0_5px_-1px_var(--success)]",
   starting: "bg-[var(--warning)]",
-  exited: "bg-destructive",
-  error: "bg-destructive",
-  stopped: "bg-muted-foreground",
+  exited: "bg-destructive/80",
+  error: "bg-destructive/80",
+  stopped: "bg-muted-foreground/60",
 };
 
 export function StatusDot({ status }: { status?: ServerStatus }) {

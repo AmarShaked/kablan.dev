@@ -1,18 +1,24 @@
 {
-  "name": "claude-management",
+  "name": "kablan-dev",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Manage your Claude dev environment: projects, branches, worktrees, env files, and dev servers.",
+  "description": "Kablan.dev — a desktop cockpit for your local dev environment: projects, branches, worktrees, env files, and dev servers.",
   "scripts": {
     "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "preview": "npm run build && cross-env NODE_ENV=production tsx server/index.ts"
+    "preview": "npm run build && cross-env NODE_ENV=production tsx server/index.ts",
+    "test:server": "node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
+    "test:server:rust": "cargo build --manifest-path src-tauri/Cargo.toml --bin kablan-server --no-default-features && cross-env KABLAN_SERVER_CMD=\"./src-tauri/target/debug/kablan-server\" node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-virtual": "^3.14.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
@@ -26,6 +32,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",

@@ -1,0 +1,31 @@
+name: Deploy landing page
+
+# Publishes landing/ to the `gh-pages` branch. Enable Pages once in
+# Settings → Pages → Source: "Deploy from a branch" → gh-pages / root.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "landing/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./landing
+          publish_branch: gh-pages
+          force_orphan: true

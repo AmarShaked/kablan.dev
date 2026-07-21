@@ -107,7 +107,7 @@ export function LogsTab({
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className="absolute inset-0 overflow-y-auto rounded-lg border border-border bg-[#08090c] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
+          className="absolute inset-0 overflow-y-auto custom-scroll rounded-lg border border-border bg-[var(--terminal)] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
         >
           {logs.length === 0 ? (
             <span className="text-muted-foreground">
@@ -118,9 +118,9 @@ export function LogsTab({
               <div
                 key={i}
                 className={cn(
-                  l.stream === "stderr" && "text-red-400",
+                  l.stream === "stderr" && "text-[var(--destructive)]",
                   l.stream === "system" && "text-[var(--warning)]",
-                  l.stream === "stdout" && "text-zinc-300",
+                  l.stream === "stdout" && "text-foreground/80",
                 )}
               >
                 {stripAnsi(l.text).replace(/\n$/, "")}

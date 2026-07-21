@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kablan.dev",
+  "version": "0.1.0",
+  "identifier": "dev.kablan.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5317",
+    "beforeDevCommand": "npm run dev:web",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Your local dev environment, under one roof.",
+    "longDescription": "Kablan.dev is a desktop cockpit for your local dev environment: every git repo, branch and worktree at a glance, env-file editing, and dev servers with live logs.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

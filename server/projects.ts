@@ -123,7 +123,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         getLastCommitTs(dir),
       ]);
       // Name is the path relative to the scanning folder, so nested repos
-      // (e.g. "sweet/frontend/app") stay grouped and unambiguous.
+      // (e.g. "acme/frontend/app") stay grouped and unambiguous.
       const name = relative(parent, dir).split(sep).join("/");
       return {
         name,

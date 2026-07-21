@@ -7,7 +7,15 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig, saveConfig, setOverride, clearOverride, DEFAULT_CONFIG } from "./config.ts";
-import { listBranches, listWorktrees, checkoutBranch, getCurrentBranch, pull } from "./git.ts";
+import {
+  listBranches,
+  listWorktrees,
+  checkoutBranch,
+  getCurrentBranch,
+  pull,
+  pullBranch,
+  getCommitActivity,
+} from "./git.ts";
 import {
   listProjects,
   readEnvFiles,
@@ -26,7 +34,9 @@ import {
   serverEvents,
 } from "./processes.ts";
 
-const PORT = 4317;
+// PORT is overridable via env; PORT=0 lets the OS pick a free port (used by tests).
+const PORT = process.env.PORT !== undefined ? Number(process.env.PORT) : 4317;
+const HOST = "127.0.0.1";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
@@ -56,6 +66,7 @@ api.put("/config", (req, res) => {
     patch.maxLogLines = Math.floor(body.maxLogLines);
   }
   if (typeof body.showNonNodeProjects === "boolean") patch.showNonNodeProjects = body.showNonNodeProjects;
+  if (typeof body.linearWorkspace === "string") patch.linearWorkspace = body.linearWorkspace.trim();
   const next = saveConfig(patch);
   res.json(next);
 });
@@ -70,6 +81,7 @@ api.post("/config/reset", (_req, res) => {
     devScriptPriority: [...DEFAULT_CONFIG.devScriptPriority],
     maxLogLines: DEFAULT_CONFIG.maxLogLines,
     showNonNodeProjects: DEFAULT_CONFIG.showNonNodeProjects,
+    linearWorkspace: DEFAULT_CONFIG.linearWorkspace,
     overrides: current.overrides,
   });
   res.json(next);
@@ -111,6 +123,19 @@ api.get("/projects/:name/worktrees", async (req, res) => {
   }
 });
 
+api.get("/projects/:name/commits", async (req, res) => {
+  try {
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : undefined;
+    const dir = cwdParam
+      ? await resolveWorkdir(req.params.name, cwdParam)
+      : projectPathFromName(req.params.name);
+    const ref = typeof req.query.ref === "string" && req.query.ref ? req.query.ref : undefined;
+    res.json({ timestamps: await getCommitActivity(dir, ref) });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
 api.post("/projects/:name/checkout", async (req, res) => {
   try {
     const dir = projectPathFromName(req.params.name);
@@ -132,6 +157,21 @@ api.post("/projects/:name/pull", async (req, res) => {
     const dir = projectPathFromName(req.params.name);
     const output = await pull(dir);
     res.json({ output, currentBranch: await getCurrentBranch(dir) });
+  } catch (err) {
+    res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
+  }
+});
+
+api.post("/projects/:name/pull-branch", async (req, res) => {
+  try {
+    const dir = projectPathFromName(req.params.name);
+    const { branch, cwd } = req.body ?? {};
+    if (typeof branch !== "string" || !branch) {
+      return res.status(400).json({ error: "branch is required" });
+    }
+    const workdir = cwd ? await resolveWorkdir(req.params.name, cwd) : undefined;
+    const output = await pullBranch(dir, branch, workdir);
+    res.json({ output });
   } catch (err) {
     res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
   }
@@ -247,10 +287,13 @@ wss.on("connection", (ws: WebSocket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`\n  claude-management server → http://localhost:${PORT}`);
+httpServer.listen(PORT, HOST, () => {
+  const addr = httpServer.address();
+  const port = typeof addr === "object" && addr ? addr.port : PORT;
+  // Machine-readable ready line — the Rust port and test harness both key off this.
+  console.log(`Kablan.dev listening on http://${HOST}:${port}`);
   const cfg = loadConfig();
-  console.log(`  scanning projects in:    ${cfg.parentDir}\n`);
+  console.log(`  scanning projects in: ${cfg.parentDir}`);
 });
 
 function shutdown() {

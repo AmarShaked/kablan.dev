@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
-import { api, type ProjectSummary, type EnvFile, type Worktree, type RunningServer } from "../api.ts";
+import { api, type ProjectSummary, type EnvFile, type RunningServer } from "../api.ts";
+import { useWorktrees } from "../queries.ts";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,24 +19,24 @@ import { cn } from "@/lib/utils";
 export function EnvTab({
   project,
   server,
+  defaultCwd,
+  lockDirectory = false,
 }: {
   project: ProjectSummary;
   server: RunningServer | null;
+  defaultCwd?: string;
+  /** When true, edit only defaultCwd's env (no directory picker) — used in the item drawer. */
+  lockDirectory?: boolean;
 }) {
-  // Default to the directory the dev server is actually running in, so the
-  // editor matches what the running server loads. Worktrees each have their own env.
-  const [cwd, setCwd] = useState(server?.cwd || project.path);
-  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
+  // Default to the item's directory (drawer), else the running server's dir, else main.
+  const [cwd, setCwd] = useState(defaultCwd || server?.cwd || project.path);
+  const worktrees = useWorktrees(project.name).data ?? [];
   const [files, setFiles] = useState<EnvFile[]>([]);
   const [active, setActive] = useState(0);
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    api.getWorktrees(project.name).then(setWorktrees).catch(() => setWorktrees([]));
-  }, [project.name]);
 
   useEffect(() => {
     setLoading(true);
@@ -86,34 +88,43 @@ export function EnvTab({
 
   return (
     <div className="flex flex-col gap-3 max-w-4xl">
-      <div className="grid gap-2">
-        <Label>Directory (each worktree has its own env files)</Label>
-        <Select value={cwd} onValueChange={changeCwd}>
-          <SelectTrigger className="font-mono text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={project.path} className="font-mono text-xs">
-              {project.path} (main)
-            </SelectItem>
-            {worktreeOptions.map((w) => (
-              <SelectItem key={w.path} value={w.path} className="font-mono text-xs">
-                {w.path} {w.branch ? `(${w.branch})` : ""}
+      {!lockDirectory && (
+        <div className="grid gap-2">
+          <Label>Directory (each worktree has its own env files)</Label>
+          <Select value={cwd} onValueChange={changeCwd}>
+            <SelectTrigger className="font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={project.path} className="font-mono text-xs">
+                {project.path} (main)
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {server && (
-          <p className="text-[11px] text-muted-foreground">
-            {runningHere
-              ? "✓ This is the directory your dev server is running in."
-              : `Heads up: your dev server is running in ${server.cwd} — select it to edit the env it loads.`}
-          </p>
-        )}
-      </div>
+              {worktreeOptions.map((w) => (
+                <SelectItem key={w.path} value={w.path} className="font-mono text-xs">
+                  {w.path} {w.branch ? `(${w.branch})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {server && (
+            <p className="text-[11px] text-muted-foreground">
+              {runningHere
+                ? "✓ This is the directory your dev server is running in."
+                : `Heads up: your dev server is running in ${server.cwd} — select it to edit the env it loads.`}
+            </p>
+          )}
+        </div>
+      )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading env files…</p>
+        <>
+          <div className="flex flex-wrap gap-2">
+            {[16, 20, 24, 28].map((w, i) => (
+              <Skeleton key={i} className="h-[30px] rounded-md" style={{ width: `${w * 4}px` }} />
+            ))}
+          </div>
+          <Skeleton className="min-h-[360px] w-full rounded-lg" />
+        </>
       ) : files.length === 0 ? (
         <p className="text-sm text-muted-foreground">No env files configured. Add some in Settings.</p>
       ) : (

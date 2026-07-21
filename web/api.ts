@@ -5,6 +5,7 @@ export interface AppConfig {
   devScriptPriority: string[];
   maxLogLines: number;
   showNonNodeProjects: boolean;
+  linearWorkspace: string;
   overrides: Record<string, { devCommand?: string }>;
 }
 
@@ -25,6 +26,10 @@ export interface Branch {
   upstream: string | null;
   lastCommit: string | null;
   lastCommitDate: string | null;
+  lastCommitTs: number | null;
+  author: string | null;
+  ahead: number;
+  behind: number;
 }
 
 export interface Worktree {
@@ -35,6 +40,8 @@ export interface Worktree {
   detached: boolean;
   locked: boolean;
   isMain: boolean;
+  lastCommitTs: number | null;
+  author: string | null;
 }
 
 export interface EnvFile {
@@ -62,8 +69,24 @@ export interface LogLine {
   text: string;
 }
 
+// In the Tauri app the UI is served from the bundled assets, so it must reach the
+// local Rust backend by absolute URL (the port is injected by the shell). In the
+// browser dev server, requests stay relative and go through the Vite proxy.
+export const API_BASE =
+  typeof window !== "undefined" && window.__KABLAN_PORT__
+    ? `http://127.0.0.1:${window.__KABLAN_PORT__}`
+    : "";
+
+export function wsUrl(): string {
+  if (typeof window !== "undefined" && window.__KABLAN_PORT__) {
+    return `ws://127.0.0.1:${window.__KABLAN_PORT__}/ws`;
+  }
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/ws`;
+}
+
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(API_BASE + url, {
     ...opts,
     headers: { "Content-Type": "application/json", ...(opts?.headers ?? {}) },
   });
@@ -88,6 +111,15 @@ export const api = {
   listProjects: () => req<ProjectSummary[]>("/api/projects"),
   getBranches: (name: string) => req<Branch[]>(`/api/projects/${encodeURIComponent(name)}/branches`),
   getWorktrees: (name: string) => req<Worktree[]>(`/api/projects/${encodeURIComponent(name)}/worktrees`),
+  getCommits: (name: string, opts: { ref?: string; cwd?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.ref) p.set("ref", opts.ref);
+    if (opts.cwd) p.set("cwd", opts.cwd);
+    const qs = p.toString();
+    return req<{ timestamps: number[] }>(
+      `/api/projects/${encodeURIComponent(name)}/commits${qs ? `?${qs}` : ""}`,
+    );
+  },
   checkout: (name: string, branch: string) =>
     req<{ currentBranch: string | null }>(`/api/projects/${encodeURIComponent(name)}/checkout`, {
       method: "POST",
@@ -98,6 +130,11 @@ export const api = {
       `/api/projects/${encodeURIComponent(name)}/pull`,
       { method: "POST" },
     ),
+  pullBranch: (name: string, branch: string, cwd?: string) =>
+    req<{ output: string }>(`/api/projects/${encodeURIComponent(name)}/pull-branch`, {
+      method: "POST",
+      body: JSON.stringify({ branch, cwd }),
+    }),
 
   getEnv: (name: string, cwd?: string) =>
     req<EnvFile[]>(

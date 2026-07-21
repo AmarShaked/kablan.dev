@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync } from "node:fs";
 
 const exec = promisify(execFile);
 
@@ -14,6 +15,10 @@ export interface Branch {
   upstream: string | null;
   lastCommit: string | null;
   lastCommitDate: string | null;
+  lastCommitTs: number | null;
+  author: string | null;
+  ahead: number;
+  behind: number;
 }
 
 export interface Worktree {
@@ -25,6 +30,9 @@ export interface Worktree {
   locked: boolean;
   /** True when this worktree is the project's main working directory. */
   isMain: boolean;
+  /** Unix timestamp (seconds) of the worktree's HEAD commit. */
+  lastCommitTs: number | null;
+  author: string | null;
 }
 
 export async function isGitRepo(dir: string): Promise<boolean> {
@@ -56,20 +64,78 @@ export async function getLastCommitTs(dir: string): Promise<number | null> {
   }
 }
 
+/** The repo's default branch (origin/HEAD, else main/master), or null. */
+async function defaultBranch(dir: string): Promise<string | null> {
+  const head = await git(dir, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).catch(() => "");
+  if (head) return head.replace(/^origin\//, "");
+  for (const b of ["main", "master"]) {
+    const ok = await git(dir, ["rev-parse", "--verify", "--quiet", b]).catch(() => "");
+    if (ok) return b;
+  }
+  return null;
+}
+
+/**
+ * Commit timestamps (unix seconds) for the heatmap. For a feature branch this is
+ * the commits since it forked from the default branch (merge-base..ref) — i.e.
+ * the branch's own work. For the default branch, the last year of history.
+ */
+export async function getCommitActivity(dir: string, ref?: string): Promise<number[]> {
+  try {
+    const target = ref || "HEAD";
+    const def = await defaultBranch(dir);
+    const args = ["log", "--format=%ct", "--max-count=5000", "--since=6.months.ago"];
+    let range = target;
+    if (def && ref && ref !== def) {
+      const base = (await git(dir, ["merge-base", def, target]).catch(() => "")).trim();
+      if (base) range = `${base}..${target}`;
+    }
+    args.push(range);
+    const out = await git(dir, args);
+    if (!out) return [];
+    return out
+      .split("\n")
+      .map((s) => parseInt(s, 10))
+      .filter((n) => Number.isFinite(n));
+  } catch {
+    return [];
+  }
+}
+
+/** HEAD commit timestamp + author name for a working directory. */
+export async function getHeadMeta(dir: string): Promise<{ ts: number | null; author: string | null }> {
+  try {
+    const out = await git(dir, ["log", "-1", "--format=%ct%x09%an"]);
+    const [ct, an] = out.split("\t");
+    const ts = parseInt(ct, 10);
+    return { ts: Number.isFinite(ts) ? ts : null, author: an || null };
+  } catch {
+    return { ts: null, author: null };
+  }
+}
+
 export async function listBranches(dir: string): Promise<Branch[]> {
   try {
     // Custom format so we can parse reliably regardless of branch names.
-    const fmt = "%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(committerdate:relative)";
+    const fmt =
+      "%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)%09%(upstream:track,nobracket)";
     const out = await git(dir, ["for-each-ref", "--sort=-committerdate", `--format=${fmt}`, "refs/heads"]);
     if (!out) return [];
     return out.split("\n").map((line) => {
-      const [name, head, upstream, commit, date] = line.split("\t");
+      const [name, head, upstream, commit, date, unix, author, track] = line.split("\t");
+      const ts = parseInt(unix, 10);
+      const aheadM = track?.match(/ahead (\d+)/);
+      const behindM = track?.match(/behind (\d+)/);
       return {
         name,
         current: head === "*",
         upstream: upstream || null,
         lastCommit: commit || null,
         lastCommitDate: date || null,
+        lastCommitTs: Number.isFinite(ts) ? ts : null,
+        author: author || null,
+        ahead: aheadM ? parseInt(aheadM[1], 10) : 0,
+        behind: behindM ? parseInt(behindM[1], 10) : 0,
       };
     });
   } catch {
@@ -83,7 +149,7 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
     if (!out) return [];
     const mainPath = await git(dir, ["rev-parse", "--show-toplevel"]).catch(() => "");
     const blocks = out.split("\n\n").filter(Boolean);
-    return blocks.map((block) => {
+    const parsed = blocks.map((block) => {
       const lines = block.split("\n");
       const wt: Worktree = {
         path: "",
@@ -93,6 +159,8 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
         detached: false,
         locked: false,
         isMain: false,
+        lastCommitTs: null,
+        author: null,
       };
       for (const line of lines) {
         if (line.startsWith("worktree ")) wt.path = line.slice("worktree ".length);
@@ -105,6 +173,17 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
       wt.isMain = wt.path === mainPath;
       return wt;
     });
+    // Drop stale worktrees whose directory no longer exists (prunable entries).
+    const existing = parsed.filter((w) => w.path && existsSync(w.path));
+    // Attach each worktree's HEAD commit time + author so the UI can sort/filter.
+    await Promise.all(
+      existing.map(async (w) => {
+        const meta = await getHeadMeta(w.path);
+        w.lastCommitTs = meta.ts;
+        w.author = meta.author;
+      }),
+    );
+    return existing;
   } catch {
     return [];
   }
@@ -123,5 +202,38 @@ export async function pull(dir: string): Promise<string> {
     const e = err as { stderr?: string; stdout?: string; message?: string };
     const msg = (e.stderr || e.stdout || e.message || "").toString().trim();
     throw new Error(msg || "git pull failed");
+  }
+}
+
+/**
+ * Bring a specific branch up to date with its upstream. If the branch is checked
+ * out (in the main repo or a worktree), does a plain `git pull` there. Otherwise
+ * fast-forwards the local ref from the remote without checking it out.
+ */
+export async function pullBranch(mainDir: string, branch: string, cwd?: string): Promise<string> {
+  const dir = cwd || mainDir;
+  const current = await getCurrentBranch(dir);
+  if (current === branch) return pull(dir);
+
+  // Non-checked-out branch: fast-forward its ref from the configured upstream.
+  const info = await git(mainDir, [
+    "for-each-ref",
+    "--format=%(upstream:remotename)%09%(upstream:short)",
+    `refs/heads/${branch}`,
+  ]).catch(() => "");
+  const [remote, upstreamShort] = info.split("\t");
+  if (!remote || !upstreamShort) throw new Error("No upstream configured for this branch");
+  const remoteBranch = upstreamShort.startsWith(`${remote}/`)
+    ? upstreamShort.slice(remote.length + 1)
+    : upstreamShort;
+  try {
+    const { stdout, stderr } = await exec("git", ["fetch", remote, `${remoteBranch}:${branch}`], {
+      cwd: mainDir,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return `${stdout}${stderr}`.trim() || `Fast-forwarded ${branch}.`;
+  } catch (err) {
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    throw new Error((e.stderr || e.stdout || e.message || "").toString().trim() || "fetch failed");
   }
 }
