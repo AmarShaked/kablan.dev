@@ -198,6 +198,79 @@ pub fn create_merge_request(
     }
 }
 
+const KEYRING_SERVICE: &str = "dev.kablan.gitlab";
+
+pub fn api_base(host: &str) -> String {
+    format!("https://{host}/api/v4")
+}
+
+pub fn get_token(host: &str) -> Option<String> {
+    keyring::Entry::new(KEYRING_SERVICE, host).ok()?.get_password().ok()
+}
+
+pub fn set_token(host: &str, token: &str) -> Result<(), String> {
+    keyring::Entry::new(KEYRING_SERVICE, host)
+        .map_err(|e| e.to_string())?
+        .set_password(token)
+        .map_err(|e| e.to_string())
+}
+
+pub fn delete_token(host: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, host).map_err(|e| e.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Project id GitLab expects: URL-encoded full path.
+fn project_id(project: &str) -> String {
+    project.replace('/', "%2F")
+}
+
+fn is_configured(host: &str) -> bool {
+    crate::config::load().gitlab_hosts.iter().any(|h| h == host)
+}
+
+pub fn status(dir: &str) -> (bool, Option<String>, Option<String>) {
+    match resolve(dir) {
+        Some(r) => {
+            let connected = is_configured(&r.host) && get_token(&r.host).is_some();
+            (connected, Some(r.host), Some(r.project))
+        }
+        None => (false, None, None),
+    }
+}
+
+pub fn overview(dir: &str) -> Overview {
+    let remote = match resolve(dir) {
+        Some(r) => r,
+        None => return Overview { connected: false, host: None, project: None, mrs: vec![], pipelines: vec![], error: None },
+    };
+    let host = remote.host.clone();
+    let project = remote.project.clone();
+    if !is_configured(&host) {
+        return Overview { connected: false, host: Some(host), project: Some(project), mrs: vec![], pipelines: vec![], error: None };
+    }
+    let token = match get_token(&host) {
+        Some(t) => t,
+        None => return Overview { connected: false, host: Some(host), project: Some(project), mrs: vec![], pipelines: vec![], error: None },
+    };
+    let base = api_base(&host);
+    let id = project_id(&project);
+    match (fetch_open_mrs(&base, &token, &id), fetch_pipelines(&base, &token, &id)) {
+        (Ok(mrs), Ok(pipelines)) => Overview { connected: true, host: Some(host), project: Some(project), mrs, pipelines, error: None },
+        (Err(e), _) | (_, Err(e)) => Overview { connected: true, host: Some(host), project: Some(project), mrs: vec![], pipelines: vec![], error: Some(e) },
+    }
+}
+
+pub fn create(dir: &str, args: &CreateMrArgs) -> Result<(u64, String), String> {
+    let remote = resolve(dir).ok_or("not a GitLab repo (no origin remote)")?;
+    let token = get_token(&remote.host).ok_or("no token for this GitLab host")?;
+    create_merge_request(&api_base(&remote.host), &token, &project_id(&remote.project), args)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
