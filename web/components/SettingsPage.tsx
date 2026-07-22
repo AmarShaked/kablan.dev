@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, X, RotateCcw, Save, RefreshCw } from "lucide-react";
+import { Plus, Trash2, X, RotateCcw, Save, RefreshCw, Link2 } from "lucide-react";
 import { api, type AppConfig, type ProjectSummary } from "../api.ts";
 import {
   APP_VERSION,
@@ -78,6 +78,37 @@ export function SettingsPage({
   const [draft, setDraft] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  const [glHosts, setGlHosts] = useState<string[]>([]);
+  const [glHost, setGlHost] = useState("");
+  const [glToken, setGlToken] = useState("");
+  const [glBusy, setGlBusy] = useState(false);
+
+  useEffect(() => {
+    if (isTauri) api.gitlab.hosts().then((r) => setGlHosts(r.hosts)).catch(() => {});
+  }, []);
+
+  const glConnect = async () => {
+    if (!glHost.trim() || !glToken.trim()) return;
+    setGlBusy(true);
+    try {
+      const r = await api.gitlab.setToken(glHost.trim().toLowerCase(), glToken.trim());
+      toast.success(`Connected to ${glHost} as ${r.username}`);
+      setGlToken("");
+      setGlHost("");
+      setGlHosts((await api.gitlab.hosts()).hosts);
+    } catch (err) {
+      toast.error(`Couldn't connect: ${String(err)}`);
+    } finally {
+      setGlBusy(false);
+    }
+  };
+
+  const glDisconnect = async (host: string) => {
+    await api.gitlab.deleteToken(host).catch(() => {});
+    setGlHosts((await api.gitlab.hosts()).hosts);
+    toast.success(`Disconnected ${host}`);
+  };
 
   const checkUpdates = async () => {
     setChecking(true);
@@ -340,6 +371,60 @@ export function SettingsPage({
                   </Button>
                 </CardContent>
               </Card>
+
+              {isTauri && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>GitLab</CardTitle>
+                    <CardDescription>
+                      Connect a GitLab host to see Merge Request &amp; pipeline status and open MRs.
+                      Use a Personal Access Token with the <code className="font-mono">api</code> scope
+                      — it's stored in your OS keychain, never in this config.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {glHosts.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {glHosts.map((h) => (
+                          <div key={h} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                            <Link2 className="size-4 text-muted-foreground" />
+                            <span className="font-mono">{h}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto text-muted-foreground"
+                              onClick={() => glDisconnect(h)}
+                            >
+                              <Trash2 className="size-4" /> Disconnect
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Label>Add a host</Label>
+                      <Input
+                        value={glHost}
+                        placeholder="gitlab.com or gitlab.mycompany.com"
+                        spellCheck={false}
+                        className="font-mono text-xs"
+                        onChange={(e) => setGlHost(e.target.value)}
+                      />
+                      <Input
+                        value={glToken}
+                        type="password"
+                        placeholder="Personal Access Token (api scope)"
+                        spellCheck={false}
+                        className="font-mono text-xs"
+                        onChange={(e) => setGlToken(e.target.value)}
+                      />
+                      <Button size="sm" className="self-start" disabled={glBusy} onClick={glConnect}>
+                        {glBusy ? "Connecting…" : "Test & connect"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="detection" className="mt-0 flex flex-col gap-6">
