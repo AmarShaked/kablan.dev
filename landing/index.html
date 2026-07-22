@@ -289,7 +289,7 @@
           <p class="lead">Latest version: <b id="ver">…</b> · <a href="https://github.com/AmarShaked/kablan.dev/releases" style="color:var(--accent)">all releases</a></p>
           <div class="dls">
             <div class="dlcard" id="card-mac">
-              <div class="os">🍎</div><h3>macOS</h3><div class="files">.dmg — Apple Silicon &amp; Intel</div>
+              <div class="os">🍎</div><h3>macOS</h3><div class="files">Universal .dmg — Apple Silicon &amp; Intel</div>
               <a class="btn btn-primary" id="dl-mac" href="https://github.com/AmarShaked/kablan.dev/releases">Download</a>
             </div>
             <div class="dlcard" id="card-win">
@@ -371,7 +371,8 @@
           const assets = rel.assets || [];
           document.getElementById("ver").textContent = (rel.tag_name || "").replace(/^v/, "") || "—";
           const map = {
-            mac: [/\.dmg$/i, /\.app\.tar\.gz$/i],
+            // Prefer the universal dmg; fall back to per-arch for older releases.
+            mac: [/universal\.dmg$/i, /aarch64\.dmg$/i, /x64\.dmg$/i, /\.dmg$/i],
             win: [/\.msi$/i, /setup\.exe$/i, /\.exe$/i],
             linux: [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i],
           };
