@@ -2,6 +2,7 @@
 //! the original Node/Express server (validated by the shared server test suite).
 pub mod config;
 pub mod git;
+pub mod gitlab;
 pub mod open;
 pub mod processes;
 pub mod projects;
