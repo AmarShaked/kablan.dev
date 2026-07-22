@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Capabilities for the main window: self-update and relaunch.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "process:default",
+    "process:allow-restart"
+  ]
+}

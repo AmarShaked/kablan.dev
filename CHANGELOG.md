@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-22
+
+### Added
+- **In-app auto-update** (macOS/Windows/Linux). The desktop app now checks for
+  new signed releases and installs them **in place** — the update banner shows
+  "Update & restart" instead of a download link. Because updates aren't
+  downloaded through a browser, macOS no longer re-quarantines the app, so you
+  won't have to re-approve it in Security settings on every new version.
+  (The very first install of an unsigned build still needs the one-time
+  approval; from this version on, updates are seamless.)
+
 ## [0.1.5] - 2026-07-22
 
 ### Added
@@ -73,7 +84,8 @@ Initial public release. 🎉
 - **Full behavioral test suite** — 64 black-box tests that run against both the
   reference Node server and the Rust backend to guarantee parity.
 
-[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.1...v0.1.3

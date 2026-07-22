@@ -10,6 +10,39 @@ export interface UpdateInfo {
   url: string;
 }
 
+/** True when running inside the Tauri desktop shell (vs. a plain browser). */
+export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export interface TauriUpdate {
+  version: string;
+  /** Download + install the update in place, then relaunch the app. */
+  run: () => Promise<void>;
+}
+
+/**
+ * Ask Tauri's updater whether a newer signed release exists. Installing it
+ * happens in place (no browser download), so macOS Gatekeeper doesn't re-prompt.
+ * Returns null in the browser, when up to date, or on any error.
+ */
+export async function checkTauriUpdate(): Promise<TauriUpdate | null> {
+  if (!isTauri) return null;
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (!update) return null;
+    return {
+      version: update.version,
+      run: async () => {
+        await update.downloadAndInstall();
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Parse a version like "v1.2.3" / "1.2.3" into comparable numbers. */
 function parse(v: string): number[] {
   return v

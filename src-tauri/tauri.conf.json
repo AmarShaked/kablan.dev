@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kablan.dev",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "identifier": "dev.kablan.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -16,9 +16,18 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/AmarShaked/kablan.dev/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU3OTkyOEE0MEZERjJGRkQKUldUOUw5OFBwQ2laNS8wa1N1Z09WV0Y2eTd6NXlRRktDNFVSemhaRjJvQjNmZFdFOTNPb05VK0YK"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "Your local dev environment, under one roof.",
     "longDescription": "Kablan.dev is a desktop cockpit for your local dev environment: every git repo, branch and worktree at a glance, env-file editing, and dev servers with live logs.",

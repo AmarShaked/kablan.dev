@@ -3,7 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle } from "lucide-react";
 import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine } from "./api.ts";
-import { APP_VERSION, checkForUpdate, DOWNLOAD_URL, type UpdateInfo } from "./lib/version.ts";
+import {
+  APP_VERSION,
+  checkForUpdate,
+  checkTauriUpdate,
+  isTauri,
+  DOWNLOAD_URL,
+  type UpdateInfo,
+  type TauriUpdate,
+} from "./lib/version.ts";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,11 +69,29 @@ export function App() {
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
   const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [tauriUpdate, setTauriUpdate] = useState<TauriUpdate | null>(null);
+  const [updating, setUpdating] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
 
   useEffect(() => {
-    checkForUpdate().then(setUpdate);
+    // In the desktop app, self-update in place; in the browser, link to the download.
+    if (isTauri) checkTauriUpdate().then(setTauriUpdate).catch(() => {});
+    else checkForUpdate().then(setUpdate);
   }, []);
+
+  // Version available via either path (Tauri updater or web release check).
+  const newVersion = tauriUpdate?.version ?? update?.latest ?? null;
+  const runTauriUpdate = async () => {
+    if (!tauriUpdate) return;
+    setUpdating(true);
+    try {
+      toast.info("Downloading update…");
+      await tauriUpdate.run(); // installs + relaunches
+    } catch (err) {
+      toast.error(`Update failed: ${String(err)}`);
+      setUpdating(false);
+    }
+  };
 
   const refreshProjects = useCallback(
     () => queryClient.invalidateQueries({ queryKey: qk.projects }),
@@ -303,16 +329,21 @@ export function App() {
                 <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {update && (
+            {newVersion && (
               <SidebarMenuItem>
                 <SidebarMenuButton
                   size="sm"
                   className="text-[var(--success)]"
-                  tooltip={`Update available: v${update.latest}`}
-                  onClick={() => window.open(DOWNLOAD_URL, "_blank", "noopener,noreferrer")}
+                  tooltip={`Update available: v${newVersion}`}
+                  disabled={updating}
+                  onClick={() =>
+                    tauriUpdate
+                      ? runTauriUpdate()
+                      : window.open(DOWNLOAD_URL, "_blank", "noopener,noreferrer")
+                  }
                 >
                   <ArrowUpCircle />
-                  <span>Update to v{update.latest}</span>
+                  <span>{updating ? "Updating…" : `Update to v${newVersion}`}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
@@ -325,20 +356,30 @@ export function App() {
       </Sidebar>
 
       <SidebarInset className="h-screen overflow-hidden">
-        {update && !updateDismissed && (
+        {newVersion && !updateDismissed && (
           <div className="flex items-center gap-3 border-b border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm">
             <ArrowUpCircle className="size-4 shrink-0 text-[var(--success)]" />
             <span>
-              Kablan.dev <strong>v{update.latest}</strong> is available.
+              Kablan.dev <strong>v{newVersion}</strong> is available.
             </span>
-            <a
-              href={DOWNLOAD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30"
-            >
-              <Download className="size-3.5" /> Download
-            </a>
+            {tauriUpdate ? (
+              <button
+                onClick={runTauriUpdate}
+                disabled={updating}
+                className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30 disabled:opacity-60"
+              >
+                <Download className="size-3.5" /> {updating ? "Updating…" : "Update & restart"}
+              </button>
+            ) : (
+              <a
+                href={DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30"
+              >
+                <Download className="size-3.5" /> Download
+              </a>
+            )}
             <button
               onClick={() => setUpdateDismissed(true)}
               aria-label="Dismiss"

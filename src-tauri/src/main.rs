@@ -56,6 +56,8 @@ fn main() {
     let init = format!("window.__KABLAN_PORT__ = {port};");
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(move |app| {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Kablan.dev")
