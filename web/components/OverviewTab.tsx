@@ -17,6 +17,7 @@ import {
   X,
   Clock,
   ArrowDownAZ,
+  RefreshCw,
 } from "lucide-react";
 import {
   api,
@@ -62,6 +63,7 @@ export interface Entry {
   cwd: string | null; // worktree dir to run in
   runBranch: string | null; // branch to check out + run (branch rows)
   inWorktree: string | null; // branch already checked out in a worktree
+  remoteOnly: boolean; // branch exists only on a remote (not local yet)
   linearId: string | null;
 }
 
@@ -259,6 +261,20 @@ export function OverviewTab({
     }
   };
 
+  const fetchRemote = async () => {
+    setGitBusy(true);
+    try {
+      const res = await api.fetchRemote(project.name);
+      toast.success(res.output || "Fetched.", { duration: 5000 });
+      await reload();
+      onCommandChange();
+    } catch (err) {
+      toast.error(String(err), { duration: 8000 });
+    } finally {
+      setGitBusy(false);
+    }
+  };
+
   const filtersActive =
     search.trim() !== "" || author !== "all" || dateWindow !== "any" || runningOnly || sort !== "recent";
   const clearFilters = () => {
@@ -297,6 +313,7 @@ export function OverviewTab({
           cwd: w.path,
           runBranch: null,
           inWorktree: null,
+          remoteOnly: false,
           linearId: extractLinearId(w.branch),
         };
       });
@@ -317,6 +334,7 @@ export function OverviewTab({
       cwd: worktreeByBranch.get(b.name) ?? null,
       runBranch: b.name,
       inWorktree: worktreeByBranch.get(b.name) ?? null,
+      remoteOnly: b.remoteOnly,
       linearId: extractLinearId(b.name),
     }));
     return [...wtEntries, ...brEntries];
@@ -443,8 +461,18 @@ export function OverviewTab({
             <X className="size-3.5" /> Clear
           </Button>
         )}
-        {/* Sort — right side */}
-        <div className="ml-auto flex h-7 shrink-0 overflow-hidden rounded-md border border-border">
+        {/* Fetch + Sort — right side */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          disabled={gitBusy}
+          title="Fetch all remotes (git fetch --all --prune)"
+          onClick={fetchRemote}
+        >
+          <RefreshCw className={cn("size-3.5", gitBusy && "animate-spin")} /> Fetch
+        </Button>
+        <div className="flex h-7 shrink-0 overflow-hidden rounded-md border border-border">
           <button
             onClick={() => setSort("recent")}
             title="Sort by most recent"
@@ -572,7 +600,7 @@ export function OverviewTab({
             : undefined
         }
         onPull={
-          drawer?.entry && drawer.entry.behind > 0 && drawer.entry.branchName
+          drawer?.entry && drawer.entry.branchName && drawer.entry.upstream && !drawer.entry.remoteOnly
             ? () => pullEntry(drawer.entry)
             : undefined
         }
@@ -645,6 +673,11 @@ function EntryRow({
       )}
       {entry.locked && (
         <Badge className="shrink-0 border-0 bg-amber-500/15 text-amber-600 dark:text-amber-400">locked</Badge>
+      )}
+      {entry.remoteOnly && (
+        <Badge className="shrink-0 gap-1 border-0 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+          <Cloud className="size-3" /> remote
+        </Badge>
       )}
       {running && (
         <span

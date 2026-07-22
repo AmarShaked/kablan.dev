@@ -30,6 +30,7 @@ export interface Branch {
   author: string | null;
   ahead: number;
   behind: number;
+  remoteOnly: boolean;
 }
 
 export interface Worktree {
@@ -135,6 +136,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ branch, cwd }),
     }),
+  fetchRemote: (name: string) =>
+    req<{ output: string }>(`/api/projects/${encodeURIComponent(name)}/fetch`, { method: "POST" }),
 
   getEnv: (name: string, cwd?: string) =>
     req<EnvFile[]>(

@@ -69,6 +69,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/checkout", post(post_checkout))
         .route("/api/projects/:name/pull", post(post_pull))
         .route("/api/projects/:name/pull-branch", post(post_pull_branch))
+        .route("/api/projects/:name/fetch", post(post_fetch))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -168,6 +169,12 @@ async fn post_pull_branch(Path(name): Path<String>, body: Bytes) -> ApiResult {
         None => None,
     };
     let output = blocking(move || git::pull_branch(&dir, &branch, workdir.as_deref())).await.map_err(bad)?;
+    Ok(Json(json!({ "output": output })))
+}
+
+async fn post_fetch(Path(name): Path<String>) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let output = blocking(move || git::fetch_remotes(&dir)).await.map_err(bad)?;
     Ok(Json(json!({ "output": output })))
 }
 

@@ -16,6 +16,8 @@ pub struct Branch {
     pub author: Option<String>,
     pub ahead: u32,
     pub behind: u32,
+    /// True when the branch exists only on a remote (no local ref yet).
+    pub remote_only: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,11 +158,11 @@ fn head_meta(dir: &str) -> (Option<i64>, Option<String>) {
 pub fn list_branches(dir: &str) -> Vec<Branch> {
     let fmt = "%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)%09%(upstream:track,nobracket)";
     let format_arg = format!("--format={fmt}");
-    let out = match git(dir, &["for-each-ref", "--sort=-committerdate", &format_arg, "refs/heads"]) {
-        Ok(s) if !s.is_empty() => s,
-        _ => return vec![],
-    };
-    out.lines()
+    let out = git(dir, &["for-each-ref", "--sort=-committerdate", &format_arg, "refs/heads"])
+        .unwrap_or_default();
+    let mut branches: Vec<Branch> = out
+        .lines()
+        .filter(|l| !l.is_empty())
         .map(|line| {
             let f: Vec<&str> = line.splitn(8, '\t').collect();
             let get = |i: usize| f.get(i).copied().unwrap_or("");
@@ -175,9 +177,53 @@ pub fn list_branches(dir: &str) -> Vec<Branch> {
                 author: non_empty(get(6)),
                 ahead: parse_track(track, "ahead"),
                 behind: parse_track(track, "behind"),
+                remote_only: false,
             }
         })
-        .collect()
+        .collect();
+
+    // Append branches that exist only on a remote (no local ref yet).
+    let local_names: std::collections::HashSet<String> =
+        branches.iter().map(|b| b.name.clone()).collect();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let rfmt = "%(refname:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)";
+    let rformat = format!("--format={rfmt}");
+    let rout = git(dir, &["for-each-ref", "--sort=-committerdate", &rformat, "refs/remotes"])
+        .unwrap_or_default();
+    for line in rout.lines().filter(|l| !l.is_empty()) {
+        let f: Vec<&str> = line.splitn(5, '\t').collect();
+        let full = f.first().copied().unwrap_or("");
+        if full.is_empty() || full.ends_with("/HEAD") {
+            continue;
+        }
+        let name = match full.split_once('/') {
+            Some((_, n)) => n.to_string(),
+            None => continue,
+        };
+        if local_names.contains(&name) || seen.contains(&name) {
+            continue;
+        }
+        seen.insert(name.clone());
+        branches.push(Branch {
+            name,
+            current: false,
+            upstream: Some(full.to_string()),
+            last_commit: non_empty(f.get(1).copied().unwrap_or("")),
+            last_commit_date: non_empty(f.get(2).copied().unwrap_or("")),
+            last_commit_ts: f.get(3).and_then(|s| s.parse::<i64>().ok()),
+            author: non_empty(f.get(4).copied().unwrap_or("")),
+            ahead: 0,
+            behind: 0,
+            remote_only: true,
+        });
+    }
+    branches
+}
+
+/// Fetch all remotes and prune deleted remote branches. Returns git's output.
+pub fn fetch_remotes(dir: &str) -> Result<String, String> {
+    let out = git_combined(dir, &["fetch", "--all", "--prune"])?;
+    Ok(if out.is_empty() { "Already up to date.".to_string() } else { out })
 }
 
 pub fn list_worktrees(dir: &str) -> Vec<Worktree> {
@@ -259,7 +305,12 @@ pub fn pull_branch(main_dir: &str, branch: &str, cwd: Option<&str>) -> Result<St
     let prefix = format!("{remote}/");
     let remote_branch = upstream_short.strip_prefix(&prefix).unwrap_or(upstream_short);
     let refspec = format!("{remote_branch}:{branch}");
+    let before = git(main_dir, &["rev-parse", branch]).unwrap_or_default();
     let out = git_combined(main_dir, &["fetch", remote, &refspec])?;
+    let after = git(main_dir, &["rev-parse", branch]).unwrap_or_default();
+    if !before.is_empty() && before == after {
+        return Ok("Already up to date.".to_string());
+    }
     Ok(if out.is_empty() { format!("Fast-forwarded {branch}.") } else { out })
 }
 

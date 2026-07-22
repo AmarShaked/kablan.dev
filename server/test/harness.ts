@@ -107,6 +107,18 @@ export async function advanceRemote(bareDir: string, branch: string, message = "
   // Fetch so the origin's new tip is known locally (mirrors a real user having fetched).
 }
 
+/** Create a brand-new branch that exists ONLY on the remote (never checked out locally). */
+export async function addRemoteBranch(bareDir: string, branch: string, message = "remote branch"): Promise<void> {
+  const clone = mkdtempSync(join(tmpdir(), "kablan-rb-"));
+  await git(clone, ["clone", bareDir, "."]);
+  await git(clone, ["config", "user.email", "test@example.com"]);
+  await git(clone, ["config", "user.name", "Test User"]);
+  await git(clone, ["checkout", "-b", branch]);
+  await commit(clone, message, { [`rb-${branch.replace(/\W/g, "_")}.txt`]: "x" });
+  await git(clone, ["push", "-u", "origin", branch]);
+  rmSync(clone, { recursive: true, force: true });
+}
+
 export async function addWorktree(mainDir: string, wtPath: string, branch: string, newBranch = true): Promise<void> {
   const args = newBranch
     ? ["worktree", "add", "-b", branch, wtPath]

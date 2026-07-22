@@ -19,6 +19,8 @@ export interface Branch {
   author: string | null;
   ahead: number;
   behind: number;
+  /** True when the branch exists only on a remote (no local ref yet). */
+  remoteOnly: boolean;
 }
 
 export interface Worktree {
@@ -120,26 +122,77 @@ export async function listBranches(dir: string): Promise<Branch[]> {
     const fmt =
       "%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)%09%(upstream:track,nobracket)";
     const out = await git(dir, ["for-each-ref", "--sort=-committerdate", `--format=${fmt}`, "refs/heads"]);
-    if (!out) return [];
-    return out.split("\n").map((line) => {
-      const [name, head, upstream, commit, date, unix, author, track] = line.split("\t");
+    const local: Branch[] = out
+      ? out.split("\n").map((line) => {
+          const [name, head, upstream, commit, date, unix, author, track] = line.split("\t");
+          const ts = parseInt(unix, 10);
+          const aheadM = track?.match(/ahead (\d+)/);
+          const behindM = track?.match(/behind (\d+)/);
+          return {
+            name,
+            current: head === "*",
+            upstream: upstream || null,
+            lastCommit: commit || null,
+            lastCommitDate: date || null,
+            lastCommitTs: Number.isFinite(ts) ? ts : null,
+            author: author || null,
+            ahead: aheadM ? parseInt(aheadM[1], 10) : 0,
+            behind: behindM ? parseInt(behindM[1], 10) : 0,
+            remoteOnly: false,
+          };
+        })
+      : [];
+
+    // Append branches that exist only on a remote (no local ref yet).
+    const localNames = new Set(local.map((b) => b.name));
+    const seen = new Set<string>();
+    const rfmt =
+      "%(refname:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)";
+    const rout = await git(dir, [
+      "for-each-ref",
+      "--sort=-committerdate",
+      `--format=${rfmt}`,
+      "refs/remotes",
+    ]).catch(() => "");
+    for (const line of rout.split("\n").filter(Boolean)) {
+      const [full, commit, date, unix, author] = line.split("\t");
+      if (!full || full.endsWith("/HEAD")) continue; // skip the remote's symbolic HEAD
+      const slash = full.indexOf("/");
+      if (slash < 0) continue;
+      const name = full.slice(slash + 1); // "origin/feature" -> "feature"
+      if (localNames.has(name) || seen.has(name)) continue;
+      seen.add(name);
       const ts = parseInt(unix, 10);
-      const aheadM = track?.match(/ahead (\d+)/);
-      const behindM = track?.match(/behind (\d+)/);
-      return {
+      local.push({
         name,
-        current: head === "*",
-        upstream: upstream || null,
+        current: false,
+        upstream: full,
         lastCommit: commit || null,
         lastCommitDate: date || null,
         lastCommitTs: Number.isFinite(ts) ? ts : null,
         author: author || null,
-        ahead: aheadM ? parseInt(aheadM[1], 10) : 0,
-        behind: behindM ? parseInt(behindM[1], 10) : 0,
-      };
-    });
+        ahead: 0,
+        behind: 0,
+        remoteOnly: true,
+      });
+    }
+    return local;
   } catch {
     return [];
+  }
+}
+
+/** Fetch all remotes and prune deleted remote branches. Returns git's output. */
+export async function fetchRemotes(dir: string): Promise<string> {
+  try {
+    const { stdout, stderr } = await exec("git", ["fetch", "--all", "--prune"], {
+      cwd: dir,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return `${stdout}${stderr}`.trim() || "Already up to date.";
+  } catch (err) {
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    throw new Error((e.stderr || e.stdout || e.message || "").toString().trim() || "git fetch failed");
   }
 }
 
@@ -226,11 +279,14 @@ export async function pullBranch(mainDir: string, branch: string, cwd?: string):
   const remoteBranch = upstreamShort.startsWith(`${remote}/`)
     ? upstreamShort.slice(remote.length + 1)
     : upstreamShort;
+  const before = await git(mainDir, ["rev-parse", branch]).catch(() => "");
   try {
     const { stdout, stderr } = await exec("git", ["fetch", remote, `${remoteBranch}:${branch}`], {
       cwd: mainDir,
       maxBuffer: 10 * 1024 * 1024,
     });
+    const after = await git(mainDir, ["rev-parse", branch]).catch(() => "");
+    if (before && before === after) return "Already up to date.";
     return `${stdout}${stderr}`.trim() || `Fast-forwarded ${branch}.`;
   } catch (err) {
     const e = err as { stderr?: string; stdout?: string; message?: string };

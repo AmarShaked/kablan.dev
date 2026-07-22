@@ -14,6 +14,7 @@ import {
   getCurrentBranch,
   pull,
   pullBranch,
+  fetchRemotes,
   getCommitActivity,
 } from "./git.ts";
 import {
@@ -157,6 +158,15 @@ api.post("/projects/:name/pull", async (req, res) => {
     const dir = projectPathFromName(req.params.name);
     const output = await pull(dir);
     res.json({ output, currentBranch: await getCurrentBranch(dir) });
+  } catch (err) {
+    res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
+  }
+});
+
+api.post("/projects/:name/fetch", async (req, res) => {
+  try {
+    const dir = projectPathFromName(req.params.name);
+    res.json({ output: await fetchRemotes(dir) });
   } catch (err) {
     res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
   }

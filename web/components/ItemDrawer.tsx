@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { FolderTree, GitBranch, Play, Square, ArrowLeftRight, DownloadCloud, Check } from "lucide-react";
+import { FolderTree, GitBranch, Play, Square, ArrowLeftRight, DownloadCloud, Check, Cloud } from "lucide-react";
 import { type ProjectSummary, type RunningServer, type LogLine } from "../api.ts";
 import { useCommits } from "../queries.ts";
 import {
@@ -197,6 +197,11 @@ export function ItemDrawer({
                     <Check className="size-3" /> current
                   </Badge>
                 )}
+                {entry.remoteOnly && (
+                  <Badge className="shrink-0 gap-1 border-0 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                    <Cloud className="size-3" /> remote
+                  </Badge>
+                )}
                 {running && (
                   <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     <span className="size-2 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_6px_0] shadow-emerald-500/60" />
@@ -252,9 +257,10 @@ export function ItemDrawer({
                         variant="outline"
                         disabled={gitBusy}
                         className="text-amber-600 dark:text-amber-400"
+                        title="Pull from the remote (reports 'up to date' if there's nothing new)"
                         onClick={onPull}
                       >
-                        <DownloadCloud className="size-3.5" /> Pull {entry.behind}
+                        <DownloadCloud className="size-3.5" /> Pull{entry.behind > 0 ? ` ↓${entry.behind}` : ""}
                       </Button>
                     )}
                   </div>
