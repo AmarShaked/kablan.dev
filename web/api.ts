@@ -43,7 +43,20 @@ export interface Worktree {
   isMain: boolean;
   lastCommitTs: number | null;
   author: string | null;
+  dirty: boolean;
 }
+
+export interface Commit {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  author: string | null;
+  ts: number | null;
+  dateRel: string | null;
+  parents: number;
+}
+
+export type OpenTarget = "vscode" | "cursor" | "terminal" | "iterm" | "finder" | "url";
 
 export interface EnvFile {
   name: string;
@@ -138,6 +151,30 @@ export const api = {
     }),
   fetchRemote: (name: string) =>
     req<{ output: string }>(`/api/projects/${encodeURIComponent(name)}/fetch`, { method: "POST" }),
+  getLog: (name: string, opts: { ref?: string; cwd?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.ref) p.set("ref", opts.ref);
+    if (opts.cwd) p.set("cwd", opts.cwd);
+    if (opts.limit) p.set("limit", String(opts.limit));
+    const qs = p.toString();
+    return req<{ commits: Commit[] }>(
+      `/api/projects/${encodeURIComponent(name)}/log${qs ? `?${qs}` : ""}`,
+    );
+  },
+  getDiff: (name: string, opts: { sha?: string; cwd?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.sha) p.set("sha", opts.sha);
+    if (opts.cwd) p.set("cwd", opts.cwd);
+    const qs = p.toString();
+    return req<{ diff: string }>(
+      `/api/projects/${encodeURIComponent(name)}/diff${qs ? `?${qs}` : ""}`,
+    );
+  },
+  openIn: (name: string, target: OpenTarget, opts: { cwd?: string; url?: string } = {}) =>
+    req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/open`, {
+      method: "POST",
+      body: JSON.stringify({ target, ...opts }),
+    }),
 
   getEnv: (name: string, cwd?: string) =>
     req<EnvFile[]>(

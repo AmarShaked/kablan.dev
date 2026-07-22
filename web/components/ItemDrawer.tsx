@@ -1,6 +1,17 @@
 import { useEffect } from "react";
-import { FolderTree, GitBranch, Play, Square, ArrowLeftRight, DownloadCloud, Check, Cloud } from "lucide-react";
-import { type ProjectSummary, type RunningServer, type LogLine } from "../api.ts";
+import { toast } from "sonner";
+import {
+  FolderTree,
+  GitBranch,
+  Play,
+  Square,
+  ArrowLeftRight,
+  DownloadCloud,
+  Check,
+  Cloud,
+  ExternalLink,
+} from "lucide-react";
+import { api, type ProjectSummary, type RunningServer, type LogLine, type OpenTarget } from "../api.ts";
 import { useCommits } from "../queries.ts";
 import {
   Sheet,
@@ -15,9 +26,20 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { LinearLink } from "./LinearLink.tsx";
+import { OpenMenu } from "./OpenMenu.tsx";
 import { EnvTab } from "./EnvTab.tsx";
 import { LogsTab } from "./LogsTab.tsx";
 import type { Entry } from "./OverviewTab.tsx";
+
+/** Find the first localhost URL a dev server printed, so it can be opened. */
+function findServerUrl(logs: LogLine[]): string | null {
+  const re = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+(?:\/\S*)?/;
+  for (const l of logs) {
+    const m = l.text.match(re);
+    if (m) return m[0].replace(/0\.0\.0\.0/, "localhost");
+  }
+  return null;
+}
 
 function dayKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -162,6 +184,15 @@ export function ItemDrawer({
 
   const TypeIcon = entry?.kind === "worktree" ? FolderTree : GitBranch;
   const dir = entry?.cwd ?? project.path;
+  const serverUrl = running ? findServerUrl(logs) : null;
+
+  const openIn = async (target: OpenTarget) => {
+    try {
+      await api.openIn(project.name, target, { cwd: entry?.cwd ?? project.path });
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
 
   // Environment needs a concrete working directory: a worktree, the checked-out
   // branch, or the currently-running server's dir.
@@ -195,6 +226,14 @@ export function ItemDrawer({
                 {entry.current && (
                   <Badge className="shrink-0 border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                     <Check className="size-3" /> current
+                  </Badge>
+                )}
+                {entry.dirty && (
+                  <Badge
+                    title="Uncommitted changes"
+                    className="shrink-0 gap-1 border-0 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  >
+                    ● uncommitted
                   </Badge>
                 )}
                 {entry.remoteOnly && (
@@ -263,7 +302,31 @@ export function ItemDrawer({
                         <DownloadCloud className="size-3.5" /> Pull{entry.behind > 0 ? ` ↓${entry.behind}` : ""}
                       </Button>
                     )}
+                    <OpenMenu
+                      onPick={openIn}
+                      align="start"
+                      trigger={
+                        <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-accent">
+                          <ExternalLink className="size-3.5" /> Open
+                        </button>
+                      }
+                    />
                   </div>
+
+                  {serverUrl && (
+                    <a
+                      href={serverUrl}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        api.openIn(project.name, "url", { url: serverUrl }).catch((err) => toast.error(String(err)));
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--success)]/40 bg-[var(--success)]/10 px-3 py-2 text-sm text-[var(--success)] transition-colors hover:bg-[var(--success)]/15"
+                    >
+                      <ExternalLink className="size-4 shrink-0" />
+                      <span className="font-mono">{serverUrl}</span>
+                      <span className="ml-auto text-xs opacity-80">open in browser</span>
+                    </a>
+                  )}
 
                   {/* Details */}
                   <div className="rounded-lg border border-border divide-y divide-border px-3">

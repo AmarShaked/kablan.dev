@@ -16,7 +16,10 @@ import {
   pullBranch,
   fetchRemotes,
   getCommitActivity,
+  listCommits,
+  getDiff,
 } from "./git.ts";
+import { openTarget, type OpenTarget } from "./open.ts";
 import {
   listProjects,
   readEnvFiles,
@@ -134,6 +137,50 @@ api.get("/projects/:name/commits", async (req, res) => {
     res.json({ timestamps: await getCommitActivity(dir, ref) });
   } catch (err) {
     res.status(400).json({ error: String(err) });
+  }
+});
+
+api.get("/projects/:name/log", async (req, res) => {
+  try {
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : undefined;
+    const dir = cwdParam
+      ? await resolveWorkdir(req.params.name, cwdParam)
+      : projectPathFromName(req.params.name);
+    const ref = typeof req.query.ref === "string" && req.query.ref ? req.query.ref : undefined;
+    const limit = typeof req.query.limit === "string" ? Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50)) : 50;
+    res.json({ commits: await listCommits(dir, ref, limit) });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
+api.get("/projects/:name/diff", async (req, res) => {
+  try {
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : undefined;
+    const dir = cwdParam
+      ? await resolveWorkdir(req.params.name, cwdParam)
+      : projectPathFromName(req.params.name);
+    const sha = typeof req.query.sha === "string" && req.query.sha ? req.query.sha : undefined;
+    res.json({ diff: await getDiff(dir, sha) });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
+api.post("/projects/:name/open", async (req, res) => {
+  try {
+    const { target, cwd, url } = req.body ?? {};
+    const valid: OpenTarget[] = ["vscode", "cursor", "terminal", "iterm", "finder", "url"];
+    if (!valid.includes(target)) return res.status(400).json({ error: "invalid target" });
+    const arg =
+      target === "url"
+        ? (typeof url === "string" ? url : "")
+        : await resolveWorkdir(req.params.name, typeof cwd === "string" ? cwd : undefined);
+    if (!arg) return res.status(400).json({ error: "missing url/cwd" });
+    await openTarget(target, arg);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
   }
 });
 

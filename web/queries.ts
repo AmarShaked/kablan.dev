@@ -36,3 +36,21 @@ export function useCommits(name: string, ref?: string, cwd?: string, enabled = t
     staleTime: 60_000,
   });
 }
+
+export function useLog(name: string, ref?: string, cwd?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["log", name, cwd ?? "", ref ?? ""] as const,
+    queryFn: () => api.getLog(name, { ref, cwd, limit: 100 }),
+    enabled: enabled && !!name,
+    staleTime: 30_000,
+  });
+}
+
+export function useDiff(name: string, sha?: string, cwd?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["diff", name, cwd ?? "", sha ?? "working"] as const,
+    queryFn: () => api.getDiff(name, { sha, cwd }),
+    enabled: enabled && !!name,
+    staleTime: 15_000,
+  });
+}

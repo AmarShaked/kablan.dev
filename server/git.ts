@@ -35,6 +35,19 @@ export interface Worktree {
   /** Unix timestamp (seconds) of the worktree's HEAD commit. */
   lastCommitTs: number | null;
   author: string | null;
+  /** True when the working tree has uncommitted changes (git status --porcelain). */
+  dirty: boolean;
+}
+
+export interface Commit {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  author: string | null;
+  ts: number | null;
+  dateRel: string | null;
+  /** Number of parents (>1 = merge commit). */
+  parents: number;
 }
 
 export async function isGitRepo(dir: string): Promise<boolean> {
@@ -214,6 +227,7 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
         isMain: false,
         lastCommitTs: null,
         author: null,
+        dirty: false,
       };
       for (const line of lines) {
         if (line.startsWith("worktree ")) wt.path = line.slice("worktree ".length);
@@ -234,6 +248,8 @@ export async function listWorktrees(dir: string): Promise<Worktree[]> {
         const meta = await getHeadMeta(w.path);
         w.lastCommitTs = meta.ts;
         w.author = meta.author;
+        const status = await git(w.path, ["status", "--porcelain"]).catch(() => "");
+        w.dirty = status.trim().length > 0;
       }),
     );
     return existing;
@@ -291,5 +307,45 @@ export async function pullBranch(mainDir: string, branch: string, cwd?: string):
   } catch (err) {
     const e = err as { stderr?: string; stdout?: string; message?: string };
     throw new Error((e.stderr || e.stdout || e.message || "").toString().trim() || "fetch failed");
+  }
+}
+
+/** Recent commits for a ref (default HEAD). For the timeline/graph view. */
+export async function listCommits(dir: string, ref?: string, limit = 50): Promise<Commit[]> {
+  try {
+    const target = ref || "HEAD";
+    const fmt = "%H%x1f%h%x1f%s%x1f%an%x1f%ct%x1f%p";
+    const out = await git(dir, ["log", `--format=${fmt}`, `--max-count=${limit}`, target]);
+    if (!out) return [];
+    return out
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, shortSha, subject, author, ct, parents] = line.split("\x1f");
+        const ts = parseInt(ct, 10);
+        return {
+          sha,
+          shortSha,
+          subject: subject || "",
+          author: author || null,
+          ts: Number.isFinite(ts) ? ts : null,
+          dateRel: null,
+          parents: parents ? parents.trim().split(/\s+/).filter(Boolean).length : 0,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/** Unified diff. With `sha`, shows that commit; otherwise the working-tree changes vs HEAD. */
+export async function getDiff(dir: string, sha?: string): Promise<string> {
+  try {
+    const args = sha
+      ? ["show", "--no-color", "--stat", "--patch", sha]
+      : ["diff", "--no-color", "HEAD"];
+    return await git(dir, args);
+  } catch {
+    return "";
   }
 }

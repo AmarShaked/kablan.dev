@@ -23,6 +23,9 @@ import {
   CalendarDays,
   Link2,
   ChevronLeft,
+  ExternalLink,
+  Server,
+  Pencil,
 } from "lucide-react";
 import {
   api,
@@ -31,9 +34,11 @@ import {
   type Worktree,
   type RunningServer,
   type LogLine,
+  type OpenTarget,
 } from "../api.ts";
 import { useBranches, useWorktrees, qk } from "../queries.ts";
 import { ItemDrawer } from "./ItemDrawer.tsx";
+import { OpenMenu } from "./OpenMenu.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +68,7 @@ export interface Entry {
   runBranch: string | null; // branch to check out + run (branch rows)
   inWorktree: string | null; // branch already checked out in a worktree
   remoteOnly: boolean; // branch exists only on a remote (not local yet)
+  dirty: boolean; // working tree has uncommitted changes
   linearId: string | null;
 }
 
@@ -222,6 +228,7 @@ export function OverviewTab({
   const [runningOnly, setRunningOnly] = useState(false);
   const [hasLinear, setHasLinear] = useState(false);
   const [mainOnly, setMainOnly] = useState(false);
+  const [dirtyOnly, setDirtyOnly] = useState(false);
   const [location, setLocation] = useState<"all" | "local" | "remote">("all");
   const [sort, setSort] = useState<SortMode>("recent");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -326,6 +333,7 @@ export function OverviewTab({
     (runningOnly ? 1 : 0) +
     (hasLinear ? 1 : 0) +
     (mainOnly ? 1 : 0) +
+    (dirtyOnly ? 1 : 0) +
     (location !== "all" ? 1 : 0);
   const filtersActive = search.trim() !== "" || activeCount > 0 || sort !== "recent";
   const clearFilters = () => {
@@ -335,14 +343,25 @@ export function OverviewTab({
     setRunningOnly(false);
     setHasLinear(false);
     setMainOnly(false);
+    setDirtyOnly(false);
     setLocation("all");
     setSort("recent");
+  };
+
+  const openInRow = async (entry: Entry, target: OpenTarget) => {
+    try {
+      await api.openIn(project.name, target, { cwd: entry.cwd ?? project.path });
+    } catch (err) {
+      toast.error(String(err));
+    }
   };
 
   // --- Build the unified entry list ---
   const allEntries = useMemo<Entry[]>(() => {
     const worktreeByBranch = new Map<string, string>();
+    const dirtyByBranch = new Map<string, boolean>();
     for (const w of worktrees) {
+      if (w.branch && !w.bare) dirtyByBranch.set(w.branch, w.dirty);
       if (w.branch && !w.isMain && !w.bare) worktreeByBranch.set(w.branch, w.path);
     }
     const branchByName = new Map(branches.map((b) => [b.name, b]));
@@ -368,6 +387,7 @@ export function OverviewTab({
           runBranch: null,
           inWorktree: null,
           remoteOnly: false,
+          dirty: w.dirty,
           linearId: extractLinearId(w.branch),
         };
       });
@@ -389,6 +409,7 @@ export function OverviewTab({
       runBranch: b.name,
       inWorktree: worktreeByBranch.get(b.name) ?? null,
       remoteOnly: b.remoteOnly,
+      dirty: dirtyByBranch.get(b.name) ?? false,
       linearId: extractLinearId(b.name),
     }));
     return [...wtEntries, ...brEntries];
@@ -412,6 +433,7 @@ export function OverviewTab({
       if (author !== "all" && e.author !== author) return false;
       if (hasLinear && !e.linearId) return false;
       if (mainOnly && !isMainEntry(e)) return false;
+      if (dirtyOnly && !e.dirty) return false;
       if (location === "local" && e.remoteOnly) return false;
       if (location === "remote" && !e.remoteOnly) return false;
       if (cutoff && (e.ts ?? 0) < cutoff) return false;
@@ -442,7 +464,7 @@ export function OverviewTab({
       if (!collapsed[g.kind]) items.forEach((entry) => out.push({ type: "item", entry }));
     }
     return out;
-  }, [allEntries, search, author, dateWindow, runningOnly, hasLinear, mainOnly, location, server, sort, collapsed]);
+  }, [allEntries, search, author, dateWindow, runningOnly, hasLinear, mainOnly, dirtyOnly, location, server, sort, collapsed]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -460,6 +482,7 @@ export function OverviewTab({
   if (runningOnly) chips.push({ key: "running", label: "Running", clear: () => setRunningOnly(false) });
   if (hasLinear) chips.push({ key: "linear", label: "Has Linear", clear: () => setHasLinear(false) });
   if (mainOnly) chips.push({ key: "main", label: "Main only", clear: () => setMainOnly(false) });
+  if (dirtyOnly) chips.push({ key: "dirty", label: "Uncommitted", clear: () => setDirtyOnly(false) });
   if (location !== "all")
     chips.push({
       key: "loc",
@@ -515,6 +538,7 @@ export function OverviewTab({
                 <FilterRow icon={Cloud} label="Location" chevron onClick={() => setFilterView("location")} />
                 <div className="my-1 h-px bg-border" />
                 <FilterRow
+                  icon={Server}
                   label="Running server"
                   active={runningOnly}
                   disabled={!serverRunning && !runningOnly}
@@ -538,6 +562,15 @@ export function OverviewTab({
                   active={mainOnly}
                   onClick={() => {
                     setMainOnly((v) => !v);
+                    closeFilter();
+                  }}
+                />
+                <FilterRow
+                  icon={Pencil}
+                  label="Uncommitted changes"
+                  active={dirtyOnly}
+                  onClick={() => {
+                    setDirtyOnly((v) => !v);
                     closeFilter();
                   }}
                 />
@@ -710,6 +743,7 @@ export function OverviewTab({
                           ? () => pullEntry(row.entry)
                           : undefined
                       }
+                      onOpenIn={(t) => openInRow(row.entry, t)}
                     />
                   )}
                 </div>
@@ -766,6 +800,7 @@ function EntryRow({
   onStop,
   onCheckout,
   onPull,
+  onOpenIn,
 }: {
   entry: Entry;
   linearWorkspace: string;
@@ -778,6 +813,7 @@ function EntryRow({
   onStop: () => void;
   onCheckout?: () => void;
   onPull?: () => void;
+  onOpenIn: (target: OpenTarget) => void;
 }) {
   const canCheckout = entry.kind === "branch" && !entry.current && !entry.inWorktree && onCheckout;
   const TypeIcon = entry.kind === "worktree" ? FolderTree : GitBranch;
@@ -824,6 +860,13 @@ function EntryRow({
           <Cloud className="size-3" /> remote
         </Badge>
       )}
+      {entry.dirty && (
+        <span
+          title="Uncommitted changes"
+          className="size-2 shrink-0 rounded-full bg-amber-500"
+          aria-label="Uncommitted changes"
+        />
+      )}
       {running && (
         <span
           title="Dev server running"
@@ -835,6 +878,18 @@ function EntryRow({
       )}
 
       <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+        <OpenMenu
+          onPick={onOpenIn}
+          trigger={
+            <button
+              onClick={(e) => e.stopPropagation()}
+              title="Open in editor / terminal / Finder"
+              className="text-muted-foreground/60 transition-colors hover:text-foreground"
+            >
+              <ExternalLink className="size-3.5" />
+            </button>
+          }
+        />
         {entry.linearId && linearWorkspace && <LinearLink id={entry.linearId} workspace={linearWorkspace} />}
         {onPull ? (
           <Button

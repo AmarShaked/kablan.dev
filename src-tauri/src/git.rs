@@ -32,6 +32,21 @@ pub struct Worktree {
     pub is_main: bool,
     pub last_commit_ts: Option<i64>,
     pub author: Option<String>,
+    /// True when the working tree has uncommitted changes (git status --porcelain).
+    pub dirty: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Commit {
+    pub sha: String,
+    pub short_sha: String,
+    pub subject: String,
+    pub author: Option<String>,
+    pub ts: Option<i64>,
+    pub date_rel: Option<String>,
+    /// Number of parents (>1 = merge commit).
+    pub parents: u32,
 }
 
 /// Run `git <args>` in `cwd`, returning trimmed stdout, or Err(git's message).
@@ -260,6 +275,9 @@ pub fn list_worktrees(dir: &str) -> Vec<Worktree> {
         }
         let (ts, author) = head_meta(&path);
         let is_main = path == main_path;
+        let dirty = git(&path, &["status", "--porcelain"])
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
         result.push(Worktree {
             path,
             branch,
@@ -270,6 +288,7 @@ pub fn list_worktrees(dir: &str) -> Vec<Worktree> {
             is_main,
             last_commit_ts: ts,
             author,
+            dirty,
         });
     }
     result
@@ -312,6 +331,45 @@ pub fn pull_branch(main_dir: &str, branch: &str, cwd: Option<&str>) -> Result<St
         return Ok("Already up to date.".to_string());
     }
     Ok(if out.is_empty() { format!("Fast-forwarded {branch}.") } else { out })
+}
+
+/// Recent commits for a ref (default HEAD). For the timeline/graph view.
+pub fn list_commits(dir: &str, reff: Option<&str>, limit: u32) -> Vec<Commit> {
+    let target = reff.unwrap_or("HEAD");
+    let fmt = "%H%x1f%h%x1f%s%x1f%an%x1f%ct%x1f%p";
+    let format_arg = format!("--format={fmt}");
+    let max_count = format!("--max-count={limit}");
+    let out = match git(dir, &["log", &format_arg, &max_count, target]) {
+        Ok(s) if !s.is_empty() => s,
+        _ => return vec![],
+    };
+    out.lines()
+        .filter(|l| !l.is_empty())
+        .map(|line| {
+            let f: Vec<&str> = line.split('\u{1f}').collect();
+            let get = |i: usize| f.get(i).copied().unwrap_or("");
+            let ts = get(4).parse::<i64>().ok();
+            let parents = get(5).split_whitespace().filter(|s| !s.is_empty()).count() as u32;
+            Commit {
+                sha: get(0).to_string(),
+                short_sha: get(1).to_string(),
+                subject: get(2).to_string(),
+                author: non_empty(get(3)),
+                ts,
+                date_rel: None,
+                parents,
+            }
+        })
+        .collect()
+}
+
+/// Unified diff. With `sha`, shows that commit; otherwise the working-tree changes vs HEAD.
+pub fn get_diff(dir: &str, sha: Option<&str>) -> String {
+    let args: Vec<&str> = match sha {
+        Some(s) => vec!["show", "--no-color", "--stat", "--patch", s],
+        None => vec!["diff", "--no-color", "HEAD"],
+    };
+    git(dir, &args).unwrap_or_default()
 }
 
 fn non_empty(s: &str) -> Option<String> {

@@ -2,6 +2,7 @@
 //! the original Node/Express server (validated by the shared server test suite).
 pub mod config;
 pub mod git;
+pub mod open;
 pub mod processes;
 pub mod projects;
 
@@ -66,6 +67,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/branches", get(get_branches))
         .route("/api/projects/:name/worktrees", get(get_worktrees))
         .route("/api/projects/:name/commits", get(get_commits))
+        .route("/api/projects/:name/log", get(get_log))
+        .route("/api/projects/:name/diff", get(get_diff))
+        .route("/api/projects/:name/open", post(post_open))
         .route("/api/projects/:name/checkout", post(post_checkout))
         .route("/api/projects/:name/pull", post(post_pull))
         .route("/api/projects/:name/pull-branch", post(post_pull_branch))
@@ -132,6 +136,60 @@ async fn get_commits(Path(name): Path<String>, Query(q): Query<HashMap<String, S
     };
     let ts = blocking(move || git::commit_activity(&dir, reff.as_deref())).await;
     Ok(Json(json!({ "timestamps": ts })))
+}
+async fn get_log(Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    let cwd = q.get("cwd").filter(|s| !s.is_empty()).cloned();
+    let reff = q.get("ref").filter(|s| !s.is_empty()).cloned();
+    let dir = match &cwd {
+        Some(c) => {
+            let n = name.clone();
+            let c = c.clone();
+            blocking(move || projects::resolve_workdir(&n, Some(&c))).await.map_err(bad)?
+        }
+        None => projects::project_path_from_name(&name).map_err(bad)?,
+    };
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<u32>().ok())
+        .map(|n| n.clamp(1, 500))
+        .unwrap_or(50);
+    let commits = blocking(move || git::list_commits(&dir, reff.as_deref(), limit)).await;
+    Ok(Json(json!({ "commits": commits })))
+}
+async fn get_diff(Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    let cwd = q.get("cwd").filter(|s| !s.is_empty()).cloned();
+    let sha = q.get("sha").filter(|s| !s.is_empty()).cloned();
+    let dir = match &cwd {
+        Some(c) => {
+            let n = name.clone();
+            let c = c.clone();
+            blocking(move || projects::resolve_workdir(&n, Some(&c))).await.map_err(bad)?
+        }
+        None => projects::project_path_from_name(&name).map_err(bad)?,
+    };
+    let diff = blocking(move || git::get_diff(&dir, sha.as_deref())).await;
+    Ok(Json(json!({ "diff": diff })))
+}
+async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let target = b.get("target").and_then(|v| v.as_str()).unwrap_or("");
+    let valid = ["vscode", "cursor", "terminal", "iterm", "finder", "url"];
+    if !valid.contains(&target) {
+        return Err(bad("invalid target"));
+    }
+    let arg = if target == "url" {
+        b.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string()
+    } else {
+        let cwd = b.get("cwd").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+        let n = name.clone();
+        blocking(move || projects::resolve_workdir(&n, cwd.as_deref())).await.map_err(bad)?
+    };
+    if arg.is_empty() {
+        return Err(bad("missing url/cwd"));
+    }
+    let target = target.to_string();
+    blocking(move || open::open_target(&target, &arg)).await.map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
 }
 async fn post_checkout(Path(name): Path<String>, body: Bytes) -> ApiResult {
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
