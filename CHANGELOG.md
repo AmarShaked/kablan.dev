@@ -6,13 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-07-21
+## [0.1.3] - 2026-07-21
 
 ### Changed
-- **macOS is now a single universal build** (`universal-apple-darwin`) — one
-  `.dmg` that runs natively on both Apple Silicon and Intel. No more picking the
-  right architecture, and no Rosetta "won't run in future macOS" warning for
-  Apple Silicon users. The download page prefers the universal artifact.
+- **macOS ships separate native builds per architecture** and the download page
+  leads with **Apple Silicon** (native — no Rosetta, no "won't run in future
+  macOS" warning), with an Intel `.dmg` link alongside. (A universal build was
+  attempted in 0.1.2 but Tauri only `lipo`s the main binary, leaving the extra
+  `kablan-server` binary without a universal artifact and failing the bundle, so
+  per-arch builds are used instead. 0.1.2 was not fully released.)
 
 ## [0.1.1] - 2026-07-21
 
@@ -48,7 +50,7 @@ Initial public release. 🎉
 - **Full behavioral test suite** — 64 black-box tests that run against both the
   reference Node server and the Rust backend to guarantee parity.
 
-[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.2...HEAD
-[0.1.2]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.1...v0.1.2
+[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.1...v0.1.3
 [0.1.1]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AmarShaked/kablan.dev/releases/tag/v0.1.0
