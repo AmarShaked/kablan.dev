@@ -151,6 +151,8 @@
       .dlcard h3 { margin: 8px 0 4px; }
       .dlcard .files { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
       .dlcard .btn { width: 100%; justify-content: center; }
+      .dlcard .alt { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+      .dlcard .alt:hover { color: var(--accent); }
       .stack { display: grid; gap: 8px; }
       .stack a { font-size: 13px; color: var(--muted); }
       .stack a:hover { color: var(--accent); }
@@ -289,8 +291,9 @@
           <p class="lead">Latest version: <b id="ver">…</b> · <a href="https://github.com/AmarShaked/kablan.dev/releases" style="color:var(--accent)">all releases</a></p>
           <div class="dls">
             <div class="dlcard" id="card-mac">
-              <div class="os">🍎</div><h3>macOS</h3><div class="files">Universal .dmg — Apple Silicon &amp; Intel</div>
-              <a class="btn btn-primary" id="dl-mac" href="https://github.com/AmarShaked/kablan.dev/releases">Download</a>
+              <div class="os">🍎</div><h3>macOS</h3><div class="files">Apple Silicon (native) · Intel</div>
+              <a class="btn btn-primary" id="dl-macArm" href="https://github.com/AmarShaked/kablan.dev/releases">Download — Apple Silicon</a>
+              <a class="alt" id="dl-macIntel" href="https://github.com/AmarShaked/kablan.dev/releases">Intel Mac (.dmg)</a>
             </div>
             <div class="dlcard" id="card-win">
               <div class="os">🪟</div><h3>Windows</h3><div class="files">.msi / .exe installer</div>
@@ -346,7 +349,7 @@
       const REPO = "AmarShaked/kablan.dev";
       const ua = navigator.userAgent;
       const os = /Mac/i.test(ua) ? "mac" : /Win/i.test(ua) ? "win" : /Linux|X11/i.test(ua) ? "linux" : null;
-      const label = { mac: "macOS", win: "Windows", linux: "Linux" };
+      const label = { mac: "macOS (Apple Silicon)", win: "Windows", linux: "Linux" };
       if (os) {
         const card = document.getElementById("card-" + os);
         if (card) card.classList.add("match");
@@ -371,8 +374,10 @@
           const assets = rel.assets || [];
           document.getElementById("ver").textContent = (rel.tag_name || "").replace(/^v/, "") || "—";
           const map = {
-            // Prefer the universal dmg; fall back to per-arch for older releases.
-            mac: [/universal\.dmg$/i, /aarch64\.dmg$/i, /x64\.dmg$/i, /\.dmg$/i],
+            // Apple Silicon is primary; a universal dmg (if that's what a release
+            // ships) is also native on Apple Silicon, so it's an acceptable match.
+            macArm: [/aarch64\.dmg$/i, /universal\.dmg$/i, /\.dmg$/i],
+            macIntel: [/x64\.dmg$/i, /universal\.dmg$/i],
             win: [/\.msi$/i, /setup\.exe$/i, /\.exe$/i],
             linux: [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i],
           };
@@ -381,7 +386,8 @@
             const el = document.getElementById("dl-" + k);
             if (el) el.href = url || RELEASES;
           }
-          const heroUrl = os ? pick(assets, map[os]) : null;
+          const heroKey = os === "mac" ? "macArm" : os;
+          const heroUrl = os ? pick(assets, map[heroKey]) : null;
           const hero = document.getElementById("hero-dl");
           if (hero) hero.href = heroUrl || "#download";
         })
