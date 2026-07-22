@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, type ProjectSummary, type RunningServer, type LogLine, type OpenTarget } from "../api.ts";
 import { useCommits } from "../queries.ts";
+import { GitlabSection } from "./GitlabSection.tsx";
 import {
   Sheet,
   SheetContent,
@@ -385,6 +386,12 @@ export function ItemDrawer({
                       {(commits.data?.timestamps.length ?? 0).toLocaleString()} commits in the last 6 months
                     </p>
                   </div>
+
+                  <GitlabSection
+                    project={project.name}
+                    branch={entry.branchName}
+                    defaultTarget={project.currentBranch ?? "main"}
+                  />
                 </div>
               </TabsContent>
 
