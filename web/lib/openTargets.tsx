@@ -1,17 +1,10 @@
 import type { OpenTarget } from "../api.ts";
+import { VSCodeLogo } from "./brandLogos.tsx";
 
-// Small, recognizable app marks (brand-colored) for the "Open in…" menu.
+// Small, recognizable app marks for the "Open in…" menu. VS Code uses its real
+// brand logo; the macOS-only apps below aren't in the logo set, so they keep
+// simple brand-colored marks.
 const box = "size-4 shrink-0";
-
-function VSCodeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className={box} aria-hidden="true">
-      <rect x="2" y="2" width="20" height="20" rx="5" fill="#1f6feb" />
-      <polyline points="9,8 6,12 9,16" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="15,8 18,12 15,16" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function CursorIcon() {
   return (
@@ -60,7 +53,7 @@ function FinderIcon() {
 }
 
 export const OPEN_TARGETS: { id: OpenTarget; label: string; icon: React.ReactNode }[] = [
-  { id: "vscode", label: "VS Code", icon: <VSCodeIcon /> },
+  { id: "vscode", label: "VS Code", icon: <VSCodeLogo /> },
   { id: "cursor", label: "Cursor", icon: <CursorIcon /> },
   { id: "terminal", label: "Terminal", icon: <TerminalIcon /> },
   { id: "iterm", label: "iTerm", icon: <ITermIcon /> },

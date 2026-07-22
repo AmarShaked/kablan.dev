@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, X, RotateCcw, Save, RefreshCw, Link2 } from "lucide-react";
 import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import { GitLabLogo, LinearLogo } from "../lib/brandLogos.tsx";
 import {
   APP_VERSION,
   checkForUpdate,
@@ -256,6 +257,7 @@ export function SettingsPage({
           <TabsList variant="line" className="h-11">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="detection">Detection &amp; Env</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="overrides">
               Project overrides {overrideEntries.length > 0 && `(${overrideEntries.length})`}
             </TabsTrigger>
@@ -336,7 +338,30 @@ export function SettingsPage({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Linear</CardTitle>
+                  <CardTitle>About &amp; updates</CardTitle>
+                  <CardDescription>
+                    You're running Kablan.dev <code className="font-mono">v{APP_VERSION}</code>.
+                    {isTauri
+                      ? " Updates install in place — no re-download needed."
+                      : " In the browser, updates open the download page."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" onClick={checkUpdates} disabled={checking}>
+                    <RefreshCw className={checking ? "size-4 animate-spin" : "size-4"} />
+                    {checking ? "Checking…" : "Check for updates"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+            </TabsContent>
+
+            <TabsContent value="integrations" className="mt-0 flex flex-col gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LinearLogo className="size-4 shrink-0" /> Linear
+                  </CardTitle>
                   <CardDescription>
                     Workspace slug from your Linear URL (<code className="font-mono">linear.app/&lt;slug&gt;</code>).
                     When set, branches/worktrees with a ticket id (e.g. <code className="font-mono">FE-3146</code>)
@@ -354,28 +379,12 @@ export function SettingsPage({
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>About &amp; updates</CardTitle>
-                  <CardDescription>
-                    You're running Kablan.dev <code className="font-mono">v{APP_VERSION}</code>.
-                    {isTauri
-                      ? " Updates install in place — no re-download needed."
-                      : " In the browser, updates open the download page."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" size="sm" onClick={checkUpdates} disabled={checking}>
-                    <RefreshCw className={checking ? "size-4 animate-spin" : "size-4"} />
-                    {checking ? "Checking…" : "Check for updates"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {isTauri && (
+              {isTauri ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>GitLab</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <GitLabLogo className="size-4 shrink-0" /> GitLab
+                    </CardTitle>
                     <CardDescription>
                       Connect a GitLab host to see Merge Request &amp; pipeline status and open MRs.
                       Use a Personal Access Token with the <code className="font-mono">api</code> scope
@@ -423,6 +432,18 @@ export function SettingsPage({
                       </Button>
                     </div>
                   </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <GitLabLogo className="size-4 shrink-0" /> GitLab
+                    </CardTitle>
+                    <CardDescription>
+                      GitLab integration (MR &amp; pipeline status, create MR) is available in the
+                      desktop app, where the access token can be stored securely in your OS keychain.
+                    </CardDescription>
+                  </CardHeader>
                 </Card>
               )}
             </TabsContent>

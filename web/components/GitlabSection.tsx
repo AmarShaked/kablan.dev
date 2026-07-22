@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { GitMerge } from "lucide-react";
+import { GitLabLogo } from "../lib/brandLogos.tsx";
 import { api } from "../api.ts";
 import { useGitlabOverview } from "../queries.ts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -81,7 +82,9 @@ export function GitlabSection({
 
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">GitLab</h3>
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <GitLabLogo className="size-3.5 shrink-0" /> GitLab
+      </h3>
       {data.error && <p className="text-xs text-rose-500">{data.error}</p>}
 
       {mr ? (
