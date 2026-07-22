@@ -2,11 +2,49 @@
 //! GitLab host + project, reads a per-host PAT from the OS keychain, and calls
 //! the GitLab REST API. Never logs or returns the token.
 use crate::git;
+use serde::Serialize;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Remote {
     pub host: String,
     pub project: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeRequest {
+    pub iid: u64,
+    pub title: String,
+    pub state: String,
+    pub draft: bool,
+    pub web_url: String,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub pipeline_status: Option<String>,
+    pub approvals_required: Option<u32>,
+    pub approvals_left: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pipeline {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub sha: String,
+    pub status: String,
+    pub web_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Overview {
+    pub connected: bool,
+    pub host: Option<String>,
+    pub project: Option<String>,
+    pub mrs: Vec<MergeRequest>,
+    pub pipelines: Vec<Pipeline>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Parse a GitLab remote URL into host + project path. Handles ssh, ssh://, and
@@ -47,6 +85,66 @@ pub fn resolve(dir: &str) -> Option<Remote> {
     parse_remote(&url)
 }
 
+fn api_get(base: &str, token: &str, path: &str) -> Result<serde_json::Value, String> {
+    let resp = ureq::get(&format!("{base}{path}"))
+        .set("PRIVATE-TOKEN", token)
+        .call();
+    match resp {
+        Ok(r) => r.into_json::<serde_json::Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(code, _)) => Err(format!("GitLab API returned {code}")),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+pub fn fetch_open_mrs(base: &str, token: &str, project_id: &str) -> Result<Vec<MergeRequest>, String> {
+    let v = api_get(
+        base,
+        token,
+        &format!("/projects/{project_id}/merge_requests?state=opened&per_page=100"),
+    )?;
+    let arr = v.as_array().cloned().unwrap_or_default();
+    Ok(arr
+        .iter()
+        .map(|m| MergeRequest {
+            iid: m["iid"].as_u64().unwrap_or(0),
+            title: m["title"].as_str().unwrap_or("").to_string(),
+            state: m["state"].as_str().unwrap_or("opened").to_string(),
+            draft: m["draft"].as_bool().or_else(|| m["work_in_progress"].as_bool()).unwrap_or(false),
+            web_url: m["web_url"].as_str().unwrap_or("").to_string(),
+            source_branch: m["source_branch"].as_str().unwrap_or("").to_string(),
+            target_branch: m["target_branch"].as_str().unwrap_or("").to_string(),
+            pipeline_status: m["head_pipeline"]["status"].as_str().map(|s| s.to_string()),
+            approvals_required: None,
+            approvals_left: None,
+        })
+        .collect())
+}
+
+pub fn fetch_pipelines(base: &str, token: &str, project_id: &str) -> Result<Vec<Pipeline>, String> {
+    let v = api_get(
+        base,
+        token,
+        &format!("/projects/{project_id}/pipelines?per_page=50&order_by=updated_at"),
+    )?;
+    let arr = v.as_array().cloned().unwrap_or_default();
+    // Keep only the newest pipeline per ref (array is newest-first).
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for p in arr {
+        let reference = p["ref"].as_str().unwrap_or("").to_string();
+        if reference.is_empty() || !seen.insert(reference.clone()) {
+            continue;
+        }
+        out.push(Pipeline {
+            reference,
+            sha: p["sha"].as_str().unwrap_or("").to_string(),
+            status: p["status"].as_str().unwrap_or("").to_string(),
+            web_url: p["web_url"].as_str().unwrap_or("").to_string(),
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,5 +169,48 @@ mod tests {
     fn rejects_unknown() {
         assert!(parse_remote("").is_none());
         assert!(parse_remote("not a url").is_none());
+    }
+
+    #[test]
+    fn parses_open_mrs_and_pipelines() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method("GET").path("/projects/g%2Fp/merge_requests");
+            then.status(200).json_body(serde_json::json!([{
+                "iid": 12, "title": "Add thing", "state": "opened", "draft": false,
+                "web_url": "https://gl/x/-/merge_requests/12",
+                "source_branch": "feat/x", "target_branch": "main",
+                "head_pipeline": { "status": "success" }
+            }]));
+        });
+        server.mock(|when, then| {
+            when.method("GET").path("/projects/g%2Fp/pipelines");
+            then.status(200).json_body(serde_json::json!([
+                { "ref": "feat/x", "sha": "abc", "status": "success", "web_url": "u1" },
+                { "ref": "feat/x", "sha": "old", "status": "failed", "web_url": "u0" },
+                { "ref": "feat/y", "sha": "def", "status": "failed", "web_url": "u2" }
+            ]));
+        });
+        let base = server.base_url();
+        let mrs = fetch_open_mrs(&base, "tok", "g%2Fp").unwrap();
+        assert_eq!(mrs.len(), 1);
+        assert_eq!(mrs[0].iid, 12);
+        assert_eq!(mrs[0].source_branch, "feat/x");
+        assert_eq!(mrs[0].pipeline_status.as_deref(), Some("success"));
+
+        let pipes = fetch_pipelines(&base, "tok", "g%2Fp").unwrap();
+        assert_eq!(pipes.len(), 2, "newest per ref only");
+        assert_eq!(pipes[0].status, "success");
+    }
+
+    #[test]
+    fn surfaces_http_errors() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method("GET");
+            then.status(401).json_body(serde_json::json!({"message": "401 Unauthorized"}));
+        });
+        let err = fetch_open_mrs(&server.base_url(), "bad", "g%2Fp").unwrap_err();
+        assert!(err.contains("401"), "got: {err}");
     }
 }
