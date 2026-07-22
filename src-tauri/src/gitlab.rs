@@ -145,6 +145,59 @@ pub fn fetch_pipelines(base: &str, token: &str, project_id: &str) -> Result<Vec<
     Ok(out)
 }
 
+pub fn validate(base: &str, token: &str) -> Result<String, String> {
+    let v = api_get(base, token, "/user")?;
+    v["username"].as_str().map(|s| s.to_string()).ok_or_else(|| "unexpected /user response".to_string())
+}
+
+pub struct CreateMrArgs {
+    pub source_branch: String,
+    pub target_branch: String,
+    pub title: String,
+    pub description: String,
+    pub draft: bool,
+    pub remove_source_branch: bool,
+}
+
+pub fn create_merge_request(
+    base: &str,
+    token: &str,
+    project_id: &str,
+    args: &CreateMrArgs,
+) -> Result<(u64, String), String> {
+    // GitLab marks drafts via a "Draft:" title prefix.
+    let title = if args.draft && !args.title.starts_with("Draft:") {
+        format!("Draft: {}", args.title)
+    } else {
+        args.title.clone()
+    };
+    let body = serde_json::json!({
+        "source_branch": args.source_branch,
+        "target_branch": args.target_branch,
+        "title": title,
+        "description": args.description,
+        "remove_source_branch": args.remove_source_branch,
+    });
+    let resp = ureq::post(&format!("{base}/projects/{project_id}/merge_requests"))
+        .set("PRIVATE-TOKEN", token)
+        .send_json(body);
+    match resp {
+        Ok(r) => {
+            let v = r.into_json::<serde_json::Value>().map_err(|e| e.to_string())?;
+            let iid = v["iid"].as_u64().ok_or("no iid in response")?;
+            let url = v["web_url"].as_str().unwrap_or("").to_string();
+            Ok((iid, url))
+        }
+        Err(ureq::Error::Status(code, r)) => {
+            let msg = r.into_json::<serde_json::Value>().ok()
+                .and_then(|v| v["message"].as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| format!("GitLab API returned {code}"));
+            Err(msg)
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +265,38 @@ mod tests {
         });
         let err = fetch_open_mrs(&server.base_url(), "bad", "g%2Fp").unwrap_err();
         assert!(err.contains("401"), "got: {err}");
+    }
+
+    #[test]
+    fn validate_returns_username() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method("GET").path("/user");
+            then.status(200).json_body(serde_json::json!({"username": "shaked"}));
+        });
+        assert_eq!(validate(&server.base_url(), "tok").unwrap(), "shaked");
+    }
+
+    #[test]
+    fn create_mr_sends_draft_prefix_and_returns_iid() {
+        let server = httpmock::MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method("POST")
+                .path("/projects/g%2Fp/merge_requests")
+                .json_body_partial(r#"{"title":"Draft: My MR","source_branch":"feat/x","target_branch":"main"}"#);
+            then.status(201).json_body(serde_json::json!({"iid": 7, "web_url": "https://gl/mr/7"}));
+        });
+        let args = CreateMrArgs {
+            source_branch: "feat/x".into(),
+            target_branch: "main".into(),
+            title: "My MR".into(),
+            description: "".into(),
+            draft: true,
+            remove_source_branch: false,
+        };
+        let (iid, url) = create_merge_request(&server.base_url(), "tok", "g%2Fp", &args).unwrap();
+        m.assert();
+        assert_eq!(iid, 7);
+        assert_eq!(url, "https://gl/mr/7");
     }
 }
