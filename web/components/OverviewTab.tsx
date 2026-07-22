@@ -35,10 +35,12 @@ import {
   type RunningServer,
   type LogLine,
   type OpenTarget,
+  type GitlabMergeRequest,
 } from "../api.ts";
-import { useBranches, useWorktrees, qk } from "../queries.ts";
+import { useBranches, useWorktrees, useGitlabOverview, qk } from "../queries.ts";
 import { ItemDrawer } from "./ItemDrawer.tsx";
 import { OpenMenu } from "./OpenMenu.tsx";
+import { pipelineTone } from "./GitlabSection.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -219,6 +221,21 @@ export function OverviewTab({
   const branches: Branch[] = branchesQuery.data ?? [];
   const worktrees: Worktree[] = worktreesQuery.data ?? [];
   const loading = branchesQuery.isPending || worktreesQuery.isPending;
+
+  const gitlab = useGitlabOverview(project.name);
+  const mrByBranch = useMemo(() => {
+    const m = new Map<string, GitlabMergeRequest>();
+    gitlab.data?.mrs.forEach((mr) => m.set(mr.sourceBranch, mr));
+    return m;
+  }, [gitlab.data]);
+  const ciByRef = useMemo(() => {
+    const m = new Map<string, string>();
+    gitlab.data?.pipelines.forEach((p) => m.set(p.ref, p.status));
+    gitlab.data?.mrs.forEach((mr) => {
+      if (mr.pipelineStatus && !m.has(mr.sourceBranch)) m.set(mr.sourceBranch, mr.pipelineStatus);
+    });
+    return m;
+  }, [gitlab.data]);
 
   const [busy, setBusy] = useState(false);
   const [gitBusy, setGitBusy] = useState(false);
@@ -744,6 +761,8 @@ export function OverviewTab({
                           : undefined
                       }
                       onOpenIn={(t) => openInRow(row.entry, t)}
+                      mr={row.entry.branchName ? mrByBranch.get(row.entry.branchName) : undefined}
+                      ciStatus={row.entry.branchName ? ciByRef.get(row.entry.branchName) ?? null : null}
                     />
                   )}
                 </div>
@@ -801,6 +820,8 @@ function EntryRow({
   onCheckout,
   onPull,
   onOpenIn,
+  mr,
+  ciStatus,
 }: {
   entry: Entry;
   linearWorkspace: string;
@@ -814,6 +835,8 @@ function EntryRow({
   onCheckout?: () => void;
   onPull?: () => void;
   onOpenIn: (target: OpenTarget) => void;
+  mr?: GitlabMergeRequest;
+  ciStatus?: string | null;
 }) {
   const canCheckout = entry.kind === "branch" && !entry.current && !entry.inWorktree && onCheckout;
   const TypeIcon = entry.kind === "worktree" ? FolderTree : GitBranch;
@@ -859,6 +882,31 @@ function EntryRow({
         <Badge className="shrink-0 gap-1 border-0 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
           <Cloud className="size-3" /> remote
         </Badge>
+      )}
+      {ciStatus && (
+        <span
+          title={`CI: ${ciStatus}`}
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            ciStatus === "success" ? "bg-emerald-500" : ciStatus === "failed" ? "bg-rose-500" : "bg-amber-500",
+          )}
+        />
+      )}
+      {mr && (
+        <a
+          href={mr.webUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "shrink-0 rounded-md border-0 px-1.5 py-0.5 text-[10.5px] font-semibold",
+            "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+          )}
+          title={mr.title}
+        >
+          !{mr.iid}
+          {mr.draft ? " draft" : ""}
+        </a>
       )}
       {entry.dirty && (
         <span
