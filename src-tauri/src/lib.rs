@@ -75,6 +75,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/pull", post(post_pull))
         .route("/api/projects/:name/pull-branch", post(post_pull_branch))
         .route("/api/projects/:name/fetch", post(post_fetch))
+        .route("/api/gitlab/hosts", get(get_gitlab_hosts))
+        .route("/api/gitlab/token", put(put_gitlab_token).delete(delete_gitlab_token))
+        .route("/api/projects/:name/gitlab/status", get(get_gitlab_status))
+        .route("/api/projects/:name/gitlab/overview", get(get_gitlab_overview))
+        .route("/api/projects/:name/gitlab/mr", post(post_gitlab_mr))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -171,6 +176,78 @@ async fn get_diff(Path(name): Path<String>, Query(q): Query<HashMap<String, Stri
     let diff = blocking(move || git::get_diff(&dir, sha.as_deref())).await;
     Ok(Json(json!({ "diff": diff })))
 }
+
+// --- GitLab ---
+async fn get_gitlab_hosts() -> ApiResult {
+    let hosts = config::load().gitlab_hosts;
+    Ok(Json(json!({ "hosts": hosts })))
+}
+
+async fn put_gitlab_token(body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let host = b.get("host").and_then(|v| v.as_str()).unwrap_or("").trim().to_lowercase();
+    let token = b.get("token").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if host.is_empty() || token.is_empty() {
+        return Err(bad("host and token are required"));
+    }
+    let username = blocking(move || {
+        let user = gitlab::validate(&gitlab::api_base(&host), &token)?;
+        gitlab::set_token(&host, &token)?;
+        config::add_gitlab_host(&host);
+        Ok::<String, String>(user)
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true, "username": username })))
+}
+
+async fn delete_gitlab_token(body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let host = b.get("host").and_then(|v| v.as_str()).unwrap_or("").trim().to_lowercase();
+    if host.is_empty() {
+        return Err(bad("host is required"));
+    }
+    blocking(move || {
+        let _ = gitlab::delete_token(&host);
+        config::remove_gitlab_host(&host);
+    })
+    .await;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn get_gitlab_status(Path(name): Path<String>) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let (connected, host, project) = blocking(move || gitlab::status(&dir)).await;
+    Ok(Json(json!({ "connected": connected, "host": host, "project": project })))
+}
+
+async fn get_gitlab_overview(Path(name): Path<String>) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let ov = blocking(move || gitlab::overview(&dir)).await;
+    Ok(Json(serde_json::to_value(ov).unwrap()))
+}
+
+async fn post_gitlab_mr(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let source = b.get("sourceBranch").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let target = b.get("targetBranch").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let title = b.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if source.is_empty() || target.is_empty() || title.is_empty() {
+        return Err(bad("sourceBranch, targetBranch and title are required"));
+    }
+    let args = gitlab::CreateMrArgs {
+        source_branch: source,
+        target_branch: target,
+        title,
+        description: b.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        draft: b.get("draft").and_then(|v| v.as_bool()).unwrap_or(false),
+        remove_source_branch: b.get("removeSourceBranch").and_then(|v| v.as_bool()).unwrap_or(false),
+    };
+    let (iid, web_url) = blocking(move || gitlab::create(&dir, &args)).await.map_err(bad)?;
+    Ok(Json(json!({ "iid": iid, "webUrl": web_url })))
+}
+
 async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {
     let b = parse_body(&body);
     let target = b.get("target").and_then(|v| v.as_str()).unwrap_or("");
