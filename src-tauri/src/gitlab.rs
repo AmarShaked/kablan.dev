@@ -233,16 +233,6 @@ fn is_configured(host: &str) -> bool {
     crate::config::load().gitlab_hosts.iter().any(|h| h == host)
 }
 
-pub fn status(dir: &str) -> (bool, Option<String>, Option<String>) {
-    match resolve(dir) {
-        Some(r) => {
-            let connected = is_configured(&r.host) && get_token(&r.host).is_some();
-            (connected, Some(r.host), Some(r.project))
-        }
-        None => (false, None, None),
-    }
-}
-
 pub fn overview(dir: &str) -> Overview {
     let remote = match resolve(dir) {
         Some(r) => r,

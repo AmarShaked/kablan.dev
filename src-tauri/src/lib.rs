@@ -77,7 +77,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/fetch", post(post_fetch))
         .route("/api/gitlab/hosts", get(get_gitlab_hosts))
         .route("/api/gitlab/token", put(put_gitlab_token).delete(delete_gitlab_token))
-        .route("/api/projects/:name/gitlab/status", get(get_gitlab_status))
         .route("/api/projects/:name/gitlab/overview", get(get_gitlab_overview))
         .route("/api/projects/:name/gitlab/mr", post(post_gitlab_mr))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
@@ -213,12 +212,6 @@ async fn delete_gitlab_token(body: Bytes) -> ApiResult {
     })
     .await;
     Ok(Json(json!({ "ok": true })))
-}
-
-async fn get_gitlab_status(Path(name): Path<String>) -> ApiResult {
-    let dir = projects::project_path_from_name(&name).map_err(bad)?;
-    let (connected, host, project) = blocking(move || gitlab::status(&dir)).await;
-    Ok(Json(json!({ "connected": connected, "host": host, "project": project })))
 }
 
 async fn get_gitlab_overview(Path(name): Path<String>) -> ApiResult {

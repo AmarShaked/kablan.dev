@@ -67,7 +67,7 @@ export function GitlabSection({
       });
       toast.success(`Created MR !${r.iid}`, {
         duration: 8000,
-        action: { label: "Open", onClick: () => api.gitlab.status(project).then(() => window.open(r.webUrl, "_blank")) },
+        action: { label: "Open", onClick: () => window.open(r.webUrl, "_blank", "noopener") },
       });
       setShowForm(false);
       setTitle("");

@@ -214,10 +214,6 @@ export const api = {
       }),
     deleteToken: (host: string) =>
       req<{ ok: boolean }>("/api/gitlab/token", { method: "DELETE", body: JSON.stringify({ host }) }),
-    status: (name: string) =>
-      req<{ connected: boolean; host: string | null; project: string | null }>(
-        `/api/projects/${encodeURIComponent(name)}/gitlab/status`,
-      ),
     overview: (name: string) =>
       req<GitlabOverview>(`/api/projects/${encodeURIComponent(name)}/gitlab/overview`),
     createMr: (
