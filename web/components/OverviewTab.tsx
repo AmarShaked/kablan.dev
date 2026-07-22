@@ -18,6 +18,11 @@ import {
   Clock,
   ArrowDownAZ,
   RefreshCw,
+  ListFilter,
+  User,
+  CalendarDays,
+  Link2,
+  ChevronLeft,
 } from "lucide-react";
 import {
   api,
@@ -32,13 +37,7 @@ import { ItemDrawer } from "./ItemDrawer.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { LinearLink, extractLinearId } from "./LinearLink.tsx";
@@ -75,6 +74,14 @@ const DATE_WINDOWS: Record<string, number> = {
   "7d": 604800,
   "30d": 2592000,
   "90d": 7776000,
+};
+
+const DATE_LABELS: Record<string, string> = {
+  any: "Any time",
+  "1d": "Last 24 hours",
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
 };
 
 function relTime(ts: number | null): string {
@@ -154,6 +161,39 @@ function Avatar({ name }: { name: string | null }) {
   );
 }
 
+/** One row inside the filter popover — a submenu opener (chevron), a toggle, or an option (check). */
+function FilterRow({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+  disabled,
+  chevron,
+}: {
+  icon?: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  chevron?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent",
+        active ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      {Icon && <Icon className="size-3.5 shrink-0 opacity-80" />}
+      <span className="flex-1 truncate text-left">{label}</span>
+      {chevron && <ChevronRight className="size-3.5 shrink-0 opacity-60" />}
+      {active && !chevron && <Check className="size-3.5 shrink-0 text-[var(--success)]" />}
+    </button>
+  );
+}
+
 export function OverviewTab({
   project,
   server,
@@ -180,7 +220,12 @@ export function OverviewTab({
   const [author, setAuthor] = useState("all");
   const [dateWindow, setDateWindow] = useState("any");
   const [runningOnly, setRunningOnly] = useState(false);
+  const [hasLinear, setHasLinear] = useState(false);
+  const [mainOnly, setMainOnly] = useState(false);
+  const [location, setLocation] = useState<"all" | "local" | "remote">("all");
   const [sort, setSort] = useState<SortMode>("recent");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterView, setFilterView] = useState<"root" | "author" | "date" | "location">("root");
   const [collapsed, setCollapsed] = useState<Record<Kind, boolean>>({ worktree: false, branch: false });
   const [drawer, setDrawer] = useState<{ entry: Entry; tab: string } | null>(null);
 
@@ -275,13 +320,22 @@ export function OverviewTab({
     }
   };
 
-  const filtersActive =
-    search.trim() !== "" || author !== "all" || dateWindow !== "any" || runningOnly || sort !== "recent";
+  const activeCount =
+    (author !== "all" ? 1 : 0) +
+    (dateWindow !== "any" ? 1 : 0) +
+    (runningOnly ? 1 : 0) +
+    (hasLinear ? 1 : 0) +
+    (mainOnly ? 1 : 0) +
+    (location !== "all" ? 1 : 0);
+  const filtersActive = search.trim() !== "" || activeCount > 0 || sort !== "recent";
   const clearFilters = () => {
     setSearch("");
     setAuthor("all");
     setDateWindow("any");
     setRunningOnly(false);
+    setHasLinear(false);
+    setMainOnly(false);
+    setLocation("all");
     setSort("recent");
   };
 
@@ -352,9 +406,14 @@ export function OverviewTab({
     const win = DATE_WINDOWS[dateWindow] ?? 0;
     const cutoff = win ? Date.now() / 1000 - win : 0;
 
+    const isMainEntry = (e: Entry) => e.isMain || e.name === "main" || e.name === "master";
     const filtered = allEntries.filter((e) => {
       if (runningOnly && !isEntryRunning(e)) return false;
       if (author !== "all" && e.author !== author) return false;
+      if (hasLinear && !e.linearId) return false;
+      if (mainOnly && !isMainEntry(e)) return false;
+      if (location === "local" && e.remoteOnly) return false;
+      if (location === "remote" && !e.remoteOnly) return false;
       if (cutoff && (e.ts ?? 0) < cutoff) return false;
       if (q) {
         const hay = `${e.name} ${e.author ?? ""} ${e.head ?? ""}`.toLowerCase();
@@ -383,7 +442,7 @@ export function OverviewTab({
       if (!collapsed[g.kind]) items.forEach((entry) => out.push({ type: "item", entry }));
     }
     return out;
-  }, [allEntries, search, author, dateWindow, runningOnly, server, sort, collapsed]);
+  }, [allEntries, search, author, dateWindow, runningOnly, hasLinear, mainOnly, location, server, sort, collapsed]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -393,74 +452,160 @@ export function OverviewTab({
     overscan: 14,
   });
 
+  // Active filters, rendered as removable chips (Linear-style).
+  const chips: { key: string; label: string; clear: () => void }[] = [];
+  if (author !== "all") chips.push({ key: "author", label: author, clear: () => setAuthor("all") });
+  if (dateWindow !== "any")
+    chips.push({ key: "date", label: DATE_LABELS[dateWindow], clear: () => setDateWindow("any") });
+  if (runningOnly) chips.push({ key: "running", label: "Running", clear: () => setRunningOnly(false) });
+  if (hasLinear) chips.push({ key: "linear", label: "Has Linear", clear: () => setHasLinear(false) });
+  if (mainOnly) chips.push({ key: "main", label: "Main only", clear: () => setMainOnly(false) });
+  if (location !== "all")
+    chips.push({
+      key: "loc",
+      label: location === "local" ? "Local only" : "Remote only",
+      clear: () => setLocation("all"),
+    });
+
+  const closeFilter = () => {
+    setFilterOpen(false);
+    setFilterView("root");
+  };
+
   return (
     <div className="flex h-full flex-col">
-      {/* Filter bar */}
+      {/* Filter bar — minimal, Linear-style */}
       <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5">
-        <div className="relative w-56 max-w-[38%]">
+        <div className="relative w-52 shrink-0">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, author, sha…"
+            placeholder="Search…"
             spellCheck={false}
             className="h-7 pl-7 text-xs"
           />
         </div>
-        <Select value={author} onValueChange={setAuthor}>
-          <SelectTrigger className="!h-7 w-36 text-xs">
-            <SelectValue placeholder="Author" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All authors</SelectItem>
-            {authors.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={dateWindow} onValueChange={setDateWindow}>
-          <SelectTrigger className="!h-7 w-32 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Any time</SelectItem>
-            <SelectItem value="1d">Last 24 hours</SelectItem>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
-          </SelectContent>
-        </Select>
-        <button
-          onClick={() => setRunningOnly((v) => !v)}
-          disabled={!serverRunning && !runningOnly}
-          title={serverRunning ? "Show only running servers" : "No servers running"}
-          className={cn(
-            "flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
-            runningOnly
-              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-border text-muted-foreground hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent",
-          )}
+
+        <Popover
+          open={filterOpen}
+          onOpenChange={(o) => {
+            setFilterOpen(o);
+            if (!o) setFilterView("root");
+          }}
         >
-          <span
-            className={cn(
-              "size-2 rounded-full",
-              serverRunning ? "bg-emerald-500" : "bg-muted-foreground/40",
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs transition-colors hover:bg-accent",
+                activeCount > 0 ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <ListFilter className="size-3.5" /> Filter
+              {activeCount > 0 && (
+                <span className="rounded bg-accent px-1 text-[10px] tabular-nums">{activeCount}</span>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 p-1">
+            {filterView === "root" && (
+              <div className="flex flex-col">
+                <FilterRow icon={User} label="Author" chevron onClick={() => setFilterView("author")} />
+                <FilterRow icon={CalendarDays} label="Updated" chevron onClick={() => setFilterView("date")} />
+                <FilterRow icon={Cloud} label="Location" chevron onClick={() => setFilterView("location")} />
+                <div className="my-1 h-px bg-border" />
+                <FilterRow
+                  label="Running server"
+                  active={runningOnly}
+                  disabled={!serverRunning && !runningOnly}
+                  onClick={() => {
+                    setRunningOnly((v) => !v);
+                    closeFilter();
+                  }}
+                />
+                <FilterRow
+                  icon={Link2}
+                  label="Has Linear ticket"
+                  active={hasLinear}
+                  onClick={() => {
+                    setHasLinear((v) => !v);
+                    closeFilter();
+                  }}
+                />
+                <FilterRow
+                  icon={GitBranch}
+                  label="Main branches only"
+                  active={mainOnly}
+                  onClick={() => {
+                    setMainOnly((v) => !v);
+                    closeFilter();
+                  }}
+                />
+              </div>
             )}
-          />
-          Running
-        </button>
-        {filtersActive && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground"
-            onClick={clearFilters}
-          >
-            <X className="size-3.5" /> Clear
-          </Button>
-        )}
+            {filterView !== "root" && (
+              <div className="flex flex-col">
+                <button
+                  onClick={() => setFilterView("root")}
+                  className="mb-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium hover:bg-accent"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  {filterView === "author" ? "Author" : filterView === "date" ? "Updated" : "Location"}
+                </button>
+                <div className="mb-1 h-px bg-border" />
+                <div className="max-h-64 overflow-y-auto custom-scroll">
+                  {filterView === "author" && (
+                    <>
+                      <FilterRow label="All authors" active={author === "all"} onClick={() => { setAuthor("all"); closeFilter(); }} />
+                      {authors.map((a) => (
+                        <FilterRow key={a} label={a} active={author === a} onClick={() => { setAuthor(a); closeFilter(); }} />
+                      ))}
+                    </>
+                  )}
+                  {filterView === "date" &&
+                    Object.keys(DATE_LABELS).map((k) => (
+                      <FilterRow key={k} label={DATE_LABELS[k]} active={dateWindow === k} onClick={() => { setDateWindow(k); closeFilter(); }} />
+                    ))}
+                  {filterView === "location" && (
+                    <>
+                      <FilterRow label="Anywhere" active={location === "all"} onClick={() => { setLocation("all"); closeFilter(); }} />
+                      <FilterRow label="Local only" active={location === "local"} onClick={() => { setLocation("local"); closeFilter(); }} />
+                      <FilterRow label="Remote only" active={location === "remote"} onClick={() => { setLocation("remote"); closeFilter(); }} />
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Active filter chips */}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto custom-scroll">
+          {chips.map((c) => (
+            <span
+              key={c.key}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-accent/50 px-2 py-0.5 text-xs text-foreground"
+            >
+              {c.label}
+              <button
+                onClick={c.clear}
+                aria-label={`Remove ${c.label} filter`}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          {activeCount > 0 && (
+            <button
+              onClick={clearFilters}
+              className="shrink-0 px-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+
         {/* Fetch + Sort — right side */}
         <Button
           size="sm"

@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, X, RotateCcw, Save } from "lucide-react";
+import { Plus, Trash2, X, RotateCcw, Save, RefreshCw } from "lucide-react";
 import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import {
+  APP_VERSION,
+  checkForUpdate,
+  checkTauriUpdate,
+  isTauri,
+  DOWNLOAD_URL,
+} from "../lib/version.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +77,38 @@ export function SettingsPage({
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [draft, setDraft] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  const checkUpdates = async () => {
+    setChecking(true);
+    try {
+      if (isTauri) {
+        const u = await checkTauriUpdate();
+        if (u) {
+          toast.success(`Update available: v${u.version}`, {
+            duration: 12000,
+            action: { label: "Update & restart", onClick: () => void u.run() },
+          });
+        } else {
+          toast.success(`You're on the latest version (v${APP_VERSION}).`);
+        }
+      } else {
+        const u = await checkForUpdate();
+        if (u) {
+          toast.success(`Update available: v${u.latest}`, {
+            duration: 12000,
+            action: { label: "Download", onClick: () => window.open(DOWNLOAD_URL, "_blank", "noopener") },
+          });
+        } else {
+          toast.success(`You're on the latest version (v${APP_VERSION}).`);
+        }
+      }
+    } catch (err) {
+      toast.error(`Update check failed: ${String(err)}`);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const load = () => api.getConfig().then((c) => {
     setConfig(c);
@@ -281,6 +320,24 @@ export function SettingsPage({
                     className="font-mono text-xs"
                     onChange={(e) => set("linearWorkspace", e.target.value)}
                   />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>About &amp; updates</CardTitle>
+                  <CardDescription>
+                    You're running Kablan.dev <code className="font-mono">v{APP_VERSION}</code>.
+                    {isTauri
+                      ? " Updates install in place — no re-download needed."
+                      : " In the browser, updates open the download page."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" onClick={checkUpdates} disabled={checking}>
+                    <RefreshCw className={checking ? "size-4 animate-spin" : "size-4"} />
+                    {checking ? "Checking…" : "Check for updates"}
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>

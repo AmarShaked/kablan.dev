@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-07-22
+
+### Changed
+- **Minimal, Linear-style filter bar** — the row of dropdowns is replaced by a
+  single **Filter** menu (Author / Updated / Location submenus + Running /
+  Has Linear / Main-only toggles), with applied filters shown as removable chips,
+  a filter count, and "Clear all".
+
+### Added
+- **New filters**: Main branches only, Has Linear ticket, and Location
+  (Local only / Remote only).
+- **Check for updates** button in Settings → General (About & updates), showing
+  the current version.
+
 ## [0.1.6] - 2026-07-22
 
 ### Added
@@ -84,7 +98,8 @@ Initial public release. 🎉
 - **Full behavioral test suite** — 64 black-box tests that run against both the
   reference Node server and the Rust backend to guarantee parity.
 
-[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.3...v0.1.4
