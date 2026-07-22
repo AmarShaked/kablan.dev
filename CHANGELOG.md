@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **GitLab integration** (desktop app): connect a GitLab host in Settings with a
+  Personal Access Token (stored in the OS keychain). Rows show CI pipeline status
+  and open-MR badges; the drawer shows MR state + pipeline and can **create a
+  Merge Request**. New "Has open MR" / "CI failing" filters. Works with
+  gitlab.com and self-hosted; provider auto-detected from the repo's origin remote.
+
 ## [0.1.7] - 2026-07-22
 
 ### Changed
