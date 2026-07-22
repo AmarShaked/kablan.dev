@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-21
+
+### Fixed
+- **macOS "app is damaged" on first launch** — the app bundle is now ad-hoc
+  signed, so Gatekeeper shows the standard "unidentified developer" prompt
+  (bypassable via right-click → Open / System Settings → Open Anyway) instead of
+  refusing to open. If you still hit it on a downloaded build, clear the
+  quarantine flag once: `xattr -dr com.apple.quarantine /Applications/Kablan.dev.app`.
+
 ## [0.1.0] - 2026-07-21
 
 Initial public release. 🎉
@@ -31,5 +40,6 @@ Initial public release. 🎉
 - **Full behavioral test suite** — 64 black-box tests that run against both the
   reference Node server and the Rust backend to guarantee parity.
 
-[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AmarShaked/kablan.dev/releases/tag/v0.1.0

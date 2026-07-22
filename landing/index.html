@@ -302,7 +302,9 @@
             </div>
           </div>
           <p class="lead" style="margin-top:26px;font-size:13px">
-            Builds are unsigned for now — on macOS right-click → Open the first time; on Windows choose “More info → Run anyway”.
+            Builds are unsigned for now. On <b>macOS</b>, if you see “Kablan.dev is damaged”, drag it to Applications and run
+            <code>xattr&nbsp;-dr&nbsp;com.apple.quarantine&nbsp;/Applications/Kablan.dev.app</code> once — it's the Gatekeeper
+            quarantine flag, not a broken download. On <b>Windows</b>, choose “More info → Run anyway”.
             Requires <code>git</code> and Node.js, the tools you already develop with.
           </p>
         </div>
