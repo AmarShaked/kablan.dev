@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, GitMerge } from "lucide-react";
+import { GitMerge } from "lucide-react";
 import { api } from "../api.ts";
 import { useGitlabOverview } from "../queries.ts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,7 +50,11 @@ export function GitlabSection({
   const status = mr?.pipelineStatus ?? pipeline?.status ?? null;
 
   const submit = async () => {
-    if (!branch || !title.trim()) return;
+    if (!branch || !title.trim() || !target.trim()) return;
+    if (target.trim() === branch) {
+      toast.error("Source and target branch are the same.");
+      return;
+    }
     setCreating(true);
     try {
       const r = await api.gitlab.createMr(project, {
@@ -133,7 +137,7 @@ export function GitlabSection({
             </label>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" disabled={creating || !title.trim()} onClick={submit}>
+            <Button size="sm" disabled={creating || !title.trim() || !target.trim()} onClick={submit}>
               {creating ? "Creating…" : "Create MR"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>

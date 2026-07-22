@@ -388,6 +388,7 @@ export function ItemDrawer({
                   </div>
 
                   <GitlabSection
+                    key={entry.id}
                     project={project.name}
                     branch={entry.branchName}
                     defaultTarget={project.currentBranch ?? "main"}
