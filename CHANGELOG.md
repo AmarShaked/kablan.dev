@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-22
+
+### Fixed
+- **Dev servers wouldn't start in the packaged app** (success toast, but nothing
+  ran). GUI-launched apps inherit a minimal `PATH`, so `npm`/`node`/`pnpm`
+  weren't found. The app now resolves your login shell's real `PATH` at startup
+  and applies it process-wide, so child processes (and git) find your tools.
+
+### Changed
+- **Failures are no longer silent** — a dev server that exits abnormally (e.g.
+  "command not found", a crashed dev command) now raises a toast, and a server's
+  **Logs remain viewable after it exits** so you can see why it died.
+
 ## [0.1.3] - 2026-07-21
 
 ### Changed
@@ -50,7 +63,8 @@ Initial public release. 🎉
 - **Full behavioral test suite** — 64 black-box tests that run against both the
   reference Node server and the Rust backend to guarantee parity.
 
-[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.1...v0.1.3
 [0.1.1]: https://github.com/AmarShaked/kablan.dev/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AmarShaked/kablan.dev/releases/tag/v0.1.0

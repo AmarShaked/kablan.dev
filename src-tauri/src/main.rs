@@ -12,7 +12,35 @@ fn free_port() -> u16 {
         .unwrap_or(4317)
 }
 
+/// GUI-launched apps (Finder/Dock) inherit a minimal PATH (~`/usr/bin:/bin`),
+/// so tools installed via Homebrew/nvm/asdf (npm, node, pnpm, …) aren't found
+/// and dev servers fail to start. Resolve the user's real login-shell PATH and
+/// apply it process-wide so every child spawn (and git) sees it.
+#[cfg(unix)]
+fn augment_path() {
+    use std::process::Command;
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let resolved = Command::new(&shell)
+        .args(["-ilc", "printf %s \"$PATH\""])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut path = resolved.unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
+    // Belt-and-suspenders: make sure the usual install dirs are present.
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
+        if !path.split(':').any(|p| p == dir) {
+            path = format!("{dir}:{path}");
+        }
+    }
+    std::env::set_var("PATH", path);
+}
+#[cfg(not(unix))]
+fn augment_path() {}
+
 fn main() {
+    augment_path();
     let port = free_port();
 
     // Run the native Axum backend in the background on its own runtime, sharing

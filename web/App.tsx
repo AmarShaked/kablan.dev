@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle } from "lucide-react";
 import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine } from "./api.ts";
 import { APP_VERSION, checkForUpdate, DOWNLOAD_URL, type UpdateInfo } from "./lib/version.ts";
@@ -90,11 +91,21 @@ export function App() {
           for (const s of msg.servers as RunningServer[]) map[s.projectName] = s;
           setServers(map);
         } else if (msg.type === "status") {
+          const s = msg.server as RunningServer | null;
           setServers((prev) => {
             const next = { ...prev };
-            if (msg.server) next[msg.projectName] = msg.server;
+            if (s) next[msg.projectName] = s;
             return next;
           });
+          // Surface an abnormal exit so failures aren't silent. A clean stop
+          // kills via signal (exitCode null), so this only fires on real crashes
+          // (e.g. "command not found", a dev server that errored out).
+          if (s && (s.status === "error" || (s.status === "exited" && !!s.exitCode))) {
+            toast.error(
+              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the item's Logs tab for details.`,
+              { duration: 8000 },
+            );
+          }
         } else if (msg.type === "log") {
           const { projectName, line } = msg;
           setLogs((prev) => {

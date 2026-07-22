@@ -164,9 +164,11 @@ export function ItemDrawer({
   const dir = entry?.cwd ?? project.path;
 
   // Environment needs a concrete working directory: a worktree, the checked-out
-  // branch, or the currently-running server's dir. Logs only exist while running.
+  // branch, or the currently-running server's dir.
   const canEnv = !!entry && (!!entry.cwd || entry.current || running);
-  const canLogs = running;
+  // Logs are available while running OR when a server ran and left output behind
+  // (so a crash — e.g. "command not found" — is inspectable, not hidden).
+  const canLogs = running || logs.length > 0;
 
   // Never leave a now-disabled tab active.
   useEffect(() => {
