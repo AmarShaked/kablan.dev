@@ -64,6 +64,35 @@ export interface EnvFile {
   content: string;
 }
 
+export interface GitlabMergeRequest {
+  iid: number;
+  title: string;
+  state: string;
+  draft: boolean;
+  webUrl: string;
+  sourceBranch: string;
+  targetBranch: string;
+  pipelineStatus: string | null;
+  approvalsRequired: number | null;
+  approvalsLeft: number | null;
+}
+
+export interface GitlabPipeline {
+  ref: string;
+  sha: string;
+  status: string;
+  webUrl: string;
+}
+
+export interface GitlabOverview {
+  connected: boolean;
+  host: string | null;
+  project: string | null;
+  mrs: GitlabMergeRequest[];
+  pipelines: GitlabPipeline[];
+  error?: string;
+}
+
 export type ServerStatus = "starting" | "running" | "stopped" | "exited" | "error";
 
 export interface RunningServer {
@@ -175,6 +204,38 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ target, ...opts }),
     }),
+
+  gitlab: {
+    hosts: () => req<{ hosts: string[] }>("/api/gitlab/hosts"),
+    setToken: (host: string, token: string) =>
+      req<{ ok: boolean; username: string }>("/api/gitlab/token", {
+        method: "PUT",
+        body: JSON.stringify({ host, token }),
+      }),
+    deleteToken: (host: string) =>
+      req<{ ok: boolean }>("/api/gitlab/token", { method: "DELETE", body: JSON.stringify({ host }) }),
+    status: (name: string) =>
+      req<{ connected: boolean; host: string | null; project: string | null }>(
+        `/api/projects/${encodeURIComponent(name)}/gitlab/status`,
+      ),
+    overview: (name: string) =>
+      req<GitlabOverview>(`/api/projects/${encodeURIComponent(name)}/gitlab/overview`),
+    createMr: (
+      name: string,
+      body: {
+        sourceBranch: string;
+        targetBranch: string;
+        title: string;
+        description?: string;
+        draft?: boolean;
+        removeSourceBranch?: boolean;
+      },
+    ) =>
+      req<{ iid: number; webUrl: string }>(`/api/projects/${encodeURIComponent(name)}/gitlab/mr`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  },
 
   getEnv: (name: string, cwd?: string) =>
     req<EnvFile[]>(

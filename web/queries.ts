@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api.ts";
+import { isTauri } from "./lib/version.ts";
 
 /** Query keys — exported so mutations can invalidate them. */
 export const qk = {
@@ -52,5 +53,14 @@ export function useDiff(name: string, sha?: string, cwd?: string, enabled = true
     queryFn: () => api.getDiff(name, { sha, cwd }),
     enabled: enabled && !!name,
     staleTime: 15_000,
+  });
+}
+
+export function useGitlabOverview(name: string) {
+  return useQuery({
+    queryKey: ["gitlab-overview", name] as const,
+    queryFn: () => api.gitlab.overview(name),
+    enabled: isTauri && !!name,
+    staleTime: 60_000,
   });
 }
