@@ -19,6 +19,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Settings → Integrations tab** grouping the GitLab and Linear configuration.
 - Real brand logos (GitLab, VS Code, Linear) across the "Open in…" menu, Linear
   ticket links, and the integration cards.
+- **"Open in…" menu** on rows and in the drawer — open a project in VS Code,
+  Cursor, Terminal, iTerm, or Finder.
+- **Clickable dev-server URL** in the drawer — open the running server's
+  localhost URL in the browser.
+- **Uncommitted-changes indicator** on rows and in the drawer, with a matching
+  filter.
 
 ## [0.1.7] - 2026-07-22
 
