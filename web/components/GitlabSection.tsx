@@ -77,7 +77,6 @@ export function GitlabSection({
   const mr = branch ? data.mrs.find((m) => m.sourceBranch === branch) : undefined;
   const pipeline = branch ? data.pipelines.find((p) => p.ref === branch) : undefined;
   const status = mr?.pipelineStatus ?? pipeline?.status ?? null;
-  const otherMrs = data.mrs.filter((m) => m.sourceBranch !== branch);
   const projectUrl = data.host && data.project ? `https://${data.host}/${data.project}` : null;
 
   const submit = async () => {
@@ -213,18 +212,6 @@ export function GitlabSection({
           </div>
         )}
       </section>
-
-      {/* Other open MRs across the project */}
-      {otherMrs.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Open merge requests · {otherMrs.length}
-          </h3>
-          {otherMrs.map((m) => (
-            <MrRow key={m.iid} mr={m} />
-          ))}
-        </section>
-      )}
     </div>
   );
 }
