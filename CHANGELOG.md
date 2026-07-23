@@ -6,12 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-23
+
 ### Added
-- **GitLab integration** (desktop app): connect a GitLab host in Settings with a
-  Personal Access Token (stored in the OS keychain). Rows show CI pipeline status
-  and open-MR badges; the drawer shows MR state + pipeline and can **create a
-  Merge Request**. New "Has open MR" / "CI failing" filters. Works with
-  gitlab.com and self-hosted; provider auto-detected from the repo's origin remote.
+- **GitLab integration** (desktop app): connect a GitLab host in
+  Settings → Integrations with a Personal Access Token (stored in the OS
+  keychain). Rows show CI pipeline status and open-MR badges; a dedicated
+  **GitLab tab** in the item drawer shows the project, the branch's Merge Request
+  and pipeline, and a **Create Merge Request** form. New "Has open MR" /
+  "CI failing" filters. Works with gitlab.com and self-hosted; the provider is
+  auto-detected from the repo's origin remote.
+- **Settings → Integrations tab** grouping the GitLab and Linear configuration.
+- Real brand logos (GitLab, VS Code, Linear) across the "Open in…" menu, Linear
+  ticket links, and the integration cards.
 
 ## [0.1.7] - 2026-07-22
 
