@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, X, RotateCcw, Save, RefreshCw } from "lucide-react";
+import { Plus, Trash2, X, RotateCcw, Save, RefreshCw, Link2 } from "lucide-react";
 import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import { GitLabLogo, LinearLogo } from "../lib/brandLogos.tsx";
 import {
   APP_VERSION,
   checkForUpdate,
@@ -78,6 +79,37 @@ export function SettingsPage({
   const [draft, setDraft] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  const [glHosts, setGlHosts] = useState<string[]>([]);
+  const [glHost, setGlHost] = useState("");
+  const [glToken, setGlToken] = useState("");
+  const [glBusy, setGlBusy] = useState(false);
+
+  useEffect(() => {
+    if (isTauri) api.gitlab.hosts().then((r) => setGlHosts(r.hosts)).catch(() => {});
+  }, []);
+
+  const glConnect = async () => {
+    if (!glHost.trim() || !glToken.trim()) return;
+    setGlBusy(true);
+    try {
+      const r = await api.gitlab.setToken(glHost.trim().toLowerCase(), glToken.trim());
+      toast.success(`Connected to ${glHost} as ${r.username}`);
+      setGlToken("");
+      setGlHost("");
+      setGlHosts((await api.gitlab.hosts()).hosts);
+    } catch (err) {
+      toast.error(`Couldn't connect: ${String(err)}`);
+    } finally {
+      setGlBusy(false);
+    }
+  };
+
+  const glDisconnect = async (host: string) => {
+    await api.gitlab.deleteToken(host).catch(() => {});
+    setGlHosts((await api.gitlab.hosts()).hosts);
+    toast.success(`Disconnected ${host}`);
+  };
 
   const checkUpdates = async () => {
     setChecking(true);
@@ -225,6 +257,7 @@ export function SettingsPage({
           <TabsList variant="line" className="h-11">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="detection">Detection &amp; Env</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="overrides">
               Project overrides {overrideEntries.length > 0 && `(${overrideEntries.length})`}
             </TabsTrigger>
@@ -305,7 +338,30 @@ export function SettingsPage({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Linear</CardTitle>
+                  <CardTitle>About &amp; updates</CardTitle>
+                  <CardDescription>
+                    You're running Kablan.dev <code className="font-mono">v{APP_VERSION}</code>.
+                    {isTauri
+                      ? " Updates install in place — no re-download needed."
+                      : " In the browser, updates open the download page."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" onClick={checkUpdates} disabled={checking}>
+                    <RefreshCw className={checking ? "size-4 animate-spin" : "size-4"} />
+                    {checking ? "Checking…" : "Check for updates"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+            </TabsContent>
+
+            <TabsContent value="integrations" className="mt-0 flex flex-col gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LinearLogo className="size-4 shrink-0" /> Linear
+                  </CardTitle>
                   <CardDescription>
                     Workspace slug from your Linear URL (<code className="font-mono">linear.app/&lt;slug&gt;</code>).
                     When set, branches/worktrees with a ticket id (e.g. <code className="font-mono">FE-3146</code>)
@@ -323,23 +379,73 @@ export function SettingsPage({
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>About &amp; updates</CardTitle>
-                  <CardDescription>
-                    You're running Kablan.dev <code className="font-mono">v{APP_VERSION}</code>.
-                    {isTauri
-                      ? " Updates install in place — no re-download needed."
-                      : " In the browser, updates open the download page."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" size="sm" onClick={checkUpdates} disabled={checking}>
-                    <RefreshCw className={checking ? "size-4 animate-spin" : "size-4"} />
-                    {checking ? "Checking…" : "Check for updates"}
-                  </Button>
-                </CardContent>
-              </Card>
+              {isTauri ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <GitLabLogo className="size-4 shrink-0" /> GitLab
+                    </CardTitle>
+                    <CardDescription>
+                      Connect a GitLab host to see Merge Request &amp; pipeline status and open MRs.
+                      Use a Personal Access Token with the <code className="font-mono">api</code> scope
+                      — it's stored in your OS keychain, never in this config.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {glHosts.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {glHosts.map((h) => (
+                          <div key={h} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                            <Link2 className="size-4 text-muted-foreground" />
+                            <span className="font-mono">{h}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto text-muted-foreground"
+                              onClick={() => glDisconnect(h)}
+                            >
+                              <Trash2 className="size-4" /> Disconnect
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Label>Add a host</Label>
+                      <Input
+                        value={glHost}
+                        placeholder="gitlab.com or gitlab.mycompany.com"
+                        spellCheck={false}
+                        className="font-mono text-xs"
+                        onChange={(e) => setGlHost(e.target.value)}
+                      />
+                      <Input
+                        value={glToken}
+                        type="password"
+                        placeholder="Personal Access Token (api scope)"
+                        spellCheck={false}
+                        className="font-mono text-xs"
+                        onChange={(e) => setGlToken(e.target.value)}
+                      />
+                      <Button size="sm" className="self-start" disabled={glBusy} onClick={glConnect}>
+                        {glBusy ? "Connecting…" : "Test & connect"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <GitLabLogo className="size-4 shrink-0" /> GitLab
+                    </CardTitle>
+                    <CardDescription>
+                      GitLab integration (MR &amp; pipeline status, create MR) is available in the
+                      desktop app, where the access token can be stored securely in your OS keychain.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="detection" className="mt-0 flex flex-col gap-6">

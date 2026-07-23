@@ -12,7 +12,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { api, type ProjectSummary, type RunningServer, type LogLine, type OpenTarget } from "../api.ts";
-import { useCommits } from "../queries.ts";
+import { useCommits, useGitlabOverview } from "../queries.ts";
+import { GitlabSection } from "./GitlabSection.tsx";
+import { GitLabLogo } from "../lib/brandLogos.tsx";
 import {
   Sheet,
   SheetContent,
@@ -181,6 +183,8 @@ export function ItemDrawer({
   const ref = entry?.branchName ?? undefined;
   const cwd = entry?.kind === "worktree" ? (entry.cwd ?? undefined) : undefined;
   const commits = useCommits(project.name, ref, cwd, open && !!entry);
+  const gitlab = useGitlabOverview(project.name);
+  const glConnected = gitlab.data?.connected ?? false;
 
   const TypeIcon = entry?.kind === "worktree" ? FolderTree : GitBranch;
   const dir = entry?.cwd ?? project.path;
@@ -204,8 +208,9 @@ export function ItemDrawer({
   // Never leave a now-disabled tab active.
   useEffect(() => {
     if (!open) return;
-    if ((tab === "logs" && !canLogs) || (tab === "env" && !canEnv)) onTabChange("overview");
-  }, [open, tab, canLogs, canEnv, onTabChange]);
+    if ((tab === "logs" && !canLogs) || (tab === "env" && !canEnv) || (tab === "gitlab" && !glConnected))
+      onTabChange("overview");
+  }, [open, tab, canLogs, canEnv, glConnected, onTabChange]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -269,6 +274,11 @@ export function ItemDrawer({
                   >
                     Logs
                   </TabsTrigger>
+                  {glConnected && (
+                    <TabsTrigger value="gitlab" className="gap-1.5">
+                      <GitLabLogo className="size-3.5" /> GitLab
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
@@ -387,6 +397,17 @@ export function ItemDrawer({
                   </div>
                 </div>
               </TabsContent>
+
+              {glConnected && (
+                <TabsContent value="gitlab" className="flex-1 overflow-y-auto custom-scroll p-5 mt-0">
+                  <GitlabSection
+                    key={entry.id}
+                    project={project.name}
+                    branch={entry.branchName}
+                    defaultTarget={project.currentBranch ?? "main"}
+                  />
+                </TabsContent>
+              )}
 
               <TabsContent value="env" className="flex-1 overflow-y-auto custom-scroll p-5 mt-0">
                 <EnvTab

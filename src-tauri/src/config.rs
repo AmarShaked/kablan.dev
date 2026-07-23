@@ -30,6 +30,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub linear_workspace: String,
     #[serde(default)]
+    pub gitlab_hosts: Vec<String>,
+    #[serde(default)]
     pub overrides: BTreeMap<String, ProjectOverride>,
 }
 
@@ -68,6 +70,7 @@ impl Default for AppConfig {
             max_log_lines: default_max_log_lines(),
             show_non_node_projects: true,
             linear_workspace: String::new(),
+            gitlab_hosts: Vec::new(),
             overrides: BTreeMap::new(),
         }
     }
@@ -165,6 +168,22 @@ pub fn set_override(project_path: &str, dev_command: Option<String>) -> AppConfi
 pub fn clear_override(project_path: &str) -> AppConfig {
     let mut cfg = load();
     cfg.overrides.remove(project_path);
+    write(&cfg);
+    cfg
+}
+
+pub fn add_gitlab_host(host: &str) -> AppConfig {
+    let mut cfg = load();
+    if !cfg.gitlab_hosts.iter().any(|h| h == host) {
+        cfg.gitlab_hosts.push(host.to_string());
+        write(&cfg);
+    }
+    cfg
+}
+
+pub fn remove_gitlab_host(host: &str) -> AppConfig {
+    let mut cfg = load();
+    cfg.gitlab_hosts.retain(|h| h != host);
     write(&cfg);
     cfg
 }

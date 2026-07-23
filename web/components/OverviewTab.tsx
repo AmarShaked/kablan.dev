@@ -26,6 +26,8 @@ import {
   ExternalLink,
   Server,
   Pencil,
+  GitMerge,
+  CircleAlert,
 } from "lucide-react";
 import {
   api,
@@ -35,10 +37,12 @@ import {
   type RunningServer,
   type LogLine,
   type OpenTarget,
+  type GitlabMergeRequest,
 } from "../api.ts";
-import { useBranches, useWorktrees, qk } from "../queries.ts";
+import { useBranches, useWorktrees, useGitlabOverview, qk } from "../queries.ts";
 import { ItemDrawer } from "./ItemDrawer.tsx";
 import { OpenMenu } from "./OpenMenu.tsx";
+import { pipelineTone } from "./GitlabSection.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -220,6 +224,21 @@ export function OverviewTab({
   const worktrees: Worktree[] = worktreesQuery.data ?? [];
   const loading = branchesQuery.isPending || worktreesQuery.isPending;
 
+  const gitlab = useGitlabOverview(project.name);
+  const mrByBranch = useMemo(() => {
+    const m = new Map<string, GitlabMergeRequest>();
+    gitlab.data?.mrs.forEach((mr) => m.set(mr.sourceBranch, mr));
+    return m;
+  }, [gitlab.data]);
+  const ciByRef = useMemo(() => {
+    const m = new Map<string, string>();
+    gitlab.data?.pipelines.forEach((p) => m.set(p.ref, p.status));
+    gitlab.data?.mrs.forEach((mr) => {
+      if (mr.pipelineStatus && !m.has(mr.sourceBranch)) m.set(mr.sourceBranch, mr.pipelineStatus);
+    });
+    return m;
+  }, [gitlab.data]);
+
   const [busy, setBusy] = useState(false);
   const [gitBusy, setGitBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -229,6 +248,8 @@ export function OverviewTab({
   const [hasLinear, setHasLinear] = useState(false);
   const [mainOnly, setMainOnly] = useState(false);
   const [dirtyOnly, setDirtyOnly] = useState(false);
+  const [hasMr, setHasMr] = useState(false);
+  const [ciFailing, setCiFailing] = useState(false);
   const [location, setLocation] = useState<"all" | "local" | "remote">("all");
   const [sort, setSort] = useState<SortMode>("recent");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -334,7 +355,9 @@ export function OverviewTab({
     (hasLinear ? 1 : 0) +
     (mainOnly ? 1 : 0) +
     (dirtyOnly ? 1 : 0) +
-    (location !== "all" ? 1 : 0);
+    (location !== "all" ? 1 : 0) +
+    (hasMr ? 1 : 0) +
+    (ciFailing ? 1 : 0);
   const filtersActive = search.trim() !== "" || activeCount > 0 || sort !== "recent";
   const clearFilters = () => {
     setSearch("");
@@ -346,6 +369,8 @@ export function OverviewTab({
     setDirtyOnly(false);
     setLocation("all");
     setSort("recent");
+    setHasMr(false);
+    setCiFailing(false);
   };
 
   const openInRow = async (entry: Entry, target: OpenTarget) => {
@@ -434,6 +459,8 @@ export function OverviewTab({
       if (hasLinear && !e.linearId) return false;
       if (mainOnly && !isMainEntry(e)) return false;
       if (dirtyOnly && !e.dirty) return false;
+      if (hasMr && !(e.branchName && mrByBranch.has(e.branchName))) return false;
+      if (ciFailing && !(e.branchName && ciByRef.get(e.branchName) === "failed")) return false;
       if (location === "local" && e.remoteOnly) return false;
       if (location === "remote" && !e.remoteOnly) return false;
       if (cutoff && (e.ts ?? 0) < cutoff) return false;
@@ -464,7 +491,7 @@ export function OverviewTab({
       if (!collapsed[g.kind]) items.forEach((entry) => out.push({ type: "item", entry }));
     }
     return out;
-  }, [allEntries, search, author, dateWindow, runningOnly, hasLinear, mainOnly, dirtyOnly, location, server, sort, collapsed]);
+  }, [allEntries, search, author, dateWindow, runningOnly, hasLinear, mainOnly, dirtyOnly, hasMr, ciFailing, mrByBranch, ciByRef, location, server, sort, collapsed]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -483,6 +510,8 @@ export function OverviewTab({
   if (hasLinear) chips.push({ key: "linear", label: "Has Linear", clear: () => setHasLinear(false) });
   if (mainOnly) chips.push({ key: "main", label: "Main only", clear: () => setMainOnly(false) });
   if (dirtyOnly) chips.push({ key: "dirty", label: "Uncommitted", clear: () => setDirtyOnly(false) });
+  if (hasMr) chips.push({ key: "mr", label: "Has open MR", clear: () => setHasMr(false) });
+  if (ciFailing) chips.push({ key: "ci", label: "CI failing", clear: () => setCiFailing(false) });
   if (location !== "all")
     chips.push({
       key: "loc",
@@ -574,6 +603,22 @@ export function OverviewTab({
                     closeFilter();
                   }}
                 />
+                {gitlab.data?.connected && (
+                  <>
+                    <FilterRow
+                      icon={GitMerge}
+                      label="Has open MR"
+                      active={hasMr}
+                      onClick={() => { setHasMr((v) => !v); closeFilter(); }}
+                    />
+                    <FilterRow
+                      icon={CircleAlert}
+                      label="CI failing"
+                      active={ciFailing}
+                      onClick={() => { setCiFailing((v) => !v); closeFilter(); }}
+                    />
+                  </>
+                )}
               </div>
             )}
             {filterView !== "root" && (
@@ -744,6 +789,8 @@ export function OverviewTab({
                           : undefined
                       }
                       onOpenIn={(t) => openInRow(row.entry, t)}
+                      mr={row.entry.branchName ? mrByBranch.get(row.entry.branchName) : undefined}
+                      ciStatus={row.entry.branchName ? ciByRef.get(row.entry.branchName) ?? null : null}
                     />
                   )}
                 </div>
@@ -801,6 +848,8 @@ function EntryRow({
   onCheckout,
   onPull,
   onOpenIn,
+  mr,
+  ciStatus,
 }: {
   entry: Entry;
   linearWorkspace: string;
@@ -814,6 +863,8 @@ function EntryRow({
   onCheckout?: () => void;
   onPull?: () => void;
   onOpenIn: (target: OpenTarget) => void;
+  mr?: GitlabMergeRequest;
+  ciStatus?: string | null;
 }) {
   const canCheckout = entry.kind === "branch" && !entry.current && !entry.inWorktree && onCheckout;
   const TypeIcon = entry.kind === "worktree" ? FolderTree : GitBranch;
@@ -859,6 +910,31 @@ function EntryRow({
         <Badge className="shrink-0 gap-1 border-0 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
           <Cloud className="size-3" /> remote
         </Badge>
+      )}
+      {ciStatus && (
+        <span
+          title={`CI: ${ciStatus}`}
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            ciStatus === "success" ? "bg-emerald-500" : ciStatus === "failed" ? "bg-rose-500" : "bg-amber-500",
+          )}
+        />
+      )}
+      {mr && (
+        <a
+          href={mr.webUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "shrink-0 rounded-md border-0 px-1.5 py-0.5 text-[10.5px] font-semibold",
+            "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+          )}
+          title={mr.title}
+        >
+          !{mr.iid}
+          {mr.draft ? " draft" : ""}
+        </a>
       )}
       {entry.dirty && (
         <span
