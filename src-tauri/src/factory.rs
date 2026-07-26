@@ -193,6 +193,19 @@ pub fn delete_task_force(
     Ok(())
 }
 
+/// Ids of task forces whose worktree directory no longer exists on disk.
+pub fn orphaned_task_forces(file: &FactoryFile, project: &str) -> Vec<String> {
+    let Some(pf) = file.projects.get(project) else {
+        return Vec::new();
+    };
+    pf.features
+        .iter()
+        .flat_map(|f| &f.task_forces)
+        .filter(|t| !Path::new(&t.worktree_path).exists())
+        .map(|t| t.id.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +328,29 @@ mod tests {
         delete_task_force(&mut file, "acme/app", &tf.id, &repo, true).unwrap();
         assert!(file.projects["acme/app"].features[0].task_forces.is_empty());
         assert!(!Path::new(&wt).exists(), "worktree dir should be gone");
+    }
+
+    #[test]
+    fn orphaned_lists_missing_worktrees() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let tf = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        ).unwrap();
+
+        assert!(orphaned_task_forces(&file, "acme/app").is_empty());
+        // Simulate an externally-removed worktree dir.
+        std::fs::remove_dir_all(&tf.worktree_path).unwrap();
+        assert_eq!(orphaned_task_forces(&file, "acme/app"), vec![tf.id.clone()]);
+    }
+
+    #[test]
+    fn orphaned_unknown_project_is_empty() {
+        let file = FactoryFile::default();
+        assert!(orphaned_task_forces(&file, "nope").is_empty());
     }
 }
