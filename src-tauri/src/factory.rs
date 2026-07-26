@@ -18,6 +18,8 @@ pub struct TaskForce {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub linear_ticket: Option<String>,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub agent_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -164,9 +166,23 @@ pub fn create_task_force(
         worktree_path: wt,
         linear_ticket: args.linear_ticket.filter(|s| !s.trim().is_empty()),
         created_at,
+        agent_session_id: None,
     };
     feat.task_forces.push(tf.clone());
     Ok(tf)
+}
+
+/// Find the task force across all features in `project` and set its stored
+/// agent session id (used to `--resume` after a relaunch).
+pub fn set_agent_session(file: &mut FactoryFile, project: &str, tf_id: &str, sid: &str) -> Result<(), String> {
+    let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
+    for feat in pf.features.iter_mut() {
+        if let Some(tf) = feat.task_forces.iter_mut().find(|t| t.id == tf_id) {
+            tf.agent_session_id = Some(sid.to_string());
+            return Ok(());
+        }
+    }
+    Err("Unknown task force".to_string())
 }
 
 pub fn delete_task_force(
@@ -197,6 +213,16 @@ pub fn delete_task_force(
         let _ = git::git(&repo_dir.to_string_lossy(), &["branch", "-D", &tf.branch]);
     }
     Ok(())
+}
+
+/// Find a task force across all features in `project` by id.
+pub fn find_task_force<'a>(file: &'a FactoryFile, project: &str, tf_id: &str) -> Option<&'a TaskForce> {
+    file.projects
+        .get(project)?
+        .features
+        .iter()
+        .flat_map(|f| &f.task_forces)
+        .find(|t| t.id == tf_id)
 }
 
 /// Ids of task forces whose worktree directory no longer exists on disk.
@@ -376,6 +402,32 @@ mod tests {
             &repo, &wt_root, "feat/{feature}-{task}", 1,
         );
         assert!(r.is_err(), "flag-shaped base_branch should fail, not be parsed as a git flag");
+    }
+
+    #[test]
+    fn set_agent_session_then_read_back() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let tf = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        ).unwrap();
+        assert!(tf.agent_session_id.is_none());
+
+        set_agent_session(&mut file, "acme/app", &tf.id, "sess-42").unwrap();
+
+        let stored = &file.projects["acme/app"].features[0].task_forces[0];
+        assert_eq!(stored.agent_session_id.as_deref(), Some("sess-42"));
+    }
+
+    #[test]
+    fn set_agent_session_unknown_task_force_errors() {
+        let mut file = FactoryFile::default();
+        create_feature(&mut file, "acme/app", "Audit").unwrap();
+        assert!(set_agent_session(&mut file, "acme/app", "nope", "sess").is_err());
     }
 
     #[test]

@@ -29,6 +29,7 @@ use tower_http::cors::CorsLayer;
 #[derive(Clone)]
 pub struct AppState {
     pub procs: Arc<Processes>,
+    pub agents: Arc<agents::Agents>,
 }
 
 type ApiResult = Result<Json<Value>, ApiError>;
@@ -85,6 +86,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/features", post(post_feature))
         .route("/api/projects/:name/factory/features/:fid/taskforces", post(post_task_force))
         .route("/api/projects/:name/factory/taskforces/:tid", delete(delete_task_force_route))
+        .route("/api/projects/:name/factory/taskforces/:tid/agent", get(get_agent))
+        .route("/api/projects/:name/factory/taskforces/:tid/agent/start", post(post_agent_start))
+        .route("/api/projects/:name/factory/taskforces/:tid/agent/message", post(post_agent_message))
+        .route("/api/projects/:name/factory/taskforces/:tid/agent/stop", post(post_agent_stop))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -283,12 +288,13 @@ async fn post_feature(Path(name): Path<String>, body: Bytes) -> ApiResult {
     Ok(Json(serde_json::to_value(feat).unwrap()))
 }
 
-async fn post_task_force(Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+async fn post_task_force(State(st): State<AppState>, Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let b = parse_body(&body);
     let tf_name = b.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let linear = b.get("linearTicket").and_then(|v| v.as_str()).map(|s| s.to_string());
     let base_override = b.get("baseBranch").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let start = b.get("start").and_then(|v| v.as_bool()).unwrap_or(false);
     let key = name.clone();
     let tf = blocking(move || {
         let cfg = config::load();
@@ -323,7 +329,15 @@ async fn post_task_force(Path((name, fid)): Path<(String, String)>, body: Bytes)
     })
     .await
     .map_err(bad)?;
-    Ok(Json(serde_json::to_value(tf).unwrap()))
+
+    let mut out = serde_json::to_value(&tf).unwrap();
+    if start {
+        match start_agent(&st, &name, &tf.id).await {
+            Ok(view) => out["agent"] = serde_json::to_value(view).unwrap(),
+            Err(e) => out["agentError"] = json!(e.1),
+        }
+    }
+    Ok(Json(out))
 }
 
 async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body: Bytes) -> ApiResult {
@@ -341,6 +355,82 @@ async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body
     .await
     .map_err(bad)?;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// Shared start logic for `POST .../agent/start` and `post_task_force`'s
+/// optional `start: true`. Looks up the task force's worktree + any stored
+/// session id, enforces the concurrent-agent limit, and starts the process.
+async fn start_agent(st: &AppState, name: &str, tid: &str) -> Result<agents::AgentView, ApiError> {
+    let cfg = config::load();
+    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
+        return Err(bad("agent limit reached"));
+    }
+    let name2 = name.to_string();
+    let tid2 = tid.to_string();
+    let found = blocking(move || {
+        let file = factory::load_file(&factory_store_path());
+        factory::find_task_force(&file, &name2, &tid2)
+            .map(|tf| (tf.worktree_path.clone(), tf.agent_session_id.clone()))
+    })
+    .await;
+    let (worktree_path, session_id) = found.ok_or_else(|| bad("Unknown task force"))?;
+    let key = format!("{name}::{tid}");
+    let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref());
+    let view = st.agents.start(&key, &worktree_path, argv, session_id.as_deref());
+    Ok(view)
+}
+
+async fn post_agent_start(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let view = start_agent(&st, &name, &tid).await?;
+    Ok(Json(serde_json::to_value(view).unwrap()))
+}
+
+async fn post_agent_message(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if text.is_empty() {
+        return Err(bad("text is required"));
+    }
+    let key = format!("{name}::{tid}");
+    let ok = st.agents.send(&key, &text);
+    Ok(Json(json!({ "ok": ok })))
+}
+
+async fn post_agent_stop(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let key = format!("{name}::{tid}");
+    let ok = st.agents.stop(&key);
+    Ok(Json(json!({ "ok": ok })))
+}
+
+async fn get_agent(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let key = format!("{name}::{tid}");
+    let agent = st.agents.get(&key);
+    let events = st.agents.events(&key);
+
+    // Lightweight reconcile: the session id arrives asynchronously via the
+    // agent's stream, so persist it into the store the first time a
+    // reconnecting UI polls and finds one we haven't recorded yet.
+    if let Some(sid) = agent.as_ref().and_then(|a| a.session_id.clone()) {
+        let name2 = name.clone();
+        let tid2 = tid.clone();
+        blocking(move || {
+            let path = factory_store_path();
+            let mut file = factory::load_file(&path);
+            let needs_persist = factory::find_task_force(&file, &name2, &tid2)
+                .map(|tf| tf.agent_session_id.is_none())
+                .unwrap_or(false);
+            if needs_persist && factory::set_agent_session(&mut file, &name2, &tid2, &sid).is_ok() {
+                let _ = factory::save_file(&path, &file);
+            }
+        })
+        .await;
+    }
+
+    Ok(Json(json!({ "agent": agent, "events": events })))
 }
 
 async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {
@@ -496,9 +586,19 @@ async fn handle_ws(mut socket: WebSocket, st: AppState) {
         return;
     }
     let mut rx = st.procs.subscribe();
+    let mut agent_rx = st.agents.subscribe();
     loop {
         tokio::select! {
             msg = rx.recv() => match msg {
+                Ok(text) => {
+                    if socket.send(Message::Text(text)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            },
+            msg = agent_rx.recv() => match msg {
                 Ok(text) => {
                     if socket.send(Message::Text(text)).await.is_err() {
                         break;
@@ -518,8 +618,8 @@ async fn handle_ws(mut socket: WebSocket, st: AppState) {
 /// Bind the HTTP+WS server on `port` (0 = OS-assigned) using the given process
 /// registry, and serve until the task is dropped. Prints the machine-readable
 /// ready line the test harness and Tauri shell key off.
-pub async fn serve_on_with(port: u16, procs: Arc<Processes>) {
-    let state = AppState { procs };
+pub async fn serve_on_with(port: u16, procs: Arc<Processes>, agents: Arc<agents::Agents>) {
+    let state = AppState { procs, agents };
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.expect("bind");
     let actual = listener.local_addr().unwrap().port();
@@ -532,6 +632,7 @@ pub async fn serve_on_with(port: u16, procs: Arc<Processes>) {
 /// Honors PORT (default 4317) and cleans up child dev servers on SIGINT/SIGTERM.
 pub async fn run() {
     let procs = Processes::new();
+    let agents_supervisor = agents::Agents::new();
     let port: u16 = match std::env::var("PORT") {
         Ok(p) => p.parse().unwrap_or(4317),
         Err(_) => 4317,
@@ -539,6 +640,7 @@ pub async fn run() {
     #[cfg(unix)]
     {
         let procs2 = Arc::clone(&procs);
+        let agents2 = Arc::clone(&agents_supervisor);
         tokio::spawn(async move {
             use tokio::signal::unix::{signal, SignalKind};
             let mut term = signal(SignalKind::terminate()).unwrap();
@@ -548,8 +650,9 @@ pub async fn run() {
                 _ = int.recv() => {},
             }
             procs2.kill_all();
+            agents2.kill_all();
             std::process::exit(0);
         });
     }
-    serve_on_with(port, procs).await;
+    serve_on_with(port, procs, agents_supervisor).await;
 }

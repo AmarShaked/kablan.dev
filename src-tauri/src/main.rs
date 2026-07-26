@@ -46,10 +46,12 @@ fn main() {
     // Run the native Axum backend in the background on its own runtime, sharing
     // a process registry so we can shut child dev servers down on quit.
     let procs = kablan::processes::Processes::new();
+    let agents = kablan::agents::Agents::new();
     let procs_for_server = Arc::clone(&procs);
+    let agents_for_server = Arc::clone(&agents);
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-        rt.block_on(kablan::serve_on_with(port, procs_for_server));
+        rt.block_on(kablan::serve_on_with(port, procs_for_server, agents_for_server));
     });
 
     // Injected before any page script so the web UI knows where the backend is.
@@ -73,6 +75,9 @@ fn main() {
     app.run(move |_app, event| {
         if let RunEvent::Exit = event {
             procs.kill_all();
+            if kablan::config::load().factory.stop_agents_on_exit {
+                agents.kill_all();
+            }
         }
     });
 }
