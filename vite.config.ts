@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 import { readFileSync } from "node:fs";
+import type { InlineConfig } from "vitest";
 
 const SERVER_PORT = 4317;
 const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8"));
@@ -31,4 +32,10 @@ export default defineConfig({
     outDir: "../dist",
     emptyOutDir: true,
   },
-});
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./web/test/setup.ts"],
+    include: ["**/*.test.{ts,tsx}"],
+  },
+} as any);

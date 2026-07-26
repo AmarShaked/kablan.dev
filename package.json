@@ -13,6 +13,8 @@
     "preview": "npm run build && cross-env NODE_ENV=production tsx server/index.ts",
     "test:server": "node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
     "test:server:rust": "cargo build --manifest-path src-tauri/Cargo.toml --bin kablan-server --no-default-features && cross-env KABLAN_SERVER_CMD=\"./src-tauri/target/debug/kablan-server\" node --import tsx --test --test-concurrency=1 server/test/*.test.ts",
+    "test:web": "vitest run",
+    "test:web:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
@@ -36,6 +38,9 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
     "@tauri-apps/cli": "^2.11.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",
@@ -45,12 +50,14 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "jsdom": "^25.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.19.2",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^2.1.9"
   }
 }
