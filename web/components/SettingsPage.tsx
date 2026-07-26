@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, X, RotateCcw, Save, RefreshCw, Link2 } from "lucide-react";
-import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import { api, type AppConfig, type FactorySettings, type ProjectSummary } from "../api.ts";
 import { AgentSettings } from "./AgentSettings.tsx";
 import { GitLabLogo, LinearLogo } from "../lib/brandLogos.tsx";
 import {
@@ -30,6 +30,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+// Falls back for backends that predate the `factory` config field (e.g. an
+// on-disk ~/.kablan/config.json from before this feature, or a reference
+// server implementation that hasn't caught up yet), so this tab never
+// crashes on `draft.factory` being undefined.
+const DEFAULT_FACTORY: FactorySettings = {
+  agentCommand: "claude",
+  agentModel: "",
+  permissionMode: "default",
+  defaultBaseBranch: "",
+  worktreeRoot: "",
+  branchPattern: "feat/{feature}-{task}",
+  maxConcurrentAgents: 4,
+  stopAgentsOnExit: true,
+  autoResumeAgents: false,
+  notifications: { enabled: true, events: ["needsApproval", "failed"] },
+};
+
+const withFactoryDefault = (c: AppConfig): AppConfig => ({
+  ...c,
+  factory: c.factory ?? DEFAULT_FACTORY,
+});
 
 function StringList({
   values,
@@ -144,8 +166,9 @@ export function SettingsPage({
   };
 
   const load = () => api.getConfig().then((c) => {
-    setConfig(c);
-    setDraft(c);
+    const withDefaults = withFactoryDefault(c);
+    setConfig(withDefaults);
+    setDraft(withDefaults);
   });
 
   useEffect(() => {
@@ -173,8 +196,9 @@ export function SettingsPage({
         linearWorkspace: draft.linearWorkspace.trim(),
         factory: draft.factory,
       });
-      setConfig(next);
-      setDraft(next);
+      const withDefaults = withFactoryDefault(next);
+      setConfig(withDefaults);
+      setDraft(withDefaults);
       onConfigChanged();
       toast.success("Settings saved");
     } catch (err) {
@@ -187,8 +211,9 @@ export function SettingsPage({
   const reset = async () => {
     try {
       const next = await api.resetConfig();
-      setConfig(next);
-      setDraft(next);
+      const withDefaults = withFactoryDefault(next);
+      setConfig(withDefaults);
+      setDraft(withDefaults);
       onConfigChanged();
       toast.success("Settings reset to defaults");
     } catch (err) {
