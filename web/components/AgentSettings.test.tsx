@@ -76,9 +76,9 @@ describe("AgentSettings", () => {
     const onChange = vi.fn();
     render(<Harness initial={base} onChange={onChange} />);
     const select = screen.getByLabelText(/permission mode/i);
-    await userEvent.selectOptions(select, "bypassPermissions");
-    expect(onChange.mock.calls.at(-1)![0].permissionMode).toBe("bypassPermissions");
-    expect(select).toHaveValue("bypassPermissions");
+    await userEvent.selectOptions(select, "auto");
+    expect(onChange.mock.calls.at(-1)![0].permissionMode).toBe("auto");
+    expect(select).toHaveValue("auto");
   });
 
   it("adds and removes a notification event", async () => {

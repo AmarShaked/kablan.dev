@@ -6,7 +6,7 @@ export interface NotificationSettings {
 export interface FactorySettings {
   agentCommand: string;
   agentModel: string;
-  permissionMode: "default" | "acceptEdits" | "plan" | "bypassPermissions";
+  permissionMode: "default" | "acceptEdits" | "auto" | "bypassPermissions";
   defaultBaseBranch: string;
   worktreeRoot: string;
   branchPattern: string;

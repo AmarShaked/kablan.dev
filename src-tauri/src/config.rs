@@ -57,7 +57,7 @@ pub struct FactorySettings {
 }
 
 fn default_agent_command() -> String { "claude".into() }
-fn default_permission_mode() -> String { "default".into() }
+fn default_permission_mode() -> String { "acceptEdits".into() }
 fn default_branch_pattern() -> String { "feat/{feature}-{task}".into() }
 fn default_max_agents() -> u32 { 4 }
 
@@ -229,7 +229,7 @@ fn apply_factory_patch(fac: &mut FactorySettings, f: &Value) {
         fac.agent_model = s.trim().to_string();
     }
     if let Some(s) = f.get("permissionMode").and_then(|v| v.as_str()) {
-        if ["default", "acceptEdits", "plan", "bypassPermissions"].contains(&s) {
+        if ["default", "acceptEdits", "auto", "bypassPermissions"].contains(&s) {
             fac.permission_mode = s.to_string();
         }
     }
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(cfg.factory.max_concurrent_agents, 4);
         assert!(cfg.factory.stop_agents_on_exit);
         assert!(!cfg.factory.auto_resume_agents);
-        assert_eq!(cfg.factory.permission_mode, "default");
+        assert_eq!(cfg.factory.permission_mode, "acceptEdits");
         assert!(cfg.factory.notifications.enabled);
         assert_eq!(cfg.factory.notifications.events, vec!["needsApproval", "failed"]);
     }
@@ -386,5 +386,19 @@ mod tests {
         let next = apply_patch(base, &patch);
         assert_eq!(next.max_scan_depth, 5);
         assert_eq!(next.factory.agent_command, "claude"); // untouched
+    }
+
+    #[test]
+    fn factory_default_permission_mode_is_accept_edits() {
+        assert_eq!(FactorySettings::default().permission_mode, "acceptEdits");
+    }
+
+    #[test]
+    fn apply_patch_rejects_unknown_permission_mode_and_accepts_auto() {
+        let base = AppConfig::default();
+        let bad = apply_patch(base.clone(), &serde_json::json!({"factory":{"permissionMode":"plan"}}));
+        assert_eq!(bad.factory.permission_mode, "acceptEdits"); // unchanged (rejected)
+        let ok = apply_patch(base, &serde_json::json!({"factory":{"permissionMode":"auto"}}));
+        assert_eq!(ok.factory.permission_mode, "auto");
     }
 }

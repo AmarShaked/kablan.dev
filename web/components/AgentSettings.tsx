@@ -4,7 +4,12 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-const PERMISSION_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
+const PERMISSION_MODES = [
+  { value: "default", label: "Ask (default)" },
+  { value: "acceptEdits", label: "Accept edits" },
+  { value: "auto", label: "Auto" },
+  { value: "bypassPermissions", label: "Bypass all" },
+] as const;
 
 const NOTIFIABLE_EVENTS = [
   { key: "needsApproval", label: "Needs approval" },
@@ -70,8 +75,8 @@ export function AgentSettings({
             onChange={(e) => set("permissionMode", e.target.value as FactorySettings["permissionMode"])}
           >
             {PERMISSION_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
               </option>
             ))}
           </select>
