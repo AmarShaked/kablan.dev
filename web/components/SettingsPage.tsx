@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, X, RotateCcw, Save, RefreshCw, Link2 } from "lucide-react";
 import { api, type AppConfig, type ProjectSummary } from "../api.ts";
+import { AgentSettings } from "./AgentSettings.tsx";
 import { GitLabLogo, LinearLogo } from "../lib/brandLogos.tsx";
 import {
   APP_VERSION,
@@ -170,6 +171,7 @@ export function SettingsPage({
         maxLogLines: draft.maxLogLines,
         showNonNodeProjects: draft.showNonNodeProjects,
         linearWorkspace: draft.linearWorkspace.trim(),
+        factory: draft.factory,
       });
       setConfig(next);
       setDraft(next);
@@ -258,6 +260,7 @@ export function SettingsPage({
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="detection">Detection &amp; Env</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="agents">Agents</TabsTrigger>
             <TabsTrigger value="overrides">
               Project overrides {overrideEntries.length > 0 && `(${overrideEntries.length})`}
             </TabsTrigger>
@@ -446,6 +449,10 @@ export function SettingsPage({
                   </CardHeader>
                 </Card>
               )}
+            </TabsContent>
+
+            <TabsContent value="agents" className="mt-0 flex flex-col gap-6">
+              <AgentSettings value={draft.factory} onChange={(f) => set("factory", f)} />
             </TabsContent>
 
             <TabsContent value="detection" className="mt-0 flex flex-col gap-6">
