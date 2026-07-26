@@ -1,9 +1,17 @@
-import { useEffect, useState } from "react";
 import type { FactorySettings } from "../api.ts";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+const PERMISSION_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
+
+const NOTIFIABLE_EVENTS = [
+  { key: "needsApproval", label: "Needs approval" },
+  { key: "awaitingInput", label: "Awaiting input" },
+  { key: "failed", label: "Failed" },
+  { key: "done", label: "Done" },
+] as const;
 
 export function AgentSettings({
   value,
@@ -12,21 +20,15 @@ export function AgentSettings({
   value: FactorySettings;
   onChange: (v: FactorySettings) => void;
 }) {
-  // Local echo of `value` so the fields stay responsive to typing on every
-  // keystroke: a React controlled input whose `value` prop never changes
-  // (e.g. a parent that doesn't feed the new value back synchronously) would
-  // otherwise appear frozen, since React resets the DOM to the last-rendered
-  // `value` right after each input event. Keeping a local copy — kept in
-  // sync when the parent's `value` changes out from under us (reset, reload,
-  // switching tabs) — avoids that while still funneling every edit through
-  // `onChange` for the parent's draft/save flow.
-  const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
-
   const set = <K extends keyof FactorySettings>(k: K, v: FactorySettings[K]) => {
-    const next = { ...local, [k]: v };
-    setLocal(next);
-    onChange(next);
+    onChange({ ...value, [k]: v });
+  };
+
+  const toggleEvent = (event: string, checked: boolean) => {
+    const events = checked
+      ? [...value.notifications.events, event]
+      : value.notifications.events.filter((e) => e !== event);
+    onChange({ ...value, notifications: { ...value.notifications, events } });
   };
 
   return (
@@ -42,7 +44,7 @@ export function AgentSettings({
           <Label htmlFor="af-cmd">Agent command</Label>
           <Input
             id="af-cmd"
-            value={local.agentCommand}
+            value={value.agentCommand}
             spellCheck={false}
             className="font-mono text-xs"
             onChange={(e) => set("agentCommand", e.target.value)}
@@ -52,7 +54,7 @@ export function AgentSettings({
           <Label htmlFor="af-model">Default model</Label>
           <Input
             id="af-model"
-            value={local.agentModel}
+            value={value.agentModel}
             placeholder="(agent default)"
             spellCheck={false}
             className="font-mono text-xs"
@@ -60,10 +62,25 @@ export function AgentSettings({
           />
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="af-perm">Permission mode</Label>
+          <select
+            id="af-perm"
+            value={value.permissionMode}
+            className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs"
+            onChange={(e) => set("permissionMode", e.target.value as FactorySettings["permissionMode"])}
+          >
+            {PERMISSION_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="af-base">Default base branch</Label>
           <Input
             id="af-base"
-            value={local.defaultBaseBranch}
+            value={value.defaultBaseBranch}
             placeholder="(repo default)"
             spellCheck={false}
             className="font-mono text-xs"
@@ -74,7 +91,7 @@ export function AgentSettings({
           <Label htmlFor="af-pattern">Branch naming pattern</Label>
           <Input
             id="af-pattern"
-            value={local.branchPattern}
+            value={value.branchPattern}
             spellCheck={false}
             className="font-mono text-xs"
             onChange={(e) => set("branchPattern", e.target.value)}
@@ -84,7 +101,7 @@ export function AgentSettings({
           <Label htmlFor="af-root">Worktree root</Label>
           <Input
             id="af-root"
-            value={local.worktreeRoot}
+            value={value.worktreeRoot}
             placeholder="(alongside repo)"
             spellCheck={false}
             className="font-mono text-xs"
@@ -98,7 +115,7 @@ export function AgentSettings({
             type="number"
             min={1}
             max={64}
-            value={local.maxConcurrentAgents}
+            value={value.maxConcurrentAgents}
             className="w-24"
             onChange={(e) => set("maxConcurrentAgents", Number(e.target.value) || 1)}
           />
@@ -107,7 +124,7 @@ export function AgentSettings({
           <span className="text-sm leading-none font-medium select-none">Stop agents on exit</span>
           <Switch
             id="af-stop"
-            checked={local.stopAgentsOnExit}
+            checked={value.stopAgentsOnExit}
             onCheckedChange={(v) => set("stopAgentsOnExit", v)}
           />
         </label>
@@ -115,7 +132,7 @@ export function AgentSettings({
           <span className="text-sm leading-none font-medium select-none">Auto-resume on relaunch</span>
           <Switch
             id="af-resume"
-            checked={local.autoResumeAgents}
+            checked={value.autoResumeAgents}
             onCheckedChange={(v) => set("autoResumeAgents", v)}
           />
         </label>
@@ -123,10 +140,27 @@ export function AgentSettings({
           <span className="text-sm leading-none font-medium select-none">Desktop notifications</span>
           <Switch
             id="af-notif"
-            checked={local.notifications.enabled}
-            onCheckedChange={(v) => set("notifications", { ...local.notifications, enabled: v })}
+            checked={value.notifications.enabled}
+            onCheckedChange={(v) => set("notifications", { ...value.notifications, enabled: v })}
           />
         </label>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm leading-none font-medium select-none">Notify on</span>
+          <div className="flex flex-col gap-2">
+            {NOTIFIABLE_EVENTS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2" htmlFor={`af-notif-${key}`}>
+                <input
+                  id={`af-notif-${key}`}
+                  type="checkbox"
+                  className="border-input h-4 w-4 rounded-sm border shadow-xs"
+                  checked={value.notifications.events.includes(key)}
+                  onChange={(e) => toggleEvent(key, e.target.checked)}
+                />
+                <span className="text-sm leading-none select-none">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
