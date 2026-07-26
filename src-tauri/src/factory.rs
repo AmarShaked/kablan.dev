@@ -107,6 +107,92 @@ pub fn create_feature(file: &mut FactoryFile, project: &str, name: &str) -> Resu
     Ok(feat)
 }
 
+pub struct CreateTfArgs {
+    pub name: String,
+    pub base_branch: String,
+    pub linear_ticket: Option<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn create_task_force(
+    file: &mut FactoryFile,
+    project: &str,
+    feature_id: &str,
+    args: CreateTfArgs,
+    repo_dir: &Path,
+    worktree_root: &Path,
+    branch_pattern: &str,
+    created_at: i64,
+) -> Result<TaskForce, String> {
+    let name = args.name.trim();
+    if name.is_empty() {
+        return Err("Task force name is required".to_string());
+    }
+    let base = args.base_branch.trim();
+    if base.is_empty() {
+        return Err("Base branch is required".to_string());
+    }
+    let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
+    let feat = pf
+        .features
+        .iter_mut()
+        .find(|f| f.id == feature_id)
+        .ok_or("Unknown feature")?;
+
+    let tf_ids: Vec<String> = feat.task_forces.iter().map(|t| t.id.clone()).collect();
+    let id = unique_id(&slugify(name), &tf_ids);
+    let branch = branch_pattern
+        .replace("{feature}", &feat.id)
+        .replace("{task}", &id);
+    let worktree_path = worktree_root.join(slugify(project)).join(&id);
+    let wt = worktree_path.to_string_lossy().to_string();
+
+    // create-new only: a fresh branch off base at a fresh worktree path.
+    git::git(
+        &repo_dir.to_string_lossy(),
+        &["worktree", "add", "-b", &branch, &wt, base],
+    )
+    .map_err(|e| format!("git worktree add failed: {e}"))?;
+
+    let tf = TaskForce {
+        id,
+        name: name.to_string(),
+        branch,
+        base_branch: base.to_string(),
+        worktree_path: wt,
+        linear_ticket: args.linear_ticket.filter(|s| !s.trim().is_empty()),
+        created_at,
+    };
+    feat.task_forces.push(tf.clone());
+    Ok(tf)
+}
+
+pub fn delete_task_force(
+    file: &mut FactoryFile,
+    project: &str,
+    tf_id: &str,
+    repo_dir: &Path,
+    remove_worktree: bool,
+) -> Result<(), String> {
+    let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
+    let mut removed: Option<TaskForce> = None;
+    for feat in pf.features.iter_mut() {
+        if let Some(pos) = feat.task_forces.iter().position(|t| t.id == tf_id) {
+            removed = Some(feat.task_forces.remove(pos));
+            break;
+        }
+    }
+    let tf = removed.ok_or("Unknown task force")?;
+    if remove_worktree {
+        // best-effort: ignore errors (worktree may already be gone)
+        let _ = git::git(
+            &repo_dir.to_string_lossy(),
+            &["worktree", "remove", "--force", &tf.worktree_path],
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +205,18 @@ mod tests {
         p.push(format!("kablan-factory-test-{n}"));
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    fn init_repo() -> std::path::PathBuf {
+        let dir = tmp();
+        let d = dir.to_string_lossy().to_string();
+        crate::git::git(&d, &["init", "-b", "main"]).unwrap();
+        crate::git::git(&d, &["config", "user.email", "t@t.co"]).unwrap();
+        crate::git::git(&d, &["config", "user.name", "t"]).unwrap();
+        std::fs::write(dir.join("README.md"), "hi").unwrap();
+        crate::git::git(&d, &["add", "."]).unwrap();
+        crate::git::git(&d, &["commit", "-m", "init"]).unwrap();
+        dir
     }
 
     #[test]
@@ -162,5 +260,60 @@ mod tests {
     fn empty_feature_name_rejected() {
         let mut file = FactoryFile::default();
         assert!(create_feature(&mut file, "p", "   ").is_err());
+    }
+
+    #[test]
+    fn create_task_force_makes_branch_and_worktree() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let tf = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "Details Drawer".into(), base_branch: "main".into(), linear_ticket: Some("FE-1".into()) },
+            &repo, &wt_root, "feat/{feature}-{task}", 1234,
+        ).unwrap();
+
+        assert_eq!(tf.id, "details-drawer");
+        assert_eq!(tf.branch, "feat/audit-details-drawer");
+        assert_eq!(tf.base_branch, "main");
+        assert_eq!(tf.linear_ticket.as_deref(), Some("FE-1"));
+        assert_eq!(tf.created_at, 1234);
+        assert!(Path::new(&tf.worktree_path).exists(), "worktree dir should exist");
+        // branch exists in the repo
+        let branches = crate::git::git(&repo.to_string_lossy(), &["branch", "--list", &tf.branch]).unwrap();
+        assert!(branches.contains(&tf.branch));
+        // recorded under the feature
+        assert_eq!(file.projects["acme/app"].features[0].task_forces.len(), 1);
+    }
+
+    #[test]
+    fn create_task_force_unknown_feature_errors() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let r = create_task_force(
+            &mut file, "acme/app", "nope",
+            CreateTfArgs { name: "x".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        );
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn delete_task_force_removes_record_and_worktree() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let tf = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        ).unwrap();
+        let wt = tf.worktree_path.clone();
+        delete_task_force(&mut file, "acme/app", &tf.id, &repo, true).unwrap();
+        assert!(file.projects["acme/app"].features[0].task_forces.is_empty());
+        assert!(!Path::new(&wt).exists(), "worktree dir should be gone");
     }
 }
