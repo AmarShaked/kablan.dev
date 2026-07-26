@@ -1,3 +1,21 @@
+export interface NotificationSettings {
+  enabled: boolean;
+  events: string[];
+}
+
+export interface FactorySettings {
+  agentCommand: string;
+  agentModel: string;
+  permissionMode: "default" | "acceptEdits" | "plan" | "bypassPermissions";
+  defaultBaseBranch: string;
+  worktreeRoot: string;
+  branchPattern: string;
+  maxConcurrentAgents: number;
+  stopAgentsOnExit: boolean;
+  autoResumeAgents: boolean;
+  notifications: NotificationSettings;
+}
+
 export interface AppConfig {
   parentDir: string;
   maxScanDepth: number;
@@ -7,6 +25,7 @@ export interface AppConfig {
   showNonNodeProjects: boolean;
   linearWorkspace: string;
   overrides: Record<string, { devCommand?: string }>;
+  factory: FactorySettings;
 }
 
 export interface ProjectSummary {
