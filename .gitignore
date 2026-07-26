@@ -8,3 +8,6 @@ src-tauri/target
 
 # subagent-driven-development scratch
 .superpowers/
+
+# local dev-server preview config (not shared)
+.claude/launch.json
