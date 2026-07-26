@@ -92,7 +92,7 @@ pub struct AgentView {
 struct AgentRecord {
     view: AgentView,
     events: Vec<Value>,
-    stdin: Option<std::process::ChildStdin>,
+    stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
     generation: u64,
 }
 
@@ -144,7 +144,7 @@ impl Agents {
         self.stop(key); // one agent per task force
         let generation = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
         let view = AgentView { key: key.into(), status: AgentStatus::Working, session_id: None, pid: None, started_at: now_ms(), exit_code: None };
-        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: None, generation });
+        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation });
 
         let mut cmd = Command::new(&argv[0]);
         cmd.args(&argv[1..]).current_dir(cwd)
@@ -165,7 +165,7 @@ impl Agents {
         let stdin = child.stdin.take();
         {
             let mut reg = self.registry.lock().unwrap();
-            if let Some(r) = reg.get_mut(key) { r.view.pid = Some(pid); r.stdin = stdin; }
+            if let Some(r) = reg.get_mut(key) { r.view.pid = Some(pid); r.stdin = Arc::new(Mutex::new(stdin)); }
         }
         self.emit_status(key);
 
@@ -213,7 +213,7 @@ impl Agents {
                     if r.generation == generation {
                         r.view.exit_code = code;
                         r.view.pid = None;
-                        r.stdin = None;
+                        *r.stdin.lock().unwrap() = None;
                         r.view.status = if code == Some(0) { AgentStatus::Done } else { AgentStatus::Failed };
                         fire = true;
                     }
@@ -227,15 +227,28 @@ impl Agents {
 
     pub fn send(&self, key: &str, text: &str) -> bool {
         let msg = json!({ "type":"user","message":{ "role":"user","content":[{"type":"text","text":text}] } }).to_string();
-        let mut reg = self.registry.lock().unwrap();
-        let Some(r) = reg.get_mut(key) else { return false };
-        let Some(stdin) = r.stdin.as_mut() else { return false };
-        if writeln!(stdin, "{msg}").is_ok() && stdin.flush().is_ok() {
-            r.view.status = AgentStatus::Working;
-            drop(reg);
+        // Lock the registry only briefly to confirm the agent exists and clone
+        // its per-agent stdin handle, then drop the registry lock before doing
+        // any blocking IO — the registry must never be held across writeln!/flush.
+        let stdin_arc = {
+            let reg = self.registry.lock().unwrap();
+            let Some(r) = reg.get(key) else { return false };
+            Arc::clone(&r.stdin)
+        };
+        let ok = {
+            let mut guard = stdin_arc.lock().unwrap();
+            match guard.as_mut() {
+                Some(stdin) => writeln!(stdin, "{msg}").is_ok() && stdin.flush().is_ok(),
+                None => false,
+            }
+        };
+        if ok {
+            if let Some(r) = self.registry.lock().unwrap().get_mut(key) { r.view.status = AgentStatus::Working; }
             self.emit_status(key);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn stop(&self, key: &str) -> bool {
