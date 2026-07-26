@@ -14,6 +14,72 @@ pub struct ProjectOverride {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NotificationSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_notify_events")]
+    pub events: Vec<String>,
+}
+
+fn default_notify_events() -> Vec<String> {
+    vec!["needsApproval".into(), "failed".into()]
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        NotificationSettings { enabled: true, events: default_notify_events() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactorySettings {
+    #[serde(default = "default_agent_command")]
+    pub agent_command: String,
+    #[serde(default)]
+    pub agent_model: String,
+    #[serde(default = "default_permission_mode")]
+    pub permission_mode: String,
+    #[serde(default)]
+    pub default_base_branch: String,
+    #[serde(default)]
+    pub worktree_root: String,
+    #[serde(default = "default_branch_pattern")]
+    pub branch_pattern: String,
+    #[serde(default = "default_max_agents")]
+    pub max_concurrent_agents: u32,
+    #[serde(default = "default_true")]
+    pub stop_agents_on_exit: bool,
+    #[serde(default)]
+    pub auto_resume_agents: bool,
+    #[serde(default)]
+    pub notifications: NotificationSettings,
+}
+
+fn default_agent_command() -> String { "claude".into() }
+fn default_permission_mode() -> String { "default".into() }
+fn default_branch_pattern() -> String { "feat/{feature}-{task}".into() }
+fn default_max_agents() -> u32 { 4 }
+
+impl Default for FactorySettings {
+    fn default() -> Self {
+        FactorySettings {
+            agent_command: default_agent_command(),
+            agent_model: String::new(),
+            permission_mode: default_permission_mode(),
+            default_base_branch: String::new(),
+            worktree_root: String::new(),
+            branch_pattern: default_branch_pattern(),
+            max_concurrent_agents: default_max_agents(),
+            stop_agents_on_exit: true,
+            auto_resume_agents: false,
+            notifications: NotificationSettings::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppConfig {
     #[serde(default = "default_parent_dir")]
     pub parent_dir: String,
@@ -31,6 +97,8 @@ pub struct AppConfig {
     pub linear_workspace: String,
     #[serde(default)]
     pub gitlab_hosts: Vec<String>,
+    #[serde(default)]
+    pub factory: FactorySettings,
     #[serde(default)]
     pub overrides: BTreeMap<String, ProjectOverride>,
 }
@@ -71,6 +139,7 @@ impl Default for AppConfig {
             show_non_node_projects: true,
             linear_workspace: String::new(),
             gitlab_hosts: Vec::new(),
+            factory: FactorySettings::default(),
             overrides: BTreeMap::new(),
         }
     }
@@ -186,4 +255,39 @@ pub fn remove_gitlab_host(host: &str) -> AppConfig {
     cfg.gitlab_hosts.retain(|h| h != host);
     write(&cfg);
     cfg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn factory_defaults_when_absent() {
+        // A config with no "factory" key loads with factory defaults.
+        let cfg: AppConfig = serde_json::from_str(r#"{"parentDir":"/tmp"}"#).unwrap();
+        assert_eq!(cfg.factory.agent_command, "claude");
+        assert_eq!(cfg.factory.max_concurrent_agents, 4);
+        assert!(cfg.factory.stop_agents_on_exit);
+        assert!(!cfg.factory.auto_resume_agents);
+        assert_eq!(cfg.factory.permission_mode, "default");
+        assert!(cfg.factory.notifications.enabled);
+        assert_eq!(cfg.factory.notifications.events, vec!["needsApproval", "failed"]);
+    }
+
+    #[test]
+    fn factory_partial_merges_defaults() {
+        // A partial "factory" object keeps defaults for the fields it omits.
+        let cfg: AppConfig =
+            serde_json::from_str(r#"{"factory":{"maxConcurrentAgents":8}}"#).unwrap();
+        assert_eq!(cfg.factory.max_concurrent_agents, 8);
+        assert_eq!(cfg.factory.agent_command, "claude"); // still default
+    }
+
+    #[test]
+    fn factory_camelcase_roundtrip() {
+        let cfg = AppConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"maxConcurrentAgents\""));
+        assert!(json.contains("\"stopAgentsOnExit\""));
+    }
 }
