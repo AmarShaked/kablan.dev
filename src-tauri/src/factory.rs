@@ -148,9 +148,11 @@ pub fn create_task_force(
     let wt = worktree_path.to_string_lossy().to_string();
 
     // create-new only: a fresh branch off base at a fresh worktree path.
+    // `--` separates flags from positionals so a flag-shaped `wt` or `base`
+    // (e.g. base_branch: "--detach") can't be parsed as a git flag.
     git::git(
         &repo_dir.to_string_lossy(),
-        &["worktree", "add", "-b", &branch, &wt, base],
+        &["worktree", "add", "-b", &branch, "--", &wt, base],
     )
     .map_err(|e| format!("git worktree add failed: {e}"))?;
 
@@ -184,11 +186,15 @@ pub fn delete_task_force(
     }
     let tf = removed.ok_or("Unknown task force")?;
     if remove_worktree {
-        // best-effort: ignore errors (worktree may already be gone)
+        // best-effort: ignore errors (worktree may already be gone).
+        // `--` separates flags from the positional path (see create_task_force).
         let _ = git::git(
             &repo_dir.to_string_lossy(),
-            &["worktree", "remove", "--force", &tf.worktree_path],
+            &["worktree", "remove", "--force", "--", &tf.worktree_path],
         );
+        // Also best-effort delete the branch so a delete -> re-create cycle
+        // with the same name doesn't collide with the still-existing branch.
+        let _ = git::git(&repo_dir.to_string_lossy(), &["branch", "-D", &tf.branch]);
     }
     Ok(())
 }
@@ -352,5 +358,52 @@ mod tests {
     fn orphaned_unknown_project_is_empty() {
         let file = FactoryFile::default();
         assert!(orphaned_task_forces(&file, "nope").is_empty());
+    }
+
+    #[test]
+    fn create_task_force_rejects_flag_shaped_base_branch() {
+        // A base_branch like "--detach" must not be parsed as a git flag: the
+        // `--` separator in the worktree-add args forces it to be treated as
+        // a (bad) commit-ish, so git errors out instead of doing something
+        // unexpected with the flag.
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let r = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "--detach".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        );
+        assert!(r.is_err(), "flag-shaped base_branch should fail, not be parsed as a git flag");
+    }
+
+    #[test]
+    fn delete_then_recreate_same_name_succeeds() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        let tf1 = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 1,
+        ).unwrap();
+
+        delete_task_force(&mut file, "acme/app", &tf1.id, &repo, true).unwrap();
+
+        // Re-create a task force with the same name under the same feature.
+        // Without deleting the branch on delete, this would collide with the
+        // still-existing branch from the first create.
+        let tf2 = create_task_force(
+            &mut file, "acme/app", &feat.id,
+            CreateTfArgs { name: "drawer".into(), base_branch: "main".into(), linear_ticket: None },
+            &repo, &wt_root, "feat/{feature}-{task}", 2,
+        );
+        assert!(tf2.is_ok(), "re-create after delete should succeed: {:?}", tf2.err());
+        let tf2 = tf2.unwrap();
+        assert_eq!(tf2.id, tf1.id);
+        assert_eq!(tf2.branch, tf1.branch);
+        assert!(Path::new(&tf2.worktree_path).exists(), "recreated worktree dir should exist");
     }
 }

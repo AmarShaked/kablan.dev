@@ -311,7 +311,13 @@ async fn post_task_force(Path((name, fid)): Path<(String, String)>, body: Bytes)
             factory::CreateTfArgs { name: tf_name, base_branch: base, linear_ticket: linear },
             std::path::Path::new(&dir), &wt_root, &cfg.factory.branch_pattern, created_at,
         )?;
-        factory::save_file(&path, &file)?;
+        if let Err(e) = factory::save_file(&path, &file) {
+            // Roll back the just-created worktree + branch so a failed store
+            // save doesn't leave an orphaned worktree/branch behind.
+            let _ = git::git(&dir, &["worktree", "remove", "--force", "--", &tf.worktree_path]);
+            let _ = git::git(&dir, &["branch", "-D", &tf.branch]);
+            return Err(e);
+        }
         Ok::<_, String>(tf)
     })
     .await
