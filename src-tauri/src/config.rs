@@ -145,7 +145,7 @@ impl Default for AppConfig {
     }
 }
 
-fn config_dir() -> PathBuf {
+pub fn config_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("KABLAN_CONFIG_DIR") {
         PathBuf::from(dir)
     } else {

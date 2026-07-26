@@ -80,6 +80,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/gitlab/token", put(put_gitlab_token).delete(delete_gitlab_token))
         .route("/api/projects/:name/gitlab/overview", get(get_gitlab_overview))
         .route("/api/projects/:name/gitlab/mr", post(post_gitlab_mr))
+        .route("/api/projects/:name/factory", get(get_factory))
+        .route("/api/projects/:name/factory/features", post(post_feature))
+        .route("/api/projects/:name/factory/features/:fid/taskforces", post(post_task_force))
+        .route("/api/projects/:name/factory/taskforces/:tid", delete(delete_task_force_route))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -240,6 +244,96 @@ async fn post_gitlab_mr(Path(name): Path<String>, body: Bytes) -> ApiResult {
     };
     let (iid, web_url) = blocking(move || gitlab::create(&dir, &args)).await.map_err(bad)?;
     Ok(Json(json!({ "iid": iid, "webUrl": web_url })))
+}
+
+// --- Agent Factory ---
+fn factory_store_path() -> std::path::PathBuf {
+    config::config_dir().join("factory.json")
+}
+
+async fn get_factory(Path(name): Path<String>) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let key = name.clone();
+    let out = blocking(move || {
+        let file = factory::load_file(&factory_store_path());
+        let features = file.projects.get(&key).cloned().unwrap_or_default().features;
+        let orphaned = factory::orphaned_task_forces(&file, &key);
+        let _ = dir; // reserved for future git-based reconcile
+        json!({ "features": features, "orphaned": orphaned })
+    })
+    .await;
+    Ok(Json(out))
+}
+
+async fn post_feature(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let fname = b.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let key = name.clone();
+    let feat = blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        let feat = factory::create_feature(&mut file, &key, &fname)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(feat)
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(serde_json::to_value(feat).unwrap()))
+}
+
+async fn post_task_force(Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let tf_name = b.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let linear = b.get("linearTicket").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let base_override = b.get("baseBranch").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let key = name.clone();
+    let tf = blocking(move || {
+        let cfg = config::load();
+        let base = base_override
+            .or_else(|| { let d = cfg.factory.default_base_branch.trim(); if d.is_empty() { None } else { Some(d.to_string()) } })
+            .or_else(|| git::default_branch(&dir))
+            .unwrap_or_else(|| "main".to_string());
+        let wt_root = if cfg.factory.worktree_root.trim().is_empty() {
+            config::config_dir().join("worktrees")
+        } else {
+            std::path::PathBuf::from(cfg.factory.worktree_root.trim())
+        };
+        let created_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        let tf = factory::create_task_force(
+            &mut file, &key, &fid,
+            factory::CreateTfArgs { name: tf_name, base_branch: base, linear_ticket: linear },
+            std::path::Path::new(&dir), &wt_root, &cfg.factory.branch_pattern, created_at,
+        )?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(tf)
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(serde_json::to_value(tf).unwrap()))
+}
+
+async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let remove_wt = b.get("removeWorktree").and_then(|v| v.as_bool()).unwrap_or(true);
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::delete_task_force(&mut file, &key, &tid, std::path::Path::new(&dir), remove_wt)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {

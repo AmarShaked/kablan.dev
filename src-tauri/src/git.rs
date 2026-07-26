@@ -110,7 +110,7 @@ pub fn last_commit_ts(dir: &str) -> Option<i64> {
 }
 
 /// The repo's default branch (origin/HEAD, else main/master), or None.
-fn default_branch(dir: &str) -> Option<String> {
+pub fn default_branch(dir: &str) -> Option<String> {
     if let Ok(head) = git(dir, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]) {
         if !head.is_empty() {
             return Some(head.strip_prefix("origin/").unwrap_or(&head).to_string());
