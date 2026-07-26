@@ -175,9 +175,8 @@ fn write(cfg: &AppConfig) {
     }
 }
 
-/// Apply a validated PUT patch (a JSON object of recognised fields) and persist.
-pub fn save_patch(patch: &Value) -> AppConfig {
-    let mut cfg = load();
+/// Apply a validated PUT patch to a config value (pure; no disk).
+pub fn apply_patch(mut cfg: AppConfig, patch: &Value) -> AppConfig {
     if let Some(v) = patch.get("parentDir").and_then(|v| v.as_str()) {
         cfg.parent_dir = v.to_string();
     }
@@ -213,6 +212,67 @@ pub fn save_patch(patch: &Value) -> AppConfig {
     if let Some(s) = patch.get("linearWorkspace").and_then(|v| v.as_str()) {
         cfg.linear_workspace = s.trim().to_string();
     }
+    if let Some(f) = patch.get("factory") {
+        apply_factory_patch(&mut cfg.factory, f);
+    }
+    cfg
+}
+
+fn apply_factory_patch(fac: &mut FactorySettings, f: &Value) {
+    if let Some(s) = f.get("agentCommand").and_then(|v| v.as_str()) {
+        let s = s.trim();
+        if !s.is_empty() {
+            fac.agent_command = s.to_string();
+        }
+    }
+    if let Some(s) = f.get("agentModel").and_then(|v| v.as_str()) {
+        fac.agent_model = s.trim().to_string();
+    }
+    if let Some(s) = f.get("permissionMode").and_then(|v| v.as_str()) {
+        if ["default", "acceptEdits", "plan", "bypassPermissions"].contains(&s) {
+            fac.permission_mode = s.to_string();
+        }
+    }
+    if let Some(s) = f.get("defaultBaseBranch").and_then(|v| v.as_str()) {
+        fac.default_base_branch = s.trim().to_string();
+    }
+    if let Some(s) = f.get("worktreeRoot").and_then(|v| v.as_str()) {
+        fac.worktree_root = s.trim().to_string();
+    }
+    if let Some(s) = f.get("branchPattern").and_then(|v| v.as_str()) {
+        let s = s.trim();
+        if !s.is_empty() {
+            fac.branch_pattern = s.to_string();
+        }
+    }
+    if let Some(n) = f.get("maxConcurrentAgents").and_then(|v| v.as_f64()) {
+        if n >= 1.0 {
+            fac.max_concurrent_agents = (n.floor() as u32).min(64);
+        }
+    }
+    if let Some(b) = f.get("stopAgentsOnExit").and_then(|v| v.as_bool()) {
+        fac.stop_agents_on_exit = b;
+    }
+    if let Some(b) = f.get("autoResumeAgents").and_then(|v| v.as_bool()) {
+        fac.auto_resume_agents = b;
+    }
+    if let Some(n) = f.get("notifications") {
+        if let Some(b) = n.get("enabled").and_then(|v| v.as_bool()) {
+            fac.notifications.enabled = b;
+        }
+        if let Some(arr) = n.get("events").and_then(|v| v.as_array()) {
+            fac.notifications.events = arr
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect();
+        }
+    }
+}
+
+/// Apply a validated PUT patch and persist.
+pub fn save_patch(patch: &Value) -> AppConfig {
+    let cfg = apply_patch(load(), patch);
     write(&cfg);
     cfg
 }
@@ -289,5 +349,42 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         assert!(json.contains("\"maxConcurrentAgents\""));
         assert!(json.contains("\"stopAgentsOnExit\""));
+    }
+
+    #[test]
+    fn apply_patch_updates_factory_fields() {
+        let base = AppConfig::default();
+        let patch = serde_json::json!({
+            "factory": {
+                "agentCommand": "/opt/homebrew/bin/claude",
+                "maxConcurrentAgents": 6,
+                "stopAgentsOnExit": false,
+                "notifications": { "enabled": false, "events": ["done"] }
+            }
+        });
+        let next = apply_patch(base, &patch);
+        assert_eq!(next.factory.agent_command, "/opt/homebrew/bin/claude");
+        assert_eq!(next.factory.max_concurrent_agents, 6);
+        assert!(!next.factory.stop_agents_on_exit);
+        assert!(!next.factory.notifications.enabled);
+        assert_eq!(next.factory.notifications.events, vec!["done"]);
+    }
+
+    #[test]
+    fn apply_patch_clamps_and_ignores_bad_values() {
+        let base = AppConfig::default();
+        // maxConcurrentAgents must stay >= 1; a 0 is ignored (keeps default).
+        let patch = serde_json::json!({ "factory": { "maxConcurrentAgents": 0 } });
+        let next = apply_patch(base, &patch);
+        assert_eq!(next.factory.max_concurrent_agents, 4);
+    }
+
+    #[test]
+    fn apply_patch_preserves_existing_keys() {
+        let base = AppConfig::default();
+        let patch = serde_json::json!({ "maxScanDepth": 5 });
+        let next = apply_patch(base, &patch);
+        assert_eq!(next.max_scan_depth, 5);
+        assert_eq!(next.factory.agent_command, "claude"); // untouched
     }
 }
