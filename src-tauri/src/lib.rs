@@ -1,6 +1,7 @@
 //! Kablan.dev native backend — HTTP + WebSocket API, behaviorally identical to
 //! the original Node/Express server (validated by the shared server test suite).
 pub mod config;
+pub mod factory;
 pub mod git;
 pub mod gitlab;
 pub mod open;
