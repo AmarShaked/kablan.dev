@@ -290,3 +290,9 @@ fn kill_group(pid: i32, force: bool) {
 fn kill_group(_pid: i32, _force: bool) {
     // Windows process-tree termination is handled separately in the packaged app.
 }
+
+/// Public wrapper so other supervisors (e.g. `agents.rs`) can reuse the same
+/// process-group kill logic without duplicating it.
+pub fn kill_group_pub(pid: i32, force: bool) {
+    kill_group(pid, force);
+}
