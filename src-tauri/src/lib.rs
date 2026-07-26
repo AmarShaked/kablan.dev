@@ -362,6 +362,9 @@ async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body
 /// session id, enforces the concurrent-agent limit, and starts the process.
 async fn start_agent(st: &AppState, name: &str, tid: &str) -> Result<agents::AgentView, ApiError> {
     let cfg = config::load();
+    // TODO: running_count() is a soft cap — it's checked-then-acted-on without
+    // holding a lock across the check and the later `agents.start()` call, so
+    // concurrent starts can race past the limit (small TOCTOU window).
     if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
         return Err(bad("agent limit reached"));
     }

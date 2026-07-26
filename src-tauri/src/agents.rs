@@ -66,7 +66,9 @@ pub fn parse_event(line: &str) -> Option<ParsedEvent> {
 }
 
 /// Fold a parsed event into the running status. Process liveness (exit) is
-/// applied separately by the supervisor (see `mark_exit`).
+/// applied separately: the waiter thread spawned in `Agents::start` blocks on
+/// `child.wait()` and, once the process exits, sets the final `Done`/`Failed`
+/// status and clears the pid directly on the matching-generation record.
 pub fn next_status(prev: AgentStatus, ev: &ParsedEvent) -> AgentStatus {
     match ev.kind {
         EventKind::Result => {
@@ -180,6 +182,12 @@ impl Agents {
                     {
                         let mut reg = me.registry.lock().unwrap();
                         if let Some(r) = reg.get_mut(&k) {
+                            // A newer `start()` on the same key already replaced this
+                            // record (fresh generation). This thread belongs to the
+                            // dying process — stop touching the registry so its
+                            // trailing output can't clobber the new agent's state
+                            // (e.g. stamping a stale session_id).
+                            if r.generation != generation { break; }
                             if let Some(sid) = &ev.session_id { if r.view.session_id.is_none() { r.view.session_id = Some(sid.clone()); } }
                             let next = next_status(r.view.status, &ev);
                             if next != r.view.status { r.view.status = next; status_changed = true; }
@@ -197,6 +205,16 @@ impl Agents {
             std::thread::spawn(move || {
                 let rdr = BufReader::new(err);
                 for line in rdr.lines().map_while(Result::ok) {
+                    {
+                        let reg = me.registry.lock().unwrap();
+                        match reg.get(&k) {
+                            Some(r) if r.generation == generation => {}
+                            // Same reasoning as the stdout reader above: a newer
+                            // agent has taken this key, so this dying process's
+                            // stderr no longer belongs to it.
+                            _ => break,
+                        }
+                    }
                     let _ = me.tx.send(json!({ "type":"agent-event","key":k,"event":{"type":"system","subtype":"stderr","text":line}}).to_string());
                 }
             });
@@ -363,5 +381,36 @@ mod tests {
         assert!(wait_until(|| agents.get("p::tf3").and_then(|v| v.pid).is_some()));
         assert!(agents.stop("p::tf3"));
         assert!(wait_until(|| matches!(agents.get("p::tf3").map(|v| v.status), Some(AgentStatus::Done) | Some(AgentStatus::Failed))));
+    }
+
+    /// Restart smoke test: calling `start` a second time on the SAME key
+    /// (simulating a task-force restart) must not leave the new record
+    /// stuck because of the old (dying) process's still-running reader
+    /// threads. The generation guard added to the stdout/stderr threads
+    /// means the first agent's trailing output is dropped once the second
+    /// `start()` swaps in a fresh generation, so the second agent is free
+    /// to capture its own session id and reach `AwaitingInput` normally.
+    #[test]
+    fn restart_on_same_key_lets_new_agent_capture_session() {
+        let agents = Agents::new();
+        let cwd = std::env::temp_dir().to_string_lossy().to_string();
+        let key = "p::tf-restart";
+
+        // First agent on this key.
+        agents.start(key, &cwd, mock_argv(), None);
+        assert!(wait_until(|| agents.get(key).and_then(|v| v.pid).is_some()));
+
+        // Restart: start() again on the SAME key. This stops the first
+        // process (whose reader/stderr threads may still be draining
+        // trailing output) and installs a brand-new record + generation.
+        agents.start(key, &cwd, mock_argv(), None);
+
+        // The new agent should behave like any freshly-started agent:
+        // capture its own session id and progress to AwaitingInput after
+        // a message — proving the guard doesn't break normal restarts and
+        // that the record which ends up populated is the new one.
+        agents.send(key, "hello");
+        assert!(wait_until(|| agents.get(key).and_then(|v| v.session_id).is_some()));
+        assert!(wait_until(|| matches!(agents.get(key).map(|v| v.status), Some(AgentStatus::AwaitingInput))));
     }
 }
