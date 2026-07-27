@@ -345,24 +345,26 @@ function AppContent() {
         </SidebarHeader>
 
         <SidebarContent className="custom-scroll">
-          <SidebarGroup>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  isActive={view === "inbox"}
-                  tooltip="Inbox"
-                  onClick={() => setView("inbox")}
-                >
-                  <Inbox />
-                  <span>Inbox</span>
-                </SidebarMenuButton>
-                {(inboxQuery.data?.length ?? 0) > 0 && (
-                  <SidebarMenuBadge>{inboxQuery.data!.length}</SidebarMenuBadge>
-                )}
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
+          {isTauri && (
+            <SidebarGroup>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="sm"
+                    isActive={view === "inbox"}
+                    tooltip="Inbox"
+                    onClick={() => setView("inbox")}
+                  >
+                    <Inbox />
+                    <span>Inbox</span>
+                  </SidebarMenuButton>
+                  {(inboxQuery.data?.length ?? 0) > 0 && (
+                    <SidebarMenuBadge>{inboxQuery.data!.length}</SidebarMenuBadge>
+                  )}
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
           {sidebarMode === "factory" && selected && isTauri ? (
             <FactorySidebar
               project={selected}
@@ -539,7 +541,7 @@ function AppContent() {
             }}
             projects={projects}
           />
-        ) : view === "inbox" ? (
+        ) : view === "inbox" && isTauri ? (
           <InboxView onOpen={openInboxEntry} />
         ) : !selectedProject ? (
           <>

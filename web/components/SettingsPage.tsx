@@ -45,7 +45,7 @@ const DEFAULT_FACTORY: FactorySettings = {
   maxConcurrentAgents: 4,
   stopAgentsOnExit: true,
   autoResumeAgents: false,
-  notifications: { enabled: true, events: ["needsApproval", "failed"] },
+  notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 
 const withFactoryDefault = (c: AppConfig): AppConfig => ({

@@ -15,7 +15,7 @@ const base: FactorySettings = {
   maxConcurrentAgents: 4,
   stopAgentsOnExit: true,
   autoResumeAgents: false,
-  notifications: { enabled: true, events: ["needsApproval", "failed"] },
+  notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 
 // AgentSettings is a purely controlled component: it has no internal state,
@@ -85,12 +85,12 @@ describe("AgentSettings", () => {
     const onChange = vi.fn();
     render(<Harness initial={base} onChange={onChange} />);
 
-    // "awaitingInput" is not in base.notifications.events — checking it adds it.
-    const awaitingInput = screen.getByLabelText(/awaiting input/i);
-    expect(awaitingInput).not.toBeChecked();
-    await userEvent.click(awaitingInput);
-    expect(onChange.mock.calls.at(-1)![0].notifications.events).toContain("awaitingInput");
-    expect(awaitingInput).toBeChecked();
+    // "done" is not in base.notifications.events — checking it adds it.
+    const done = screen.getByLabelText(/^done$/i);
+    expect(done).not.toBeChecked();
+    await userEvent.click(done);
+    expect(onChange.mock.calls.at(-1)![0].notifications.events).toContain("done");
+    expect(done).toBeChecked();
 
     // "failed" is in base.notifications.events — unchecking it removes it.
     const failed = screen.getByLabelText(/^failed$/i);

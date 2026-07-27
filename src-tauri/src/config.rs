@@ -22,7 +22,7 @@ pub struct NotificationSettings {
 }
 
 fn default_notify_events() -> Vec<String> {
-    vec!["needsApproval".into(), "failed".into()]
+    vec!["awaitingInput".into(), "failed".into()]
 }
 
 impl Default for NotificationSettings {
@@ -331,7 +331,7 @@ mod tests {
         assert!(!cfg.factory.auto_resume_agents);
         assert_eq!(cfg.factory.permission_mode, "acceptEdits");
         assert!(cfg.factory.notifications.enabled);
-        assert_eq!(cfg.factory.notifications.events, vec!["needsApproval", "failed"]);
+        assert_eq!(cfg.factory.notifications.events, vec!["awaitingInput", "failed"]);
     }
 
     #[test]

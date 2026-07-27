@@ -12,7 +12,6 @@ const PERMISSION_MODES = [
 ] as const;
 
 const NOTIFIABLE_EVENTS = [
-  { key: "needsApproval", label: "Needs approval" },
   { key: "awaitingInput", label: "Awaiting input" },
   { key: "failed", label: "Failed" },
   { key: "done", label: "Done" },
