@@ -82,6 +82,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/gitlab/token", put(put_gitlab_token).delete(delete_gitlab_token))
         .route("/api/projects/:name/gitlab/overview", get(get_gitlab_overview))
         .route("/api/projects/:name/gitlab/mr", post(post_gitlab_mr))
+        .route("/api/inbox", get(get_inbox))
         .route("/api/projects/:name/factory", get(get_factory))
         .route("/api/projects/:name/factory/features", post(post_feature))
         .route("/api/projects/:name/factory/features/:fid/taskforces", post(post_task_force))
@@ -406,6 +407,16 @@ async fn post_agent_stop(State(st): State<AppState>, Path((name, tid)): Path<(St
     let key = format!("{name}::{tid}");
     let ok = st.agents.stop(&key);
     Ok(Json(json!({ "ok": ok })))
+}
+
+async fn get_inbox(State(st): State<AppState>) -> ApiResult {
+    let statuses: std::collections::BTreeMap<String, agents::AgentStatus> =
+        st.agents.get_all().into_iter().map(|v| (v.key, v.status)).collect();
+    let out = blocking(move || {
+        let file = factory::load_file(&factory_store_path());
+        factory::build_inbox(&file, &statuses)
+    }).await;
+    Ok(Json(serde_json::to_value(out).unwrap()))
 }
 
 async fn get_agent(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {

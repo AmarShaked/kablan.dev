@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::git;
+use crate::agents::AgentStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +43,18 @@ pub struct ProjectFactory {
 pub struct FactoryFile {
     #[serde(default)]
     pub projects: BTreeMap<String, ProjectFactory>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxEntry {
+    pub project: String,
+    pub feature_id: String,
+    pub feature_name: String,
+    pub task_force_id: String,
+    pub task_force_name: String,
+    pub branch: String,
+    pub status: String,
 }
 
 /// Lowercase alphanumeric slug; runs of other chars collapse to a single dash.
@@ -236,6 +249,36 @@ pub fn orphaned_task_forces(file: &FactoryFile, project: &str) -> Vec<String> {
         .filter(|t| !Path::new(&t.worktree_path).exists())
         .map(|t| t.id.clone())
         .collect()
+}
+
+/// Build the global inbox: list of task forces needing attention (AwaitingInput or Failed).
+/// Deterministic order: projects (BTreeMap order), features (list order), task forces (list order).
+pub fn build_inbox(file: &FactoryFile, statuses: &BTreeMap<String, AgentStatus>) -> Vec<InboxEntry> {
+    let mut entries = Vec::new();
+    for (project, pf) in file.projects.iter() {
+        for feat in pf.features.iter() {
+            for tf in feat.task_forces.iter() {
+                let key = format!("{project}::{}", tf.id);
+                if let Some(status) = statuses.get(&key) {
+                    let status_str = match status {
+                        AgentStatus::AwaitingInput => "awaitingInput",
+                        AgentStatus::Failed => "failed",
+                        _ => continue,
+                    };
+                    entries.push(InboxEntry {
+                        project: project.clone(),
+                        feature_id: feat.id.clone(),
+                        feature_name: feat.name.clone(),
+                        task_force_id: tf.id.clone(),
+                        task_force_name: tf.name.clone(),
+                        branch: tf.branch.clone(),
+                        status: status_str.to_string(),
+                    });
+                }
+            }
+        }
+    }
+    entries
 }
 
 #[cfg(test)]
@@ -457,5 +500,26 @@ mod tests {
         assert_eq!(tf2.id, tf1.id);
         assert_eq!(tf2.branch, tf1.branch);
         assert!(Path::new(&tf2.worktree_path).exists(), "recreated worktree dir should exist");
+    }
+
+    #[test]
+    fn build_inbox_lists_only_attention_statuses() {
+        use crate::agents::AgentStatus;
+        use std::collections::BTreeMap;
+        let mut file = FactoryFile::default();
+        let f = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        // two task forces created without git (insert directly for a pure test):
+        let pf = file.projects.get_mut("acme/app").unwrap();
+        let feat = pf.features.iter_mut().find(|x| x.id == f.id).unwrap();
+        feat.task_forces.push(TaskForce { id: "t1".into(), name: "drawer".into(), branch: "b1".into(), base_branch: "main".into(), worktree_path: "/w1".into(), linear_ticket: None, created_at: 0, agent_session_id: None });
+        feat.task_forces.push(TaskForce { id: "t2".into(), name: "export".into(), branch: "b2".into(), base_branch: "main".into(), worktree_path: "/w2".into(), linear_ticket: None, created_at: 0, agent_session_id: None });
+        let mut st = BTreeMap::new();
+        st.insert("acme/app::t1".to_string(), AgentStatus::AwaitingInput);
+        st.insert("acme/app::t2".to_string(), AgentStatus::Working); // not attention
+        let inbox = build_inbox(&file, &st);
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(inbox[0].task_force_id, "t1");
+        assert_eq!(inbox[0].feature_name, "Audit");
+        assert_eq!(inbox[0].status, "awaitingInput");
     }
 }
