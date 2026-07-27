@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentStreamProvider } from "../hooks/useAgentStream.tsx";
 import { SidebarProvider } from "./ui/sidebar.tsx";
 import { FeaturePage } from "./FeaturePage.tsx";
 import type { Feature } from "../api.ts";
+
+vi.mock("../api.ts");
 
 const features: Feature[] = [
   {
@@ -29,12 +32,15 @@ function renderPage(overrides: Partial<Parameters<typeof FeaturePage>[0]> = {}) 
     onOpenTaskForce: vi.fn(),
     ...overrides,
   };
+  const qc = new QueryClient();
   render(
-    <SidebarProvider>
-      <AgentStreamProvider>
-        <FeaturePage {...props} />
-      </AgentStreamProvider>
-    </SidebarProvider>,
+    <QueryClientProvider client={qc}>
+      <SidebarProvider>
+        <AgentStreamProvider>
+          <FeaturePage {...props} />
+        </AgentStreamProvider>
+      </SidebarProvider>
+    </QueryClientProvider>,
   );
   return props;
 }
@@ -75,5 +81,12 @@ describe("FeaturePage", () => {
   it("handles a null featureId gracefully", () => {
     renderPage({ featureId: null });
     expect(screen.getByText(/feature not found/i)).toBeInTheDocument();
+  });
+
+  it("opens the create-task-force dialog for the current feature when New task force is clicked", async () => {
+    renderPage();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /new task force/i }));
+    expect(screen.getByRole("dialog", { name: /new task force/i })).toBeInTheDocument();
   });
 });

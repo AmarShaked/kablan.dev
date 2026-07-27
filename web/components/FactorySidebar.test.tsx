@@ -1,9 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentStreamProvider } from "../hooks/useAgentStream.tsx";
 import { FactorySidebar } from "./FactorySidebar.tsx";
 import type { Feature } from "../api.ts";
+
+vi.mock("../api.ts");
 
 const features: Feature[] = [
   {
@@ -27,19 +30,21 @@ const branchEntries = [
 ];
 
 function renderSidebar(overrides: Partial<Parameters<typeof FactorySidebar>[0]> = {}) {
+  const qc = new QueryClient();
   const props = {
     project: "proj",
     branchEntries,
     onBack: vi.fn(),
     onOpenFeature: vi.fn(),
     onOpenTaskForce: vi.fn(),
-    onNewFeature: vi.fn(),
     ...overrides,
   };
   render(
-    <AgentStreamProvider>
-      <FactorySidebar {...props} />
-    </AgentStreamProvider>,
+    <QueryClientProvider client={qc}>
+      <AgentStreamProvider>
+        <FactorySidebar {...props} />
+      </AgentStreamProvider>
+    </QueryClientProvider>,
   );
   return props;
 }
@@ -72,10 +77,19 @@ describe("FactorySidebar", () => {
     expect(screen.queryByText("TF One")).not.toBeInTheDocument();
   });
 
-  it("has a New feature control that calls onNewFeature", async () => {
-    const props = renderSidebar();
+  it("opens the create-feature dialog when New feature is clicked", async () => {
+    renderSidebar();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /new feature/i }));
-    expect(props.onNewFeature).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: /new feature/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+  });
+
+  it("opens the create-task-force dialog for the right feature when New task force is clicked", async () => {
+    renderSidebar();
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+    await userEvent.click(screen.getByRole("button", { name: /new task force/i }));
+    expect(screen.getByRole("dialog", { name: /new task force/i })).toBeInTheDocument();
   });
 
   it("calls onOpenTaskForce with the feature id and task-force id when a task force is clicked", async () => {

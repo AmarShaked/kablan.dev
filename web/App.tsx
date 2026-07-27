@@ -230,18 +230,6 @@ function AppContent() {
     return null;
   }, [factoryQuery.data, selectedTaskForceId]);
 
-  const handleNewFeature = async () => {
-    if (!selected) return;
-    const name = window.prompt("Feature name?")?.trim();
-    if (!name) return;
-    try {
-      await api.factory.createFeature(selected, name);
-      await queryClient.invalidateQueries({ queryKey: ["factory", selected] });
-    } catch (err) {
-      toast.error(String(err));
-    }
-  };
-
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
   const selectedServer = selected ? servers[selected] ?? null : null;
 
@@ -330,7 +318,6 @@ function AppContent() {
                 setView("feature");
               }}
               onOpenTaskForce={openTaskForce}
-              onNewFeature={handleNewFeature}
               onOpenBranch={() => setView("project")}
             />
           ) : (

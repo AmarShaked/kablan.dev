@@ -1,6 +1,10 @@
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { useFactory } from "../queries.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./FactorySidebar.tsx";
+import { CreateTaskForceDialog } from "./CreateTaskForceDialog.tsx";
+import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentStatus } from "../api.ts";
 
@@ -29,6 +33,7 @@ export function FeaturePage({
   const { data } = useFactory(project);
   const feature = featureId ? data?.features.find((f) => f.id === featureId) : undefined;
   const { agentFor } = useAgentStream();
+  const [newTaskForceOpen, setNewTaskForceOpen] = useState(false);
 
   if (!feature) {
     return (
@@ -53,7 +58,19 @@ export function FeaturePage({
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
         <SidebarTrigger className="shrink-0" />
         <h1 className="truncate text-lg font-semibold">{feature.name}</h1>
+        <Button size="sm" className="ml-auto" onClick={() => setNewTaskForceOpen(true)}>
+          <Plus className="size-3.5" />
+          New task force
+        </Button>
       </div>
+
+      <CreateTaskForceDialog
+        project={project}
+        featureId={feature.id}
+        open={newTaskForceOpen}
+        onOpenChange={setNewTaskForceOpen}
+        onCreated={(taskForce) => onOpenTaskForce(feature.id, taskForce.id)}
+      />
 
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto custom-scroll p-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

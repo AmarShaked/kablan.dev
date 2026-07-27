@@ -3,6 +3,8 @@ import { ChevronDown, ChevronRight, FolderTree, GitBranch, Plus } from "lucide-r
 import { cn } from "@/lib/utils";
 import { useFactory } from "../queries.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
+import { CreateFeatureDialog } from "./CreateFeatureDialog.tsx";
+import { CreateTaskForceDialog } from "./CreateTaskForceDialog.tsx";
 import type { AgentStatus } from "../api.ts";
 
 /** Status → dot color, matching the mockups (sky/amber/emerald/rose/muted). */
@@ -42,7 +44,6 @@ export function FactorySidebar({
   onBack,
   onOpenFeature,
   onOpenTaskForce,
-  onNewFeature,
   onOpenBranch,
 }: {
   project: string;
@@ -50,13 +51,14 @@ export function FactorySidebar({
   onBack: () => void;
   onOpenFeature: (featureId: string) => void;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
-  onNewFeature: () => void;
   onOpenBranch?: (entry: BranchEntry) => void;
 }) {
   const { data } = useFactory(project);
   const features = data?.features ?? [];
   const { agentFor } = useAgentStream();
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [newFeatureOpen, setNewFeatureOpen] = useState(false);
+  const [newTaskForceFeatureId, setNewTaskForceFeatureId] = useState<string | null>(null);
 
   const toggleExpanded = (featureId: string) => {
     setOpen((prev) => {
@@ -128,6 +130,13 @@ export function FactorySidebar({
                         <span className="truncate">{tf.name}</span>
                       </button>
                     ))}
+                    <button
+                      onClick={() => setNewTaskForceFeatureId(feature.id)}
+                      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <Plus className="size-3.5 shrink-0" />
+                      New task force
+                    </button>
                   </div>
                 )}
               </div>
@@ -135,13 +144,31 @@ export function FactorySidebar({
           })}
         </div>
         <button
-          onClick={onNewFeature}
+          onClick={() => setNewFeatureOpen(true)}
           className="mt-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-3.5 shrink-0" />
           New feature
         </button>
       </div>
+
+      <CreateFeatureDialog
+        project={project}
+        open={newFeatureOpen}
+        onOpenChange={setNewFeatureOpen}
+        onCreated={(feature) => onOpenFeature(feature.id)}
+      />
+      {newTaskForceFeatureId && (
+        <CreateTaskForceDialog
+          project={project}
+          featureId={newTaskForceFeatureId}
+          open
+          onOpenChange={(next) => {
+            if (!next) setNewTaskForceFeatureId(null);
+          }}
+          onCreated={(taskForce) => onOpenTaskForce(newTaskForceFeatureId, taskForce.id)}
+        />
+      )}
 
       <div className="flex flex-col p-2">
         <div className="flex h-8 shrink-0 items-center px-2 text-xs font-medium text-muted-foreground">
