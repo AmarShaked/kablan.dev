@@ -311,7 +311,10 @@ function AppContent() {
             <FactorySidebar
               project={selected}
               branchEntries={branchEntries}
-              onBack={() => setSidebarMode("projects")}
+              onBack={() => {
+                setSidebarMode("projects");
+                setView("project");
+              }}
               onOpenFeature={(featureId) => {
                 setSelectedFeatureId(featureId);
                 setSelectedTaskForceId(null);

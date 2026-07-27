@@ -53,28 +53,39 @@ export function CreateTaskForceDialog({
     const trimmedName = name.trim();
     if (!trimmedName) return;
     setBusy(true);
+    let taskForce: TaskForce;
     try {
-      const taskForce = await api.factory.createTaskForce(project, featureId, {
+      taskForce = await api.factory.createTaskForce(project, featureId, {
         name: trimmedName,
         baseBranch: baseBranch.trim() || undefined,
         linearTicket: linearTicket.trim() || undefined,
         start,
       });
-      // The create endpoint doesn't take a prompt, so deliver it as the agent's first
-      // message once the task force (and its agent, if started) exist.
-      const trimmedPrompt = prompt.trim();
-      if (start && trimmedPrompt) {
-        await api.factory.agentMessage(project, taskForce.id, trimmedPrompt);
-      }
-      toast.success(`Task force "${taskForce.name}" created`);
-      await queryClient.invalidateQueries({ queryKey: ["factory", project] });
-      onCreated(taskForce);
-      reset();
-      handleOpenChange(false);
     } catch (err) {
       toast.error(String(err));
-    } finally {
       setBusy(false);
+      return;
+    }
+    // From here the task force exists server-side (branch/worktree created), so treat it
+    // as committed regardless of what happens next: invalidate, notify, and close the
+    // dialog. Re-clicking Create after this point must never re-issue createTaskForce.
+    toast.success(`Task force "${taskForce.name}" created`);
+    await queryClient.invalidateQueries({ queryKey: ["factory", project] });
+    onCreated(taskForce);
+    reset();
+    handleOpenChange(false);
+    setBusy(false);
+
+    // The create endpoint doesn't take a prompt, so deliver it as the agent's first
+    // message once the task force (and its agent, if started) exist. This is best-effort:
+    // a failure here shouldn't look like the task force itself failed to create.
+    const trimmedPrompt = prompt.trim();
+    if (start && trimmedPrompt) {
+      try {
+        await api.factory.agentMessage(project, taskForce.id, trimmedPrompt);
+      } catch (err) {
+        toast.error(`Task force created, but couldn't send the first message: ${String(err)}`);
+      }
     }
   };
 

@@ -9,7 +9,7 @@ import type { TaskForce } from "../api.ts";
 
 vi.mock("../api.ts");
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 function renderDialog(overrides: Partial<Parameters<typeof CreateTaskForceDialog>[0]> = {}) {
@@ -98,6 +98,26 @@ describe("CreateTaskForceDialog", () => {
       expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "t1", "Please start with the tests"),
     );
     expect(props.onCreated).toHaveBeenCalledWith(taskForce);
+  });
+
+  it("treats createTaskForce as committed (invalidate, onCreated, close) even when the follow-up agentMessage rejects, and warns instead of erroring", async () => {
+    vi.mocked(api.factory.createTaskForce).mockResolvedValue(taskForce);
+    vi.mocked(api.factory.agentMessage).mockRejectedValue(new Error("agent unreachable"));
+    const props = renderDialog();
+
+    await userEvent.type(screen.getByLabelText(/^name/i), "TF One");
+    await userEvent.type(screen.getByLabelText(/initial prompt/i), "Please start with the tests");
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    // Committed immediately once createTaskForce resolves, regardless of the follow-up.
+    await vi.waitFor(() => expect(props.onCreated).toHaveBeenCalledWith(taskForce));
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    expect(api.factory.createTaskForce).toHaveBeenCalledTimes(1);
+
+    await vi.waitFor(() => expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "t1", "Please start with the tests"));
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("couldn't send the first message")));
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("created"));
+    expect(api.factory.createTaskForce).toHaveBeenCalledTimes(1);
   });
 
   it("does not send the initial prompt when 'Start agent now' is toggled off", async () => {

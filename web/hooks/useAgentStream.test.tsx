@@ -15,4 +15,21 @@ describe("useAgentStream", () => {
     expect(a.events).toHaveLength(1);
     expect(result.current.agentFor("nope").events).toHaveLength(0);
   });
+
+  it("skips storing noisy stream_event/system deltas but keeps real transcript events", () => {
+    const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "stream_event", event: { type: "content_block_delta" } } }));
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "system", subtype: "thinking_tokens" } }));
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "system", subtype: "hook_started" } }));
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "system", subtype: "hook_response" } }));
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "system", subtype: "status" } }));
+    expect(result.current.agentFor("p::t1").events).toHaveLength(0);
+
+    // system spawn_error/stderr are rendered by the cockpit, so they must still be kept.
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "system", subtype: "spawn_error", message: "boom" } }));
+    expect(result.current.agentFor("p::t1").events).toHaveLength(1);
+
+    act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "assistant" } }));
+    expect(result.current.agentFor("p::t1").events).toHaveLength(2);
+  });
 });
