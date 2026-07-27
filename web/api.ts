@@ -112,6 +112,41 @@ export interface GitlabOverview {
   error?: string;
 }
 
+export type AgentStatus = "idle" | "working" | "awaitingInput" | "done" | "failed";
+export interface AgentView {
+  key: string;
+  status: AgentStatus;
+  sessionId: string | null;
+  pid: number | null;
+  startedAt: number;
+  exitCode: number | null;
+}
+export interface TaskForce {
+  id: string;
+  name: string;
+  branch: string;
+  baseBranch: string;
+  worktreePath: string;
+  linearTicket?: string;
+  createdAt: number;
+  agentSessionId?: string;
+}
+export interface Feature {
+  id: string;
+  name: string;
+  taskForces: TaskForce[];
+}
+export interface FactoryOverview {
+  features: Feature[];
+  orphaned: string[];
+}
+export interface CreateTaskForceArgs {
+  name: string;
+  baseBranch?: string;
+  linearTicket?: string;
+  start?: boolean;
+}
+
 export type ServerStatus = "starting" | "running" | "stopped" | "exited" | "error";
 
 export interface RunningServer {
@@ -250,6 +285,24 @@ export const api = {
         method: "POST",
         body: JSON.stringify(body),
       }),
+  },
+
+  factory: {
+    list: (name: string) => req<FactoryOverview>(`/api/projects/${encodeURIComponent(name)}/factory`),
+    createFeature: (name: string, featureName: string) =>
+      req<Feature>(`/api/projects/${encodeURIComponent(name)}/factory/features`, { method: "POST", body: JSON.stringify({ name: featureName }) }),
+    createTaskForce: (name: string, featureId: string, args: CreateTaskForceArgs) =>
+      req<TaskForce>(`/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(featureId)}/taskforces`, { method: "POST", body: JSON.stringify(args) }),
+    deleteTaskForce: (name: string, tid: string, removeWorktree = true) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}`, { method: "DELETE", body: JSON.stringify({ removeWorktree }) }),
+    agentStart: (name: string, tid: string) =>
+      req<AgentView>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/start`, { method: "POST" }),
+    agentMessage: (name: string, tid: string, text: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/message`, { method: "POST", body: JSON.stringify({ text }) }),
+    agentStop: (name: string, tid: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/stop`, { method: "POST" }),
+    getAgent: (name: string, tid: string) =>
+      req<{ agent: AgentView | null; events: unknown[] }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent`),
   },
 
   getEnv: (name: string, cwd?: string) =>

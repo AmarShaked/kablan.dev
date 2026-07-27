@@ -64,3 +64,12 @@ export function useGitlabOverview(name: string) {
     staleTime: 60_000,
   });
 }
+
+export function useFactory(name: string) {
+  return useQuery({
+    queryKey: ["factory", name] as const,
+    queryFn: () => api.factory.list(name),
+    enabled: isTauri && !!name,
+    staleTime: 30_000,
+  });
+}
