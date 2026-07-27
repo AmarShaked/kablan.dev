@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, FolderTree, GitBranch, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { useFactory } from "../queries.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { CreateFeatureDialog } from "./CreateFeatureDialog.tsx";
@@ -24,6 +25,20 @@ export function AgentDot({ status }: { status?: AgentStatus }) {
       )}
       title={status ?? "idle"}
     />
+  );
+}
+
+/** Compact unread-count pill, reused for task-force rows, feature rows (summed), and the
+ * Projects list (App.tsx). Renders nothing when count is zero. */
+export function UnreadPill({ count, testId }: { count: number; testId?: string }) {
+  if (count <= 0) return null;
+  return (
+    <Badge
+      data-testid={testId}
+      className="h-4 min-w-4 shrink-0 justify-center rounded-full px-1 text-[10px] leading-none tabular-nums"
+    >
+      {count}
+    </Badge>
   );
 }
 
@@ -55,7 +70,7 @@ export function FactorySidebar({
 }) {
   const { data } = useFactory(project);
   const features = data?.features ?? [];
-  const { agentFor } = useAgentStream();
+  const { agentFor, unread } = useAgentStream();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [newFeatureOpen, setNewFeatureOpen] = useState(false);
   const [newTaskForceFeatureId, setNewTaskForceFeatureId] = useState<string | null>(null);
@@ -89,6 +104,10 @@ export function FactorySidebar({
         <div className="flex flex-col gap-0.5">
           {features.map((feature) => {
             const expanded = open.has(feature.id);
+            const featureUnread = feature.taskForces.reduce(
+              (sum, tf) => sum + unread(`${project}::${tf.id}`),
+              0,
+            );
             return (
               <div key={feature.id}>
                 <div className={cn(rowClass, "gap-0 pr-0")}>
@@ -110,9 +129,10 @@ export function FactorySidebar({
                   <button
                     type="button"
                     onClick={() => onOpenFeature(feature.id)}
-                    className="flex h-7 min-w-0 flex-1 items-center truncate pr-2 text-left"
+                    className="flex h-7 min-w-0 flex-1 items-center gap-2 pr-2 text-left"
                   >
-                    <span className="truncate">{feature.name}</span>
+                    <span className="min-w-0 flex-1 truncate">{feature.name}</span>
+                    <UnreadPill count={featureUnread} testId={`unread-pill-feature-${feature.id}`} />
                   </button>
                 </div>
                 {expanded && (
@@ -127,7 +147,8 @@ export function FactorySidebar({
                         onClick={() => onOpenTaskForce(feature.id, tf.id)}
                       >
                         <AgentDot status={agentFor(`${project}::${tf.id}`).status} />
-                        <span className="truncate">{tf.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-left">{tf.name}</span>
+                        <UnreadPill count={unread(`${project}::${tf.id}`)} testId={`unread-pill-${tf.id}`} />
                       </button>
                     ))}
                     <button

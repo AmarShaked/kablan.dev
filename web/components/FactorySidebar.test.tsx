@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AgentStreamProvider } from "../hooks/useAgentStream.tsx";
+import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
 import { FactorySidebar } from "./FactorySidebar.tsx";
 import type { Feature } from "../api.ts";
 
@@ -29,7 +30,27 @@ const branchEntries = [
   { id: "wt:feature-x", name: "feature/x", kind: "worktree" as const },
 ];
 
-function renderSidebar(overrides: Partial<Parameters<typeof FactorySidebar>[0]> = {}) {
+/** Feeds messages into the AgentStreamProvider's ingest on mount, the way the app's
+ * WebSocket handler normally would — lets a test seed unread counts without a real socket. */
+function Seed({ messages }: { messages: unknown[] }) {
+  const { ingest } = useAgentStream();
+  useEffect(() => {
+    messages.forEach(ingest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+/** A minimal agent-event targeting `key`, used only to bump the unread counter. */
+function unreadEvent(key: string) {
+  return {
+    type: "agent-event",
+    key,
+    event: { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "x" }] } },
+  };
+}
+
+function renderSidebar(overrides: Partial<Parameters<typeof FactorySidebar>[0]> = {}, seed: unknown[] = []) {
   const qc = new QueryClient();
   const props = {
     project: "proj",
@@ -42,6 +63,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof FactorySidebar>[0]> 
   render(
     <QueryClientProvider client={qc}>
       <AgentStreamProvider>
+        <Seed messages={seed} />
         <FactorySidebar {...props} />
       </AgentStreamProvider>
     </QueryClientProvider>,
@@ -109,5 +131,31 @@ describe("FactorySidebar", () => {
     renderSidebar();
     expect(screen.getByText("main")).toBeInTheDocument();
     expect(screen.getByText("feature/x")).toBeInTheDocument();
+  });
+
+  it("shows an unread pill per task force and a summed pill on the feature row", async () => {
+    // t1 gets 2 unread events, t2 gets 3 -> feature-level sum should be 5.
+    renderSidebar({}, [
+      unreadEvent("proj::t1"),
+      unreadEvent("proj::t1"),
+      unreadEvent("proj::t2"),
+      unreadEvent("proj::t2"),
+      unreadEvent("proj::t2"),
+    ]);
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+    expect(screen.getByTestId("unread-pill-t1")).toHaveTextContent("2");
+    expect(screen.getByTestId("unread-pill-t2")).toHaveTextContent("3");
+    expect(screen.getByTestId("unread-pill-feature-f1")).toHaveTextContent("5");
+  });
+
+  it("shows no unread pill when a task force or feature has zero unread", async () => {
+    renderSidebar();
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+    expect(screen.queryByTestId("unread-pill-t1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("unread-pill-t2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("unread-pill-feature-f1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("unread-pill-feature-f2")).not.toBeInTheDocument();
   });
 });

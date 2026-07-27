@@ -251,8 +251,17 @@ function AssetsRail({
 
 export function TaskForceCockpit({ project, taskForce }: { project: string; taskForce: TaskForce }) {
   const key = `${project}::${taskForce.id}`;
-  const { agentFor } = useAgentStream();
+  const { agentFor, setActiveKey, markRead } = useAgentStream();
   const live = agentFor(key);
+
+  // Viewing a task force clears its unread and suppresses further increments while it's
+  // the active pane; leaving it (unmount, since the cockpit remounts per task force via
+  // its `key`) lets new events for it accrue unread again.
+  useEffect(() => {
+    setActiveKey(key);
+    markRead(key);
+    return () => setActiveKey(null);
+  }, [key, setActiveKey, markRead]);
 
   const [backfill, setBackfill] = useState<unknown[]>([]);
   const [backfillStatus, setBackfillStatus] = useState<AgentStatus | undefined>(undefined);

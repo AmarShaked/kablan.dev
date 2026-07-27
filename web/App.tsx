@@ -39,7 +39,7 @@ import type { CSSProperties } from "react";
 import { OverviewTab } from "./components/OverviewTab.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { StatusDot } from "./components/StatusDot.tsx";
-import { FactorySidebar, type BranchEntry } from "./components/FactorySidebar.tsx";
+import { FactorySidebar, UnreadPill, type BranchEntry } from "./components/FactorySidebar.tsx";
 import { FeaturePage } from "./components/FeaturePage.tsx";
 import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
 import { useProjects, useBranches, useWorktrees, useFactory, qk } from "./queries.ts";
@@ -72,7 +72,7 @@ export function App() {
 function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
-  const { ingest } = useAgentStream();
+  const { ingest, unreadForProject } = useAgentStream();
   const projectIcons = useProjectIcons();
   const { data: projects = [], isPending: loading } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
@@ -355,6 +355,8 @@ function AppContent() {
               {visibleProjects.map((p) => {
                 const s = servers[p.name];
                 const active = selected === p.name && view === "project";
+                const running = s?.status === "running" || s?.status === "starting";
+                const projectUnread = unreadForProject(p.name);
                 return (
                   <SidebarMenuItem key={p.name}>
                     <SidebarMenuButton
@@ -367,9 +369,10 @@ function AppContent() {
                       <ProjectIcon name={iconNameFor(p.name, projectIcons)} />
                       <span className="truncate">{p.name}</span>
                     </SidebarMenuButton>
-                    {(s?.status === "running" || s?.status === "starting") && (
-                      <SidebarMenuBadge>
-                        <StatusDot status={s.status} />
+                    {(running || projectUnread > 0) && (
+                      <SidebarMenuBadge className="flex items-center gap-1">
+                        {running && <StatusDot status={s!.status} />}
+                        <UnreadPill count={projectUnread} testId={`unread-pill-project-${p.name}`} />
                       </SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>

@@ -51,6 +51,13 @@ function Seed({ messages }: { messages: unknown[] }) {
   return null;
 }
 
+/** Exposes the live unread count for `tfKey` so tests can assert on setActiveKey/markRead
+ * effects without reaching into the context's internals. */
+function UnreadProbe({ tfKey }: { tfKey: string }) {
+  const { unread } = useAgentStream();
+  return <div data-testid="unread-probe">{unread(tfKey)}</div>;
+}
+
 function renderCockpit(seed: unknown[] = [], tf: TaskForce = taskForce) {
   const qc = new QueryClient();
   render(
@@ -183,5 +190,71 @@ describe("TaskForceCockpit", () => {
 
     const boxAfter = screen.getByRole("textbox") as HTMLTextAreaElement;
     expect(boxAfter).toHaveValue("");
+  });
+
+  it("marks its key read on mount, clearing unread accumulated before it was viewed", () => {
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <SidebarProvider>
+          <AgentStreamProvider>
+            <Seed messages={[helloEvent, helloEvent]} />
+            <UnreadProbe tfKey="proj::t1" />
+            <TaskForceCockpit project="proj" taskForce={taskForce} />
+          </AgentStreamProvider>
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+
+    // Seed ran before the cockpit's mount effect, so unread would have been 2 without
+    // the cockpit's setActiveKey/markRead effect clearing it.
+    expect(screen.getByTestId("unread-probe")).toHaveTextContent("0");
+  });
+
+  it("keeps its key marked active while mounted, so new events for it don't bump unread", () => {
+    const qc = new QueryClient();
+    function Harness({ seed }: { seed: unknown[] }) {
+      return (
+        <QueryClientProvider client={qc}>
+          <SidebarProvider>
+            <AgentStreamProvider>
+              {/* keyed by content so a new seed array remounts Seed and re-fires its ingest effect */}
+              <Seed key={JSON.stringify(seed)} messages={seed} />
+              <UnreadProbe tfKey="proj::t1" />
+              <TaskForceCockpit project="proj" taskForce={taskForce} />
+            </AgentStreamProvider>
+          </SidebarProvider>
+        </QueryClientProvider>
+      );
+    }
+    const { rerender } = render(<Harness seed={[]} />);
+    expect(screen.getByTestId("unread-probe")).toHaveTextContent("0");
+
+    // A new event for the active key while the cockpit is mounted should not bump unread.
+    rerender(<Harness seed={[helloEvent]} />);
+    expect(screen.getByTestId("unread-probe")).toHaveTextContent("0");
+  });
+
+  it("clears the active key on unmount, so later events for it bump unread again", () => {
+    const qc = new QueryClient();
+    function Wrapper({ mounted, seed }: { mounted: boolean; seed: unknown[] }) {
+      return (
+        <QueryClientProvider client={qc}>
+          <SidebarProvider>
+            <AgentStreamProvider>
+              <Seed key={JSON.stringify(seed)} messages={seed} />
+              <UnreadProbe tfKey="proj::t1" />
+              {mounted && <TaskForceCockpit project="proj" taskForce={taskForce} />}
+            </AgentStreamProvider>
+          </SidebarProvider>
+        </QueryClientProvider>
+      );
+    }
+    const { rerender } = render(<Wrapper mounted seed={[]} />);
+    expect(screen.getByTestId("unread-probe")).toHaveTextContent("0");
+
+    rerender(<Wrapper mounted={false} seed={[]} />);
+    rerender(<Wrapper mounted={false} seed={[helloEvent]} />);
+    expect(screen.getByTestId("unread-probe")).toHaveTextContent("1");
   });
 });
