@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle } from "lucide-react";
 import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine } from "./api.ts";
+import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
 import {
   APP_VERSION,
   checkForUpdate,
@@ -56,8 +57,17 @@ function useTheme(): [Theme, () => void] {
 }
 
 export function App() {
+  return (
+    <AgentStreamProvider>
+      <AppContent />
+    </AgentStreamProvider>
+  );
+}
+
+function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
+  const { ingest } = useAgentStream();
   const projectIcons = useProjectIcons();
   const { data: projects = [], isPending: loading } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
@@ -139,6 +149,8 @@ export function App() {
             if (arr.length > 3000) arr.splice(0, arr.length - 3000);
             return { ...prev, [projectName]: arr };
           });
+        } else if (msg.type?.startsWith("agent-")) {
+          ingest(msg);
         }
       };
       ws.onclose = () => {
@@ -151,7 +163,7 @@ export function App() {
       clearTimeout(retry);
       ws?.close();
     };
-  }, []);
+  }, [ingest]);
 
   const loadLogsFor = useCallback(async (name: string) => {
     try {
