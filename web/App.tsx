@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle } from "lucide-react";
@@ -39,9 +39,14 @@ import type { CSSProperties } from "react";
 import { OverviewTab } from "./components/OverviewTab.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { StatusDot } from "./components/StatusDot.tsx";
-import { useProjects, qk } from "./queries.ts";
+import { FactorySidebar, type BranchEntry } from "./components/FactorySidebar.tsx";
+import { useProjects, useBranches, useWorktrees, qk } from "./queries.ts";
 
-type View = "project" | "settings";
+// "feature"/"cockpit" are placeholders for now — Tasks 4–5 (Plan 04) replace them with the
+// real FeaturePage/Cockpit views. The state + callbacks are wired up here so those tasks can
+// drop their components straight in.
+type View = "project" | "settings" | "feature" | "cockpit";
+type SidebarMode = "projects" | "factory";
 type Theme = "light" | "dark";
 
 function useTheme(): [Theme, () => void] {
@@ -72,6 +77,9 @@ function AppContent() {
   const { data: projects = [], isPending: loading } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("project");
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("projects");
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
+  const [selectedTaskForceId, setSelectedTaskForceId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [runningOnly, setRunningOnly] = useState(false);
   const [linearWorkspace, setLinearWorkspace] = useState("");
@@ -177,7 +185,43 @@ function AppContent() {
   const selectProject = (name: string) => {
     setSelected(name);
     setView("project");
+    setSelectedFeatureId(null);
+    setSelectedTaskForceId(null);
+    if (isTauri) setSidebarMode("factory");
     loadLogsFor(name);
+  };
+
+  // Branches/worktrees for the Factory sidebar's "Branches & worktrees" section — the same
+  // query keys OverviewTab uses for its own list, so this shares the cache rather than
+  // double-fetching.
+  const branchesQuery = useBranches(selected ?? "");
+  const worktreesQuery = useWorktrees(selected ?? "");
+  const branchEntries: BranchEntry[] = useMemo(() => {
+    const wt = (worktreesQuery.data ?? [])
+      .filter((w) => !w.bare)
+      .map((w) => ({
+        id: `wt:${w.path}`,
+        name: w.branch ?? (w.detached ? "detached HEAD" : "—"),
+        kind: "worktree" as const,
+      }));
+    const br = (branchesQuery.data ?? []).map((b) => ({
+      id: `br:${b.name}`,
+      name: b.name,
+      kind: "branch" as const,
+    }));
+    return [...wt, ...br];
+  }, [worktreesQuery.data, branchesQuery.data]);
+
+  const handleNewFeature = async () => {
+    if (!selected) return;
+    const name = window.prompt("Feature name?")?.trim();
+    if (!name) return;
+    try {
+      await api.factory.createFeature(selected, name);
+      await queryClient.invalidateQueries({ queryKey: ["factory", selected] });
+    } catch (err) {
+      toast.error(String(err));
+    }
   };
 
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
@@ -257,6 +301,25 @@ function AppContent() {
         </SidebarHeader>
 
         <SidebarContent className="custom-scroll">
+          {sidebarMode === "factory" && selected && isTauri ? (
+            <FactorySidebar
+              project={selected}
+              branchEntries={branchEntries}
+              onBack={() => setSidebarMode("projects")}
+              onOpenFeature={(featureId) => {
+                setSelectedFeatureId(featureId);
+                setSelectedTaskForceId(null);
+                setView("feature");
+              }}
+              onOpenTaskForce={(featureId, taskForceId) => {
+                setSelectedFeatureId(featureId);
+                setSelectedTaskForceId(taskForceId);
+                setView("cockpit");
+              }}
+              onNewFeature={handleNewFeature}
+              onOpenBranch={() => setView("project")}
+            />
+          ) : (
           <SidebarGroup>
             <SidebarGroupLabel>Projects</SidebarGroupLabel>
             {loading && (
@@ -310,6 +373,7 @@ function AppContent() {
               })}
             </SidebarMenu>
           </SidebarGroup>
+          )}
         </SidebarContent>
 
         <SidebarFooter>
@@ -421,6 +485,15 @@ function AppContent() {
               <div>Select a project to get started</div>
             </div>
           </>
+        ) : view === "feature" || view === "cockpit" ? (
+          // Placeholder — Tasks 4–5 (Plan 04) render the real FeaturePage/Cockpit here,
+          // driven by the same selectedFeatureId/selectedTaskForceId state.
+          <FactoryPlaceholder
+            mode={view}
+            featureId={selectedFeatureId}
+            taskForceId={selectedTaskForceId}
+            onBack={() => setView("project")}
+          />
         ) : (
           <ProjectDetail
             project={selectedProject}
@@ -434,6 +507,39 @@ function AppContent() {
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </SidebarProvider>
+  );
+}
+
+/** Stand-in for the real FeaturePage/Cockpit (Plan 04, Tasks 4–5) — just enough to prove the
+ * sidebar's onOpenFeature/onOpenTaskForce wiring reaches the main pane. */
+function FactoryPlaceholder({
+  mode,
+  featureId,
+  taskForceId,
+  onBack,
+}: {
+  mode: "feature" | "cockpit";
+  featureId: string | null;
+  taskForceId: string | null;
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+        <SidebarTrigger className="shrink-0" />
+        <h1 className="text-lg font-semibold">{mode === "cockpit" ? "Task force cockpit" : "Feature"}</h1>
+      </div>
+      <div className="flex flex-col items-center justify-center flex-1 gap-3 text-muted-foreground">
+        <div>
+          {mode === "cockpit"
+            ? `Cockpit for task force “${taskForceId}” (feature “${featureId}”) — coming soon.`
+            : `Feature “${featureId}” — coming soon.`}
+        </div>
+        <button onClick={onBack} className="text-sm text-primary hover:underline">
+          Back to overview
+        </button>
+      </div>
+    </>
   );
 }
 

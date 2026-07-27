@@ -1,0 +1,159 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight, FolderTree, GitBranch, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useFactory } from "../queries.ts";
+import { useAgentStream } from "../hooks/useAgentStream.tsx";
+import type { AgentStatus } from "../api.ts";
+
+/** Status → dot color, matching the mockups (sky/amber/emerald/rose/muted). */
+const AGENT_DOT_COLORS: Record<string, string> = {
+  working: "bg-sky-500 shadow-[0_0_5px_-1px_theme(colors.sky.500)]",
+  awaitingInput: "bg-amber-500",
+  done: "bg-emerald-500",
+  failed: "bg-rose-500",
+};
+
+export function AgentDot({ status }: { status?: AgentStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-block size-2 rounded-full shrink-0",
+        AGENT_DOT_COLORS[status ?? ""] ?? "bg-muted-foreground/50",
+      )}
+      title={status ?? "idle"}
+    />
+  );
+}
+
+export interface BranchEntry {
+  id: string;
+  name: string;
+  kind: "worktree" | "branch" | string;
+}
+
+/** Row styling shared by feature/task-force/branch rows — mirrors SidebarMenuButton's look
+ * without depending on the real Sidebar context (this component is also used standalone). */
+const rowClass =
+  "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-foreground transition-colors hover:bg-accent";
+
+export function FactorySidebar({
+  project,
+  branchEntries,
+  onBack,
+  onOpenFeature,
+  onOpenTaskForce,
+  onNewFeature,
+  onOpenBranch,
+}: {
+  project: string;
+  branchEntries: BranchEntry[];
+  onBack: () => void;
+  onOpenFeature: (featureId: string) => void;
+  onOpenTaskForce: (featureId: string, taskForceId: string) => void;
+  onNewFeature: () => void;
+  onOpenBranch?: (entry: BranchEntry) => void;
+}) {
+  const { data } = useFactory(project);
+  const features = data?.features ?? [];
+  const { agentFor } = useAgentStream();
+  const [open, setOpen] = useState<Set<string>>(new Set());
+
+  const toggleFeature = (featureId: string) => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(featureId)) next.delete(featureId);
+      else next.add(featureId);
+      return next;
+    });
+    onOpenFeature(featureId);
+  };
+
+  return (
+    <div className="flex flex-col">
+      <button
+        onClick={onBack}
+        className="flex h-8 items-center gap-1.5 px-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronRight className="size-3.5 rotate-180" />
+        Projects
+      </button>
+
+      <div className="flex flex-col p-2">
+        <div className="flex h-8 shrink-0 items-center px-2 text-xs font-medium text-muted-foreground">
+          Features
+        </div>
+        {features.length === 0 && (
+          <div className="px-2 py-1 text-xs text-muted-foreground">No features yet.</div>
+        )}
+        <div className="flex flex-col gap-0.5">
+          {features.map((feature) => {
+            const expanded = open.has(feature.id);
+            return (
+              <div key={feature.id}>
+                <button className={rowClass} onClick={() => toggleFeature(feature.id)}>
+                  {expanded ? (
+                    <ChevronDown className="size-3.5 shrink-0" />
+                  ) : (
+                    <ChevronRight className="size-3.5 shrink-0" />
+                  )}
+                  <span className="truncate">{feature.name}</span>
+                </button>
+                {expanded && (
+                  <div className="flex flex-col gap-0.5 pl-5">
+                    {feature.taskForces.length === 0 && (
+                      <div className="px-2 py-1 text-xs text-muted-foreground">No task forces yet.</div>
+                    )}
+                    {feature.taskForces.map((tf) => (
+                      <button
+                        key={tf.id}
+                        className={rowClass}
+                        onClick={() => onOpenTaskForce(feature.id, tf.id)}
+                      >
+                        <AgentDot status={agentFor(`${project}::${tf.id}`).status} />
+                        <span className="truncate">{tf.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          onClick={onNewFeature}
+          className="mt-1 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Plus className="size-3.5 shrink-0" />
+          New feature
+        </button>
+      </div>
+
+      <div className="flex flex-col p-2">
+        <div className="flex h-8 shrink-0 items-center px-2 text-xs font-medium text-muted-foreground">
+          Branches &amp; worktrees
+        </div>
+        {branchEntries.length === 0 && (
+          <div className="px-2 py-1 text-xs text-muted-foreground">No branches or worktrees.</div>
+        )}
+        <div className="flex flex-col gap-0.5">
+          {branchEntries.map((entry) => {
+            const Icon = entry.kind === "worktree" ? FolderTree : GitBranch;
+            return (
+              <button key={entry.id} className={rowClass} onClick={() => onOpenBranch?.(entry)}>
+                <Icon
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    entry.kind === "worktree"
+                      ? "text-violet-500 dark:text-violet-400"
+                      : "text-sky-500 dark:text-sky-400",
+                  )}
+                />
+                <span className="truncate">{entry.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
