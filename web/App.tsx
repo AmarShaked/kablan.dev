@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle } from "lucide-react";
-import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine } from "./api.ts";
+import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle, Inbox } from "lucide-react";
+import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine, type InboxEntry } from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
 import {
   APP_VERSION,
@@ -42,10 +42,12 @@ import { StatusDot } from "./components/StatusDot.tsx";
 import { FactorySidebar, UnreadPill, type BranchEntry } from "./components/FactorySidebar.tsx";
 import { FeaturePage } from "./components/FeaturePage.tsx";
 import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
-import { useProjects, useBranches, useWorktrees, useFactory, qk } from "./queries.ts";
+import { InboxView } from "./components/InboxView.tsx";
+import { useProjects, useBranches, useWorktrees, useFactory, useInbox, qk } from "./queries.ts";
 
-// "feature" renders FeaturePage (Task 4); "cockpit" renders TaskForceCockpit (Task 5, Plan 04).
-type View = "project" | "settings" | "feature" | "cockpit";
+// "feature" renders FeaturePage (Task 4); "cockpit" renders TaskForceCockpit (Task 5, Plan 04);
+// "inbox" renders InboxView (Task 5, Plan 05) — the global cross-project attention list.
+type View = "project" | "settings" | "feature" | "cockpit" | "inbox";
 type SidebarMode = "projects" | "factory";
 type Theme = "light" | "dark";
 
@@ -218,6 +220,18 @@ function AppContent() {
     setView("cockpit");
   };
 
+  // Global attention inbox — jump straight into a task force's cockpit from any project,
+  // without going through the sidebar's project → factory drill-down.
+  const inboxQuery = useInbox();
+  const openInboxEntry = (entry: InboxEntry) => {
+    setSelected(entry.project);
+    setSelectedFeatureId(entry.featureId);
+    setSelectedTaskForceId(entry.taskForceId);
+    setSidebarMode("factory");
+    setView("cockpit");
+    loadLogsFor(entry.project);
+  };
+
   // Resolve the selected TaskForce object (for the Cockpit) from the same factory overview
   // the sidebar/FeaturePage use, rather than fetching it separately.
   const factoryQuery = useFactory(selected ?? "");
@@ -307,6 +321,24 @@ function AppContent() {
         </SidebarHeader>
 
         <SidebarContent className="custom-scroll">
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  isActive={view === "inbox"}
+                  tooltip="Inbox"
+                  onClick={() => setView("inbox")}
+                >
+                  <Inbox />
+                  <span>Inbox</span>
+                </SidebarMenuButton>
+                {(inboxQuery.data?.length ?? 0) > 0 && (
+                  <SidebarMenuBadge>{inboxQuery.data!.length}</SidebarMenuBadge>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
           {sidebarMode === "factory" && selected && isTauri ? (
             <FactorySidebar
               project={selected}
@@ -482,6 +514,8 @@ function AppContent() {
             }}
             projects={projects}
           />
+        ) : view === "inbox" ? (
+          <InboxView onOpen={openInboxEntry} />
         ) : !selectedProject ? (
           <>
             <div className="flex h-14 items-center gap-2 border-b border-border px-4">
