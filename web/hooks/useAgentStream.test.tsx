@@ -32,4 +32,19 @@ describe("useAgentStream", () => {
     act(() => result.current.ingest({ type: "agent-event", key: "p::t1", event: { type: "assistant" } }));
     expect(result.current.agentFor("p::t1").events).toHaveLength(2);
   });
+
+  it("tracks unread, respects active key, and sums per project", () => {
+    const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
+    const ev = (key: string) => ({ type: "agent-event", key, event: { type: "assistant" } });
+    act(() => result.current.ingest(ev("p::t1")));
+    act(() => result.current.ingest(ev("p::t1")));
+    act(() => result.current.ingest(ev("p::t2")));
+    expect(result.current.unread("p::t1")).toBe(2);
+    expect(result.current.unreadForProject("p")).toBe(3);
+    act(() => result.current.markRead("p::t1"));
+    expect(result.current.unread("p::t1")).toBe(0);
+    act(() => result.current.setActiveKey("p::t2"));
+    act(() => result.current.ingest(ev("p::t2"))); // active → no unread
+    expect(result.current.unread("p::t2")).toBe(0);
+  });
 });

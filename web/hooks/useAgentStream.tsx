@@ -6,6 +6,10 @@ type AgentSlice = { status?: AgentStatus; view?: AgentView; events: unknown[] };
 type Ctx = {
   ingest: (msg: any) => void;
   agentFor: (key: string) => { status: AgentStatus | undefined; view: AgentView | undefined; events: unknown[] };
+  unread: (key: string) => number;
+  unreadForProject: (project: string) => number;
+  markRead: (key: string) => void;
+  setActiveKey: (key: string | null) => void;
 };
 const AgentStreamCtx = createContext<Ctx | null>(null);
 
@@ -26,21 +30,60 @@ function isNoiseEvent(event: any): boolean {
 export function AgentStreamProvider({ children }: { children: React.ReactNode }) {
   const [, force] = useState(0);
   const map = useRef(new Map<string, AgentSlice>());
+  const unreadMap = useRef(new Map<string, number>());
+  const activeKeyRef = useRef<string | null>(null);
+
   const ingest = useCallback((msg: any) => {
     if (!msg || (msg.type !== "agent-status" && msg.type !== "agent-event")) return;
     const key = msg.key as string;
     if (msg.type === "agent-event" && isNoiseEvent(msg.event)) return;
     const slice = map.current.get(key) ?? { events: [] };
     if (msg.type === "agent-status") { slice.view = msg.agent; slice.status = msg.agent?.status; }
-    else { slice.events = [...slice.events, msg.event]; if (slice.events.length > MAX) slice.events.splice(0, slice.events.length - MAX); }
+    else {
+      slice.events = [...slice.events, msg.event];
+      if (slice.events.length > MAX) slice.events.splice(0, slice.events.length - MAX);
+      // Increment unread only if this is a non-noise agent-event and not the active key
+      if (key !== activeKeyRef.current) {
+        unreadMap.current.set(key, (unreadMap.current.get(key) ?? 0) + 1);
+      }
+    }
     map.current.set(key, slice);
     force((n) => n + 1);
   }, []);
+
   const agentFor = useCallback((key: string) => {
     const s = map.current.get(key);
     return { status: s?.status, view: s?.view, events: s?.events ?? [] };
   }, []);
-  return <AgentStreamCtx.Provider value={{ ingest, agentFor }}>{children}</AgentStreamCtx.Provider>;
+
+  const unread = useCallback((key: string) => {
+    return unreadMap.current.get(key) ?? 0;
+  }, []);
+
+  const unreadForProject = useCallback((project: string) => {
+    let sum = 0;
+    for (const [k, count] of unreadMap.current) {
+      if (k.startsWith(`${project}::`)) {
+        sum += count;
+      }
+    }
+    return sum;
+  }, []);
+
+  const markRead = useCallback((key: string) => {
+    unreadMap.current.set(key, 0);
+    force((n) => n + 1);
+  }, []);
+
+  const setActiveKey = useCallback((key: string | null) => {
+    activeKeyRef.current = key;
+    if (key !== null) {
+      unreadMap.current.set(key, 0);
+    }
+    force((n) => n + 1);
+  }, []);
+
+  return <AgentStreamCtx.Provider value={{ ingest, agentFor, unread, unreadForProject, markRead, setActiveKey }}>{children}</AgentStreamCtx.Provider>;
 }
 
 export function useAgentStream() {
