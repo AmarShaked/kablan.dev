@@ -128,4 +128,60 @@ describe("TaskForceCockpit", () => {
     const box = screen.getByPlaceholderText(/start the agent to chat/i);
     expect(box).toBeDisabled();
   });
+
+  it("renders without throwing when an assistant event's message.content is missing or non-array", () => {
+    const malformedEvents = [
+      {
+        type: "agent-event",
+        key: "proj::t1",
+        event: { type: "assistant", message: { role: "assistant" } }, // no content at all
+      },
+      {
+        type: "agent-event",
+        key: "proj::t1",
+        event: { type: "assistant", message: { role: "assistant", content: "not an array" } },
+      },
+      {
+        type: "agent-event",
+        key: "proj::t1",
+        event: { type: "user", message: { role: "user", content: { not: "an array" } } },
+      },
+    ];
+    expect(() => renderCockpit([workingStatus, ...malformedEvents])).not.toThrow();
+    // Status still renders fine even though the malformed events contribute no bubbles.
+    expect(screen.getByText(/working/i)).toBeInTheDocument();
+  });
+
+  it("clears the composer draft when remounted (via key change) for a different task force", async () => {
+    const qc = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <SidebarProvider>
+          <AgentStreamProvider>
+            <Seed messages={[workingStatus]} />
+            <TaskForceCockpit key="proj::t1" project="proj" taskForce={taskForce} />
+          </AgentStreamProvider>
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    await userEvent.type(box, "draft for t1");
+    expect(box).toHaveValue("draft for t1");
+
+    const otherTaskForce: TaskForce = { ...taskForce, id: "t2", name: "TF Two" };
+    rerender(
+      <QueryClientProvider client={qc}>
+        <SidebarProvider>
+          <AgentStreamProvider>
+            <Seed messages={[]} />
+            <TaskForceCockpit key="proj::t2" project="proj" taskForce={otherTaskForce} />
+          </AgentStreamProvider>
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+
+    const boxAfter = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(boxAfter).toHaveValue("");
+  });
 });

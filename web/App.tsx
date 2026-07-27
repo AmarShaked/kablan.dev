@@ -507,7 +507,11 @@ function AppContent() {
           />
         ) : view === "cockpit" ? (
           selectedTaskForce ? (
-            <TaskForceCockpit project={selectedProject.name} taskForce={selectedTaskForce} />
+            <TaskForceCockpit
+              key={`${selected}::${selectedTaskForce.id}`}
+              project={selectedProject.name}
+              taskForce={selectedTaskForce}
+            />
           ) : (
             <>
               <div className="flex items-center gap-3 border-b border-border px-6 py-4">

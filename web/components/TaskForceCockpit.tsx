@@ -52,7 +52,7 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
 
   switch (e.type) {
     case "assistant": {
-      const content = e.message?.content ?? [];
+      const content = Array.isArray(e.message?.content) ? e.message.content : [];
       const parts: ReactNode[] = [];
       content.forEach((block: any, i: number) => {
         if (block?.type === "text" && block.text) {
@@ -80,7 +80,7 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
       );
     }
     case "user": {
-      const content = e.message?.content ?? [];
+      const content = Array.isArray(e.message?.content) ? e.message.content : [];
       const results = content.filter((b: any) => b?.type === "tool_result");
       if (!results.length) return null;
       return (
@@ -97,17 +97,24 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
         </div>
       );
     }
-    case "result":
+    case "result": {
+      const resultText =
+        e.result === undefined || e.result === null
+          ? ""
+          : typeof e.result === "string"
+            ? e.result
+            : JSON.stringify(e.result);
       return (
         <div key={idx} className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
           <span className="h-px flex-1 bg-border" />
           <span>
             {e.subtype ?? "turn"}
-            {e.result ? ` · ${e.result}` : ""}
+            {resultText ? ` · ${resultText}` : ""}
           </span>
           <span className="h-px flex-1 bg-border" />
         </div>
       );
+    }
     case "system":
       if (e.subtype === "spawn_error" || e.subtype === "stderr") {
         return (
