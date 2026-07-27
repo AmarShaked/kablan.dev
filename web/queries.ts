@@ -73,3 +73,12 @@ export function useFactory(name: string) {
     staleTime: 30_000,
   });
 }
+
+export function useInbox() {
+  return useQuery({
+    queryKey: ["inbox"] as const,
+    queryFn: api.inbox,
+    enabled: isTauri,
+    refetchInterval: 15_000,
+  });
+}

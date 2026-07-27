@@ -147,6 +147,16 @@ export interface CreateTaskForceArgs {
   start?: boolean;
 }
 
+export interface InboxEntry {
+  project: string;
+  featureId: string;
+  featureName: string;
+  taskForceId: string;
+  taskForceName: string;
+  branch: string;
+  status: string;
+}
+
 export type ServerStatus = "starting" | "running" | "stopped" | "exited" | "error";
 
 export interface RunningServer {
@@ -331,4 +341,6 @@ export const api = {
   stopServer: (name: string) =>
     req<{ stopped: boolean }>(`/api/projects/${encodeURIComponent(name)}/server/stop`, { method: "POST" }),
   getAllServers: () => req<RunningServer[]>("/api/servers"),
+
+  inbox: () => req<InboxEntry[]>("/api/inbox"),
 };
