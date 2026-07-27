@@ -2,8 +2,17 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle, Inbox } from "lucide-react";
-import { api, wsUrl, type ProjectSummary, type RunningServer, type LogLine, type InboxEntry } from "./api.ts";
+import {
+  api,
+  wsUrl,
+  type ProjectSummary,
+  type RunningServer,
+  type LogLine,
+  type InboxEntry,
+  type NotificationSettings,
+} from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
+import { useAgentNotifications } from "./hooks/useAgentNotifications.tsx";
 import {
   APP_VERSION,
   checkForUpdate,
@@ -85,6 +94,7 @@ function AppContent() {
   const [filter, setFilter] = useState("");
   const [runningOnly, setRunningOnly] = useState(false);
   const [linearWorkspace, setLinearWorkspace] = useState("");
+  const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
   const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
@@ -119,7 +129,10 @@ function AppContent() {
   );
 
   useEffect(() => {
-    api.getConfig().then((c) => setLinearWorkspace(c.linearWorkspace));
+    api.getConfig().then((c) => {
+      setLinearWorkspace(c.linearWorkspace);
+      setNotifications(c.factory.notifications);
+    });
   }, []);
 
   // --- WebSocket: live status + logs ---
@@ -223,6 +236,17 @@ function AppContent() {
   // Global attention inbox — jump straight into a task force's cockpit from any project,
   // without going through the sidebar's project → factory drill-down.
   const inboxQuery = useInbox();
+
+  // Desktop notifications: reuse the inbox's project::taskForceId → name mapping for
+  // notification titles (falls back to the raw key for statuses the inbox doesn't list,
+  // e.g. "done"). The hook itself no-ops outside Tauri and respects config.factory.notifications.
+  const taskForceNameByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of inboxQuery.data ?? []) m.set(`${e.project}::${e.taskForceId}`, e.taskForceName);
+    return m;
+  }, [inboxQuery.data]);
+  const nameForKey = useCallback((key: string) => taskForceNameByKey.get(key), [taskForceNameByKey]);
+  useAgentNotifications(notifications, nameForKey);
   const openInboxEntry = (entry: InboxEntry) => {
     setSelected(entry.project);
     setSelectedFeatureId(entry.featureId);
@@ -510,6 +534,7 @@ function AppContent() {
             onConfigChanged={async () => {
               const c = await api.getConfig();
               setLinearWorkspace(c.linearWorkspace);
+              setNotifications(c.factory.notifications);
               await refreshProjects();
             }}
             projects={projects}

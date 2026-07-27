@@ -25,7 +25,7 @@ required-features = ["app"]
 
 [features]
 default = ["app"]
-app = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+app = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-updater", "dep:tauri-plugin-process", "dep:tauri-plugin-notification"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true , features = [] }
@@ -41,6 +41,7 @@ futures-util = "0.3"
 tauri = { version = "2", optional = true , features = [] }
 tauri-plugin-updater = { version = "2", optional = true }
 tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-notification = { version = "2", optional = true }
 ureq = { version = "2", features = ["json", "tls"] }
 
 [dev-dependencies]

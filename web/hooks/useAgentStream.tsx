@@ -10,6 +10,12 @@ type Ctx = {
   unreadForProject: (project: string) => number;
   markRead: (key: string) => void;
   setActiveKey: (key: string | null) => void;
+  /** Bumps on every ingest — a cheap dependency for effects that need to
+   * re-scan `snapshotStatuses()` (e.g. desktop-notification transition
+   * tracking) without threading individual keys through. */
+  version: number;
+  /** Current status of every key known to the stream, as of this render. */
+  snapshotStatuses: () => Record<string, AgentStatus>;
 };
 const AgentStreamCtx = createContext<Ctx | null>(null);
 
@@ -28,7 +34,7 @@ function isNoiseEvent(event: any): boolean {
 }
 
 export function AgentStreamProvider({ children }: { children: React.ReactNode }) {
-  const [, force] = useState(0);
+  const [version, force] = useState(0);
   const map = useRef(new Map<string, AgentSlice>());
   const unreadMap = useRef(new Map<string, number>());
   const activeKeyRef = useRef<string | null>(null);
@@ -54,6 +60,14 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
   const agentFor = useCallback((key: string) => {
     const s = map.current.get(key);
     return { status: s?.status, view: s?.view, events: s?.events ?? [] };
+  }, []);
+
+  const snapshotStatuses = useCallback((): Record<string, AgentStatus> => {
+    const out: Record<string, AgentStatus> = {};
+    for (const [key, slice] of map.current) {
+      if (slice.status) out[key] = slice.status;
+    }
+    return out;
   }, []);
 
   const unread = useCallback((key: string) => {
@@ -83,7 +97,13 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
     force((n) => n + 1);
   }, []);
 
-  return <AgentStreamCtx.Provider value={{ ingest, agentFor, unread, unreadForProject, markRead, setActiveKey }}>{children}</AgentStreamCtx.Provider>;
+  return (
+    <AgentStreamCtx.Provider
+      value={{ ingest, agentFor, unread, unreadForProject, markRead, setActiveKey, version, snapshotStatuses }}
+    >
+      {children}
+    </AgentStreamCtx.Provider>
+  );
 }
 
 export function useAgentStream() {
