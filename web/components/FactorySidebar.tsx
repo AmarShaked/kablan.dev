@@ -58,14 +58,13 @@ export function FactorySidebar({
   const { agentFor } = useAgentStream();
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  const toggleFeature = (featureId: string) => {
+  const toggleExpanded = (featureId: string) => {
     setOpen((prev) => {
       const next = new Set(prev);
       if (next.has(featureId)) next.delete(featureId);
       else next.add(featureId);
       return next;
     });
-    onOpenFeature(featureId);
   };
 
   return (
@@ -90,14 +89,30 @@ export function FactorySidebar({
             const expanded = open.has(feature.id);
             return (
               <div key={feature.id}>
-                <button className={rowClass} onClick={() => toggleFeature(feature.id)}>
-                  {expanded ? (
-                    <ChevronDown className="size-3.5 shrink-0" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0" />
-                  )}
-                  <span className="truncate">{feature.name}</span>
-                </button>
+                <div className={cn(rowClass, "gap-0 pr-0")}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpanded(feature.id);
+                    }}
+                    aria-label={expanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
+                    className="flex h-7 w-6 shrink-0 items-center justify-center"
+                  >
+                    {expanded ? (
+                      <ChevronDown className="size-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="size-3.5 shrink-0" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenFeature(feature.id)}
+                    className="flex h-7 min-w-0 flex-1 items-center truncate pr-2 text-left"
+                  >
+                    <span className="truncate">{feature.name}</span>
+                  </button>
+                </div>
                 {expanded && (
                   <div className="flex flex-col gap-0.5 pl-5">
                     {feature.taskForces.length === 0 && (

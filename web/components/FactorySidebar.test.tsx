@@ -51,12 +51,25 @@ describe("FactorySidebar", () => {
     expect(screen.getByText("Feature Two")).toBeInTheDocument();
   });
 
-  it("shows task-force names under a feature once expanded", async () => {
+  it("shows task-force names under a feature once expanded via the chevron", async () => {
     renderSidebar();
     expect(screen.queryByText("TF One")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText("Feature One"));
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
     expect(screen.getByText("TF One")).toBeInTheDocument();
     expect(screen.getByText("TF Two")).toBeInTheDocument();
+  });
+
+  it("clicking the chevron does not call onOpenFeature", async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+    expect(props.onOpenFeature).not.toHaveBeenCalled();
+  });
+
+  it("clicking the feature row body calls onOpenFeature without expanding it", async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByText("Feature One"));
+    expect(props.onOpenFeature).toHaveBeenCalledWith("f1");
+    expect(screen.queryByText("TF One")).not.toBeInTheDocument();
   });
 
   it("has a New feature control that calls onNewFeature", async () => {
@@ -67,7 +80,7 @@ describe("FactorySidebar", () => {
 
   it("calls onOpenTaskForce with the feature id and task-force id when a task force is clicked", async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByText("Feature One"));
+    await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
     await userEvent.click(screen.getByText("TF One"));
     expect(props.onOpenTaskForce).toHaveBeenCalledWith("f1", "t1");
   });

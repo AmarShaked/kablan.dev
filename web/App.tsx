@@ -40,11 +40,11 @@ import { OverviewTab } from "./components/OverviewTab.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { StatusDot } from "./components/StatusDot.tsx";
 import { FactorySidebar, type BranchEntry } from "./components/FactorySidebar.tsx";
+import { FeaturePage } from "./components/FeaturePage.tsx";
 import { useProjects, useBranches, useWorktrees, qk } from "./queries.ts";
 
-// "feature"/"cockpit" are placeholders for now — Tasks 4–5 (Plan 04) replace them with the
-// real FeaturePage/Cockpit views. The state + callbacks are wired up here so those tasks can
-// drop their components straight in.
+// "feature" now renders the real FeaturePage (Task 4); "cockpit" is still a placeholder —
+// Task 5 (Plan 04) replaces it with the real Cockpit view.
 type View = "project" | "settings" | "feature" | "cockpit";
 type SidebarMode = "projects" | "factory";
 type Theme = "light" | "dark";
@@ -212,6 +212,12 @@ function AppContent() {
     return [...wt, ...br];
   }, [worktreesQuery.data, branchesQuery.data]);
 
+  const openTaskForce = (featureId: string, taskForceId: string) => {
+    setSelectedFeatureId(featureId);
+    setSelectedTaskForceId(taskForceId);
+    setView("cockpit");
+  };
+
   const handleNewFeature = async () => {
     if (!selected) return;
     const name = window.prompt("Feature name?")?.trim();
@@ -311,11 +317,7 @@ function AppContent() {
                 setSelectedTaskForceId(null);
                 setView("feature");
               }}
-              onOpenTaskForce={(featureId, taskForceId) => {
-                setSelectedFeatureId(featureId);
-                setSelectedTaskForceId(taskForceId);
-                setView("cockpit");
-              }}
+              onOpenTaskForce={openTaskForce}
               onNewFeature={handleNewFeature}
               onOpenBranch={() => setView("project")}
             />
@@ -485,11 +487,16 @@ function AppContent() {
               <div>Select a project to get started</div>
             </div>
           </>
-        ) : view === "feature" || view === "cockpit" ? (
-          // Placeholder — Tasks 4–5 (Plan 04) render the real FeaturePage/Cockpit here,
-          // driven by the same selectedFeatureId/selectedTaskForceId state.
+        ) : view === "feature" ? (
+          <FeaturePage
+            project={selectedProject.name}
+            featureId={selectedFeatureId}
+            onOpenTaskForce={openTaskForce}
+          />
+        ) : view === "cockpit" ? (
+          // Placeholder — Task 5 (Plan 04) renders the real Cockpit here, driven by the same
+          // selectedFeatureId/selectedTaskForceId state.
           <FactoryPlaceholder
-            mode={view}
             featureId={selectedFeatureId}
             taskForceId={selectedTaskForceId}
             onBack={() => setView("project")}
@@ -510,15 +517,13 @@ function AppContent() {
   );
 }
 
-/** Stand-in for the real FeaturePage/Cockpit (Plan 04, Tasks 4–5) — just enough to prove the
- * sidebar's onOpenFeature/onOpenTaskForce wiring reaches the main pane. */
+/** Stand-in for the real Cockpit (Plan 04, Task 5) — just enough to prove the sidebar's/
+ * FeaturePage's onOpenTaskForce wiring reaches the main pane. */
 function FactoryPlaceholder({
-  mode,
   featureId,
   taskForceId,
   onBack,
 }: {
-  mode: "feature" | "cockpit";
   featureId: string | null;
   taskForceId: string | null;
   onBack: () => void;
@@ -527,13 +532,11 @@ function FactoryPlaceholder({
     <>
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
         <SidebarTrigger className="shrink-0" />
-        <h1 className="text-lg font-semibold">{mode === "cockpit" ? "Task force cockpit" : "Feature"}</h1>
+        <h1 className="text-lg font-semibold">Task force cockpit</h1>
       </div>
       <div className="flex flex-col items-center justify-center flex-1 gap-3 text-muted-foreground">
         <div>
-          {mode === "cockpit"
-            ? `Cockpit for task force “${taskForceId}” (feature “${featureId}”) — coming soon.`
-            : `Feature “${featureId}” — coming soon.`}
+          {`Cockpit for task force “${taskForceId}” (feature “${featureId}”) — coming soon.`}
         </div>
         <button onClick={onBack} className="text-sm text-primary hover:underline">
           Back to overview
