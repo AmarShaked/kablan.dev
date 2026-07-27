@@ -22,20 +22,6 @@ vi.mock("../queries.ts", () => ({
   useFactory: () => ({ data: { features, orphaned: [] }, isPending: false }),
 }));
 
-// The header reuses SidebarTrigger (SettingsPage/ProjectDetail's pattern), which needs a
-// SidebarProvider — and that provider's mobile-detection effect needs matchMedia, which jsdom
-// doesn't implement. Stub it locally rather than pulling in a full sidebar test harness.
-window.matchMedia ??= ((query: string) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: () => {},
-  removeListener: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  dispatchEvent: () => false,
-})) as unknown as typeof window.matchMedia;
-
 function renderPage(overrides: Partial<Parameters<typeof FeaturePage>[0]> = {}) {
   const props = {
     project: "proj",

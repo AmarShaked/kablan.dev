@@ -41,10 +41,10 @@ import { SettingsPage } from "./components/SettingsPage.tsx";
 import { StatusDot } from "./components/StatusDot.tsx";
 import { FactorySidebar, type BranchEntry } from "./components/FactorySidebar.tsx";
 import { FeaturePage } from "./components/FeaturePage.tsx";
-import { useProjects, useBranches, useWorktrees, qk } from "./queries.ts";
+import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
+import { useProjects, useBranches, useWorktrees, useFactory, qk } from "./queries.ts";
 
-// "feature" now renders the real FeaturePage (Task 4); "cockpit" is still a placeholder —
-// Task 5 (Plan 04) replaces it with the real Cockpit view.
+// "feature" renders FeaturePage (Task 4); "cockpit" renders TaskForceCockpit (Task 5, Plan 04).
 type View = "project" | "settings" | "feature" | "cockpit";
 type SidebarMode = "projects" | "factory";
 type Theme = "light" | "dark";
@@ -217,6 +217,18 @@ function AppContent() {
     setSelectedTaskForceId(taskForceId);
     setView("cockpit");
   };
+
+  // Resolve the selected TaskForce object (for the Cockpit) from the same factory overview
+  // the sidebar/FeaturePage use, rather than fetching it separately.
+  const factoryQuery = useFactory(selected ?? "");
+  const selectedTaskForce = useMemo(() => {
+    if (!selectedTaskForceId) return null;
+    for (const f of factoryQuery.data?.features ?? []) {
+      const tf = f.taskForces.find((t) => t.id === selectedTaskForceId);
+      if (tf) return tf;
+    }
+    return null;
+  }, [factoryQuery.data, selectedTaskForceId]);
 
   const handleNewFeature = async () => {
     if (!selected) return;
@@ -494,13 +506,19 @@ function AppContent() {
             onOpenTaskForce={openTaskForce}
           />
         ) : view === "cockpit" ? (
-          // Placeholder — Task 5 (Plan 04) renders the real Cockpit here, driven by the same
-          // selectedFeatureId/selectedTaskForceId state.
-          <FactoryPlaceholder
-            featureId={selectedFeatureId}
-            taskForceId={selectedTaskForceId}
-            onBack={() => setView("project")}
-          />
+          selectedTaskForce ? (
+            <TaskForceCockpit project={selectedProject.name} taskForce={selectedTaskForce} />
+          ) : (
+            <>
+              <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+                <SidebarTrigger className="shrink-0" />
+                <h1 className="text-lg font-semibold">Task force cockpit</h1>
+              </div>
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Task force not found.
+              </div>
+            </>
+          )
         ) : (
           <ProjectDetail
             project={selectedProject}
@@ -514,35 +532,6 @@ function AppContent() {
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </SidebarProvider>
-  );
-}
-
-/** Stand-in for the real Cockpit (Plan 04, Task 5) — just enough to prove the sidebar's/
- * FeaturePage's onOpenTaskForce wiring reaches the main pane. */
-function FactoryPlaceholder({
-  featureId,
-  taskForceId,
-  onBack,
-}: {
-  featureId: string | null;
-  taskForceId: string | null;
-  onBack: () => void;
-}) {
-  return (
-    <>
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-        <SidebarTrigger className="shrink-0" />
-        <h1 className="text-lg font-semibold">Task force cockpit</h1>
-      </div>
-      <div className="flex flex-col items-center justify-center flex-1 gap-3 text-muted-foreground">
-        <div>
-          {`Cockpit for task force “${taskForceId}” (feature “${featureId}”) — coming soon.`}
-        </div>
-        <button onClick={onBack} className="text-sm text-primary hover:underline">
-          Back to overview
-        </button>
-      </div>
-    </>
   );
 }
 
