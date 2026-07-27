@@ -44,6 +44,11 @@ export function CreateTaskForceDialog({
     setStart(true);
   };
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+
   const handleCreate = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
@@ -65,7 +70,7 @@ export function CreateTaskForceDialog({
       await queryClient.invalidateQueries({ queryKey: ["factory", project] });
       onCreated(taskForce);
       reset();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -74,13 +79,7 @@ export function CreateTaskForceDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New task force</DialogTitle>
@@ -129,7 +128,7 @@ export function CreateTaskForceDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={handleCreate} disabled={!name.trim() || busy}>

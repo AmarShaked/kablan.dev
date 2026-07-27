@@ -17,12 +17,21 @@ function renderDialog(overrides: Partial<Parameters<typeof CreateFeatureDialog>[
     onCreated: vi.fn(),
     ...overrides,
   };
-  render(
+  const { rerender } = render(
     <QueryClientProvider client={qc}>
       <CreateFeatureDialog {...props} />
     </QueryClientProvider>,
   );
-  return props;
+  const rerenderWith = (next: Partial<Parameters<typeof CreateFeatureDialog>[0]>) => {
+    Object.assign(props, next);
+    rerender(
+      <QueryClientProvider client={qc}>
+        <CreateFeatureDialog {...props} />
+      </QueryClientProvider>,
+    );
+    return props;
+  };
+  return { ...props, rerenderWith };
 }
 
 describe("CreateFeatureDialog", () => {
@@ -59,5 +68,17 @@ describe("CreateFeatureDialog", () => {
     await vi.waitFor(() => expect(api.factory.createFeature).toHaveBeenCalled());
     expect(props.onCreated).not.toHaveBeenCalled();
     expect(props.onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("resets the form when Cancel is clicked, so a later reopen starts empty", async () => {
+    const { rerenderWith } = renderDialog();
+
+    await userEvent.type(screen.getByLabelText(/name/i), "Stale name");
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    rerenderWith({ open: false });
+    rerenderWith({ open: true });
+
+    expect(screen.getByLabelText(/name/i)).toHaveValue("");
   });
 });

@@ -30,6 +30,11 @@ export function CreateFeatureDialog({
 
   const reset = () => setName("");
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -40,7 +45,7 @@ export function CreateFeatureDialog({
       await queryClient.invalidateQueries({ queryKey: ["factory", project] });
       onCreated(feature);
       reset();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -49,13 +54,7 @@ export function CreateFeatureDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New feature</DialogTitle>
@@ -74,7 +73,7 @@ export function CreateFeatureDialog({
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={handleCreate} disabled={!name.trim() || busy}>

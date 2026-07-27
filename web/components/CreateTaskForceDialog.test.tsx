@@ -2,11 +2,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { CreateTaskForceDialog } from "./CreateTaskForceDialog.tsx";
 import { api } from "../api.ts";
 import type { TaskForce } from "../api.ts";
 
 vi.mock("../api.ts");
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 function renderDialog(overrides: Partial<Parameters<typeof CreateTaskForceDialog>[0]> = {}) {
   const qc = new QueryClient();
@@ -18,12 +22,21 @@ function renderDialog(overrides: Partial<Parameters<typeof CreateTaskForceDialog
     onCreated: vi.fn(),
     ...overrides,
   };
-  render(
+  const { rerender } = render(
     <QueryClientProvider client={qc}>
       <CreateTaskForceDialog {...props} />
     </QueryClientProvider>,
   );
-  return props;
+  const rerenderWith = (next: Partial<Parameters<typeof CreateTaskForceDialog>[0]>) => {
+    Object.assign(props, next);
+    rerender(
+      <QueryClientProvider client={qc}>
+        <CreateTaskForceDialog {...props} />
+      </QueryClientProvider>,
+    );
+    return props;
+  };
+  return { ...props, rerenderWith };
 }
 
 const taskForce: TaskForce = {
@@ -104,5 +117,30 @@ describe("CreateTaskForceDialog", () => {
     });
     await vi.waitFor(() => expect(api.factory.createTaskForce).toHaveBeenCalled());
     expect(api.factory.agentMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not call onCreated or close, and shows an error toast, when the API call fails", async () => {
+    vi.mocked(api.factory.createTaskForce).mockRejectedValue(new Error("boom"));
+    const props = renderDialog();
+
+    await userEvent.type(screen.getByLabelText(/^name/i), "Broken");
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await vi.waitFor(() => expect(api.factory.createTaskForce).toHaveBeenCalled());
+    expect(props.onCreated).not.toHaveBeenCalled();
+    expect(props.onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it("resets the form when Cancel is clicked, so a later reopen starts empty", async () => {
+    const { rerenderWith } = renderDialog();
+
+    await userEvent.type(screen.getByLabelText(/^name/i), "Stale name");
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    rerenderWith({ open: false });
+    rerenderWith({ open: true });
+
+    expect(screen.getByLabelText(/^name/i)).toHaveValue("");
   });
 });
