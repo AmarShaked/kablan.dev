@@ -30,8 +30,14 @@ export function TitleBar({ isTauri, projectLabel, onOpenSearch }: TitleBarProps)
       data-tauri-drag-region
       className="flex h-[46px] shrink-0 items-center bg-sidebar px-2 pt-1 text-sidebar-foreground"
     >
-      <div data-testid="titlebar-lights-spacer" className={isTauri ? "w-[72px] shrink-0" : "w-0 shrink-0"} />
-      <div className="flex flex-1 justify-center">
+      <div
+        data-tauri-drag-region
+        data-testid="titlebar-lights-spacer"
+        className={isTauri ? "w-[72px] shrink-0" : "w-0 shrink-0"}
+      />
+      {/* The wrapper carries the drag attribute too, so the empty area around the (interactive,
+          non-draggable) search button still drags the window. */}
+      <div data-tauri-drag-region className="flex flex-1 justify-center">
         <button
           type="button"
           onClick={onOpenSearch}
@@ -41,7 +47,7 @@ export function TitleBar({ isTauri, projectLabel, onOpenSearch }: TitleBarProps)
           <span className="truncate">Search {label}… ⌘K</span>
         </button>
       </div>
-      <div data-testid="titlebar-right-spacer" className="w-[72px] shrink-0" />
+      <div data-tauri-drag-region data-testid="titlebar-right-spacer" className="w-[72px] shrink-0" />
     </div>
   );
 }
