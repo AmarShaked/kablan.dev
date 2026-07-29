@@ -1,11 +1,21 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderGit2, RefreshCw, Settings, Search, X, Sun, Moon, Download, ArrowUpCircle, Inbox } from "lucide-react";
+import {
+  FolderGit2,
+  Settings,
+  X,
+  Sun,
+  Moon,
+  Download,
+  ArrowUpCircle,
+  Inbox,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   api,
   wsUrl,
-  type ProjectSummary,
   type RunningServer,
   type LogLine,
   type InboxEntry,
@@ -22,9 +32,7 @@ import {
   type UpdateInfo,
   type TauriUpdate,
 } from "./lib/version.ts";
-import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sidebar,
   SidebarContent,
@@ -41,23 +49,19 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
-import { ProjectIcon, iconNameFor, useProjectIcons } from "@/lib/projectIcons.tsx";
-import { IconPicker } from "./components/IconPicker.tsx";
 import type { CSSProperties } from "react";
-import { OverviewTab } from "./components/OverviewTab.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
-import { StatusDot } from "./components/StatusDot.tsx";
-import { FactorySidebar, UnreadPill, type BranchEntry } from "./components/FactorySidebar.tsx";
-import { FeaturePage } from "./components/FeaturePage.tsx";
+import { ProjectSwitcher } from "./components/ProjectSwitcher.tsx";
+import { ProjectView } from "./components/ProjectView.tsx";
 import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
-import { useProjects, useBranches, useWorktrees, useFactory, useInbox, qk } from "./queries.ts";
+import { useProjects, useFactory, useInbox, qk } from "./queries.ts";
 
-// "feature" renders FeaturePage (Task 4); "cockpit" renders TaskForceCockpit (Task 5, Plan 04);
-// "inbox" renders InboxView (Task 5, Plan 05) — the global cross-project attention list.
-type View = "project" | "settings" | "feature" | "cockpit" | "inbox";
-type SidebarMode = "projects" | "factory";
+// "cockpit" renders TaskForceCockpit (Task 5, Plan 04); "inbox" renders InboxView (Task 5,
+// Plan 05) — the global cross-project attention list. "project" renders ProjectView, which
+// itself hosts a Features browser (absorbing the old nested factory sidebar/FeaturePage) and
+// a Branches & worktrees tab (OverviewTab) — the sidebar is single-level (no per-project nav).
+type View = "project" | "settings" | "cockpit" | "inbox";
 type Theme = "light" | "dark";
 
 function useTheme(): [Theme, () => void] {
@@ -84,15 +88,11 @@ function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
   const { ingest, unreadForProject } = useAgentStream();
-  const projectIcons = useProjectIcons();
-  const { data: projects = [], isPending: loading } = useProjects();
+  const { data: projects = [] } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("project");
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("projects");
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [selectedTaskForceId, setSelectedTaskForceId] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
-  const [runningOnly, setRunningOnly] = useState(false);
   const [linearWorkspace, setLinearWorkspace] = useState("");
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
@@ -202,30 +202,8 @@ function AppContent() {
     setView("project");
     setSelectedFeatureId(null);
     setSelectedTaskForceId(null);
-    if (isTauri) setSidebarMode("factory");
     loadLogsFor(name);
   };
-
-  // Branches/worktrees for the Factory sidebar's "Branches & worktrees" section — the same
-  // query keys OverviewTab uses for its own list, so this shares the cache rather than
-  // double-fetching.
-  const branchesQuery = useBranches(selected ?? "");
-  const worktreesQuery = useWorktrees(selected ?? "");
-  const branchEntries: BranchEntry[] = useMemo(() => {
-    const wt = (worktreesQuery.data ?? [])
-      .filter((w) => !w.bare)
-      .map((w) => ({
-        id: `wt:${w.path}`,
-        name: w.branch ?? (w.detached ? "detached HEAD" : "—"),
-        kind: "worktree" as const,
-      }));
-    const br = (branchesQuery.data ?? []).map((b) => ({
-      id: `br:${b.name}`,
-      name: b.name,
-      kind: "branch" as const,
-    }));
-    return [...wt, ...br];
-  }, [worktreesQuery.data, branchesQuery.data]);
 
   const openTaskForce = (featureId: string, taskForceId: string) => {
     setSelectedFeatureId(featureId);
@@ -251,14 +229,17 @@ function AppContent() {
     setSelected(entry.project);
     setSelectedFeatureId(entry.featureId);
     setSelectedTaskForceId(entry.taskForceId);
-    setSidebarMode("factory");
     setView("cockpit");
     loadLogsFor(entry.project);
   };
 
-  // Resolve the selected TaskForce object (for the Cockpit) from the same factory overview
-  // the sidebar/FeaturePage use, rather than fetching it separately.
+  // Resolve the selected Feature/TaskForce objects (for the cockpit's breadcrumb + content)
+  // from the same factory overview the Features browser uses, rather than fetching separately.
   const factoryQuery = useFactory(selected ?? "");
+  const selectedFeature = useMemo(() => {
+    if (!selectedFeatureId) return null;
+    return factoryQuery.data?.features.find((f) => f.id === selectedFeatureId) ?? null;
+  }, [factoryQuery.data, selectedFeatureId]);
   const selectedTaskForce = useMemo(() => {
     if (!selectedTaskForceId) return null;
     for (const f of factoryQuery.data?.features ?? []) {
@@ -270,26 +251,6 @@ function AppContent() {
 
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
   const selectedServer = selected ? servers[selected] ?? null : null;
-
-  const isRunning = (name: string) => {
-    const s = servers[name];
-    return s?.status === "running" || s?.status === "starting";
-  };
-  const runningCount = projects.filter((p) => isRunning(p.name)).length;
-
-  const query = filter.trim().toLowerCase();
-  let visibleProjects = query
-    ? projects.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          (p.currentBranch ?? "").toLowerCase().includes(query),
-      )
-    : projects;
-  if (runningOnly) visibleProjects = visibleProjects.filter((p) => isRunning(p.name));
-  // Float running servers to the top; stable sort keeps recency order within each group.
-  visibleProjects = [...visibleProjects].sort(
-    (a, b) => Number(isRunning(b.name)) - Number(isRunning(a.name)),
-  );
 
   return (
     <SidebarProvider
@@ -304,50 +265,36 @@ function AppContent() {
               Kablan.dev
             </span>
           </div>
-          {/* Controls — hidden when the sidebar is collapsed to icons */}
-          <div className="flex flex-col gap-2 group-data-[collapsible=icon]:hidden">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && setFilter("")}
-                placeholder="Filter projects…"
-                spellCheck={false}
-                className="h-8 pl-8 pr-8 text-sm"
-              />
-              {filter && (
-                <button
-                  onClick={() => setFilter("")}
-                  aria-label="Clear filter"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setRunningOnly((v) => !v)}
-              disabled={runningCount === 0 && !runningOnly}
-              title={runningCount ? "Show only running servers" : "No servers running"}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors",
-                runningOnly
-                  ? "border-[var(--success)]/50 bg-[var(--success)]/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent disabled:opacity-60 disabled:hover:bg-transparent",
-              )}
-            >
-              <StatusDot status={runningCount > 0 ? "running" : undefined} />
-              {runningCount} running server{runningCount === 1 ? "" : "s"}
-              {runningOnly && <span className="ml-auto text-[10px] uppercase tracking-wide">filtered</span>}
-            </button>
+          <div className="group-data-[collapsible=icon]:hidden">
+            <ProjectSwitcher
+              projects={projects}
+              selected={selected}
+              onSelect={selectProject}
+              servers={servers}
+              onRescan={refreshProjects}
+            />
           </div>
         </SidebarHeader>
 
         <SidebarContent className="custom-scroll">
-          {isTauri && (
-            <SidebarGroup>
-              <SidebarMenu>
+          <SidebarGroup>
+            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  isActive={view === "project" || view === "cockpit"}
+                  tooltip="Projects"
+                  onClick={() => setView("project")}
+                >
+                  <FolderGit2 />
+                  <span>Projects</span>
+                </SidebarMenuButton>
+                {selected && unreadForProject(selected) > 0 && (
+                  <SidebarMenuBadge>{unreadForProject(selected)}</SidebarMenuBadge>
+                )}
+              </SidebarMenuItem>
+              {isTauri && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     size="sm"
@@ -362,104 +309,24 @@ function AppContent() {
                     <SidebarMenuBadge>{inboxQuery.data!.length}</SidebarMenuBadge>
                   )}
                 </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-          )}
-          {sidebarMode === "factory" && selected && isTauri ? (
-            <FactorySidebar
-              project={selected}
-              branchEntries={branchEntries}
-              onBack={() => {
-                setSidebarMode("projects");
-                setView("project");
-              }}
-              onOpenFeature={(featureId) => {
-                setSelectedFeatureId(featureId);
-                setSelectedTaskForceId(null);
-                setView("feature");
-              }}
-              onOpenTaskForce={openTaskForce}
-              onOpenBranch={() => setView("project")}
-            />
-          ) : (
-          <SidebarGroup>
-            <SidebarGroupLabel>Projects</SidebarGroupLabel>
-            {loading && (
-              <SidebarMenu>
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <SidebarMenuItem key={i}>
-                    <div className="flex h-7 items-center gap-2 px-2">
-                      <Skeleton className="size-4 shrink-0 rounded" />
-                      <Skeleton
-                        className="h-3.5 rounded group-data-[collapsible=icon]:hidden"
-                        style={{ width: `${55 + ((i * 13) % 35)}%` }}
-                      />
-                    </div>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            )}
-            {!loading && projects.length === 0 && (
-              <div className="px-2 py-1 text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
-                No git repos found.
-              </div>
-            )}
-            {!loading && projects.length > 0 && visibleProjects.length === 0 && (
-              <div className="px-2 py-1 text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
-                {runningOnly && !query ? "No servers running." : `No projects match “${filter.trim()}”.`}
-              </div>
-            )}
-            <SidebarMenu>
-              {visibleProjects.map((p) => {
-                const s = servers[p.name];
-                const active = selected === p.name && view === "project";
-                const running = s?.status === "running" || s?.status === "starting";
-                const projectUnread = unreadForProject(p.name);
-                return (
-                  <SidebarMenuItem key={p.name}>
-                    <SidebarMenuButton
-                      size="sm"
-                      isActive={active}
-                      tooltip={p.name}
-                      title={p.name}
-                      onClick={() => selectProject(p.name)}
-                    >
-                      <ProjectIcon name={iconNameFor(p.name, projectIcons)} />
-                      <span className="truncate">{p.name}</span>
-                    </SidebarMenuButton>
-                    {(running || projectUnread > 0) && (
-                      <SidebarMenuBadge className="flex items-center gap-1">
-                        {running && <StatusDot status={s!.status} />}
-                        <UnreadPill count={projectUnread} testId={`unread-pill-project-${p.name}`} />
-                      </SidebarMenuBadge>
-                    )}
-                  </SidebarMenuItem>
-                );
-              })}
+              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  isActive={view === "settings"}
+                  tooltip="Settings"
+                  onClick={() => setView("settings")}
+                >
+                  <Settings />
+                  <span>Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
-          )}
         </SidebarContent>
 
         <SidebarFooter>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="sm" tooltip="Rescan projects" onClick={refreshProjects}>
-                <RefreshCw />
-                <span>Rescan</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="sm"
-                isActive={view === "settings"}
-                tooltip="Settings"
-                onClick={() => setView("settings")}
-              >
-                <Settings />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 size="sm"
@@ -553,80 +420,64 @@ function AppContent() {
               <div>Select a project to get started</div>
             </div>
           </>
-        ) : view === "feature" ? (
-          <FeaturePage
-            project={selectedProject.name}
-            featureId={selectedFeatureId}
-            onOpenTaskForce={openTaskForce}
-          />
         ) : view === "cockpit" ? (
-          selectedTaskForce ? (
-            <TaskForceCockpit
-              key={`${selected}::${selectedTaskForce.id}`}
-              project={selectedProject.name}
-              taskForce={selectedTaskForce}
-            />
-          ) : (
-            <>
-              <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-                <SidebarTrigger className="shrink-0" />
-                <h1 className="text-lg font-semibold">Task force cockpit</h1>
-              </div>
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Task force not found.
-              </div>
-            </>
-          )
+          <>
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
+              <button
+                type="button"
+                onClick={() => setView("project")}
+                aria-label="Back to project"
+                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5" />
+                Back
+              </button>
+              <nav
+                aria-label="Breadcrumb"
+                className="flex min-w-0 items-center gap-1.5 truncate text-sm text-muted-foreground"
+              >
+                <span className="truncate">{selectedProject.name}</span>
+                <ChevronRight className="size-3 shrink-0" />
+                <span className="truncate">{selectedFeature?.name ?? "…"}</span>
+                <ChevronRight className="size-3 shrink-0" />
+                <span className="truncate font-medium text-foreground">
+                  {selectedTaskForce?.name ?? "…"}
+                </span>
+              </nav>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col">
+              {selectedTaskForce ? (
+                <TaskForceCockpit
+                  key={`${selected}::${selectedTaskForce.id}`}
+                  project={selectedProject.name}
+                  taskForce={selectedTaskForce}
+                />
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+                    <SidebarTrigger className="shrink-0" />
+                    <h1 className="text-lg font-semibold">Task force cockpit</h1>
+                  </div>
+                  <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                    Task force not found.
+                  </div>
+                </>
+              )}
+            </div>
+          </>
         ) : (
-          <ProjectDetail
+          <ProjectView
             project={selectedProject}
             server={selectedServer}
             logs={logs[selectedProject.name] ?? []}
             onCommandChange={refreshProjects}
             linearWorkspace={linearWorkspace}
+            onOpenTaskForce={openTaskForce}
           />
         )}
       </SidebarInset>
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </SidebarProvider>
-  );
-}
-
-function ProjectDetail({
-  project,
-  server,
-  logs,
-  onCommandChange,
-  linearWorkspace,
-}: {
-  project: ProjectSummary;
-  server: RunningServer | null;
-  logs: LogLine[];
-  onCommandChange: () => void;
-  linearWorkspace: string;
-}) {
-  return (
-    <>
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-        <SidebarTrigger className="shrink-0" />
-        <IconPicker project={project.name} />
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold truncate">{project.name}</h1>
-          <div className="text-xs text-muted-foreground font-mono truncate">{project.path}</div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-hidden">
-        <OverviewTab
-          key={project.name}
-          project={project}
-          server={server}
-          logs={logs}
-          onCommandChange={onCommandChange}
-          linearWorkspace={linearWorkspace}
-        />
-      </div>
-    </>
   );
 }

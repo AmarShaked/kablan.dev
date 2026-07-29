@@ -1,5 +1,5 @@
 import { useInbox } from "../queries.ts";
-import { AgentDot } from "./FactorySidebar.tsx";
+import { AgentDot } from "./AgentDot.tsx";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentStatus, InboxEntry } from "../api.ts";

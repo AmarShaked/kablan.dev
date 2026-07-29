@@ -10,7 +10,7 @@ import {
   type LogLine,
 } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
-import { AgentDot } from "./FactorySidebar.tsx";
+import { AgentDot } from "./AgentDot.tsx";
 import { GitlabSection } from "./GitlabSection.tsx";
 import { LinearLink } from "./LinearLink.tsx";
 import { Button } from "@/components/ui/button";
