@@ -8,6 +8,19 @@ function feature(overrides: Partial<ProjectEntity> = {}): ProjectEntity {
   return { kind: "feature", id: "f1", label: "Feature One", ts: 100, featureId: "f1", ...overrides };
 }
 
+function taskForceEntity(overrides: Partial<ProjectEntity> = {}): ProjectEntity {
+  return {
+    kind: "taskForce",
+    id: "t1",
+    label: "TF One",
+    branch: "feat/one",
+    ts: 100,
+    featureId: "f1",
+    taskForceId: "t1",
+    ...overrides,
+  };
+}
+
 function worktreeEntity(overrides: Partial<ProjectEntity> = {}): ProjectEntity {
   return {
     kind: "worktree",
@@ -28,6 +41,7 @@ function branchEntity(overrides: Partial<ProjectEntity> = {}): ProjectEntity {
 function renderComponent(overrides: Partial<Parameters<typeof SidebarRecent>[0]> = {}) {
   const props = {
     features: [feature()],
+    taskForces: [] as ProjectEntity[],
     worktrees: [worktreeEntity()],
     branches: [branchEntity()],
     unreadFor: vi.fn(() => 0),
@@ -60,7 +74,7 @@ describe("SidebarRecent", () => {
     expect(screen.getByText("Login flow")).toBeInTheDocument();
     expect(screen.getByText("Zzz other")).toBeInTheDocument();
 
-    await userEvent.type(screen.getByPlaceholderText(/filter/i), "login");
+    await userEvent.type(screen.getByPlaceholderText(/find a feature/i), "login");
 
     expect(screen.getByText("Login flow")).toBeInTheDocument();
     expect(screen.queryByText("Zzz other")).not.toBeInTheDocument();
@@ -75,6 +89,31 @@ describe("SidebarRecent", () => {
   it("shows an unread badge on a feature when unreadFor > 0", () => {
     renderComponent({ unreadFor: vi.fn(() => 3) });
     expect(screen.getByText("3")).toBeInTheDocument();
+  });
+
+  it("expanding a feature shows its task forces, and clicking one calls onOpenTaskForce", async () => {
+    const props = renderComponent({ taskForces: [taskForceEntity()] });
+    expect(screen.queryByText("TF One")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Feature One"));
+    expect(screen.getByText("TF One")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("TF One"));
+    expect(props.onOpenTaskForce).toHaveBeenCalledWith("f1", "t1");
+  });
+
+  it("collapses a feature's task forces when clicked again", async () => {
+    renderComponent({ taskForces: [taskForceEntity()] });
+    await userEvent.click(screen.getByText("Feature One"));
+    expect(screen.getByText("TF One")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Feature One"));
+    expect(screen.queryByText("TF One")).not.toBeInTheDocument();
+  });
+
+  it("shows 'No task forces.' when an expanded feature has none", async () => {
+    renderComponent();
+    await userEvent.click(screen.getByText("Feature One"));
+    expect(screen.getByText("No task forces.")).toBeInTheDocument();
   });
 
   it("clicking a worktree row with no taskForceId calls onOpenWorktree with the entity", async () => {
@@ -123,5 +162,18 @@ describe("SidebarRecent", () => {
     renderComponent({ features: manyFeatures });
     for (let i = 0; i < 10; i++) expect(screen.getByText(`Feature ${i}`)).toBeInTheDocument();
     for (let i = 10; i < 15; i++) expect(screen.queryByText(`Feature ${i}`)).not.toBeInTheDocument();
+  });
+
+  it("does not render a Fetch button when onFetch is omitted", () => {
+    renderComponent();
+    expect(screen.queryByLabelText(/fetch remote/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a Fetch button in the Worktrees group and fires onFetch when clicked", async () => {
+    const onFetch = vi.fn().mockResolvedValue(undefined);
+    renderComponent({ onFetch });
+    const button = screen.getByLabelText(/fetch remote/i);
+    await userEvent.click(button);
+    expect(onFetch).toHaveBeenCalled();
   });
 });

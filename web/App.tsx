@@ -1,24 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  FolderGit2,
-  Settings,
-  X,
-  Sun,
-  Moon,
-  Download,
-  ArrowUpCircle,
-  Inbox,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-} from "lucide-react";
+import { FolderGit2, X, Download, ArrowUpCircle, ChevronLeft } from "lucide-react";
 import {
   api,
   wsUrl,
   type RunningServer,
-  type LogLine,
   type InboxEntry,
   type NotificationSettings,
 } from "./api.ts";
@@ -34,39 +21,41 @@ import {
   type TauriUpdate,
 } from "./lib/version.ts";
 import { Toaster } from "@/components/ui/sonner";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import type { CSSProperties } from "react";
 import { SettingsPage } from "./components/SettingsPage.tsx";
-import { ProjectSwitcher } from "./components/ProjectSwitcher.tsx";
+import { GlobalRail } from "./components/GlobalRail.tsx";
+import { ProjectMenu } from "./components/ProjectMenu.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
-import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
+import { Cockpit, type CockpitTarget } from "./components/Cockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
-import { SidebarRecent } from "./components/SidebarRecent.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { buildProjectEntities, type ProjectEntity } from "./lib/projectEntities.ts";
 import { useProjects, useFactory, useBranches, useWorktrees, useInbox, qk } from "./queries.ts";
 
-// "cockpit" renders TaskForceCockpit (Task 5, Plan 04); "inbox" renders InboxView (Task 5,
-// Plan 05) — the global cross-project attention list. "project" renders ProjectView, which
-// itself hosts a Features browser (absorbing the old nested factory sidebar/FeaturePage) and
-// a Branches & worktrees tab (OverviewTab) — the sidebar is single-level (no per-project nav).
+// Two-rail shell (Slack-style): GlobalRail (Inbox/Settings/Theme, always visible) + ProjectMenu
+// (switcher + Features/Worktrees/Branches, visible once a project is selected) + a main area
+// whose content depends on `view`: "project" is the Features-only ProjectView home, "cockpit"
+// renders the unified Cockpit (task force / worktree / bare branch — see CockpitTarget below),
+// "inbox" renders InboxView, "settings" renders SettingsPage. Replaces the old single shadcn
+// Sidebar shell + top-center search bar + Branches-tab-in-ProjectView design.
 type View = "project" | "settings" | "cockpit" | "inbox";
 type Theme = "light" | "dark";
+
+/** Which cockpit target to show, addressed by stable ids/paths/names rather than the resolved
+ * objects themselves — the objects are looked up from the live queries on every render (see
+ * `resolvedTarget` below) so the cockpit always reflects the latest feature/worktree/branch
+ * data without App having to keep its own copy in sync. */
+type CockpitTargetRef =
+  | { kind: "taskForce"; featureId: string; taskForceId: string }
+  | { kind: "worktree"; worktreePath: string }
+  | { kind: "branch"; branch: string };
+
+/** Stable per-target remount key for `<Cockpit key=...>` — a new target (even the same kind)
+ * should always tear down and remount the chat/details panes rather than reusing state. */
+function cockpitTargetRefKey(t: CockpitTargetRef): string {
+  if (t.kind === "taskForce") return `tf:${t.featureId}:${t.taskForceId}`;
+  if (t.kind === "worktree") return `wt:${t.worktreePath}`;
+  return `br:${t.branch}`;
+}
 
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -91,24 +80,20 @@ export function App() {
 function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
-  const { ingest, unreadForProject, unread, agentFor, version } = useAgentStream();
+  const { ingest, unread, agentFor, version } = useAgentStream();
   const { data: projects = [] } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("project");
-  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
-  const [selectedTaskForceId, setSelectedTaskForceId] = useState<string | null>(null);
+  const [cockpitTarget, setCockpitTarget] = useState<CockpitTargetRef | null>(null);
   const [linearWorkspace, setLinearWorkspace] = useState("");
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
-  // Agent Factory sidebar: recent Features/Worktrees/Branches lists + the ⌘K command palette,
-  // both scoped to the selected project. `projectTab`/`expandFeatureId` drive ProjectView so a
-  // sidebar/palette row can land on the right tab (and, for a feature, force it open).
+  // ⌘K palette + "force this feature open" (sidebar/palette "open feature" routing into the
+  // Features-only ProjectView home).
   const [commandOpen, setCommandOpen] = useState(false);
-  const [projectTab, setProjectTab] = useState<"features" | "branches">("features");
   const [expandFeatureId, setExpandFeatureId] = useState<string | null>(null);
 
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
-  const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [tauriUpdate, setTauriUpdate] = useState<TauriUpdate | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -146,7 +131,7 @@ function AppContent() {
     });
   }, []);
 
-  // --- WebSocket: live status + logs ---
+  // --- WebSocket: live status (dev servers) + agent stream ---
   useEffect(() => {
     let ws: WebSocket | null = null;
     let closed = false;
@@ -172,17 +157,10 @@ function AppContent() {
           // (e.g. "command not found", a dev server that errored out).
           if (s && (s.status === "error" || (s.status === "exited" && !!s.exitCode))) {
             toast.error(
-              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the item's Logs tab for details.`,
+              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Dev server card for details.`,
               { duration: 8000 },
             );
           }
-        } else if (msg.type === "log") {
-          const { projectName, line } = msg;
-          setLogs((prev) => {
-            const arr = prev[projectName] ? [...prev[projectName], line] : [line];
-            if (arr.length > 3000) arr.splice(0, arr.length - 3000);
-            return { ...prev, [projectName]: arr };
-          });
         } else if (msg.type?.startsWith("agent-")) {
           ingest(msg);
         }
@@ -199,31 +177,25 @@ function AppContent() {
     };
   }, [ingest]);
 
-  const loadLogsFor = useCallback(async (name: string) => {
-    try {
-      const existing = await api.getLogs(name);
-      setLogs((prev) => ({ ...prev, [name]: existing }));
-    } catch {
-      /* no server yet */
-    }
-  }, []);
-
   const selectProject = (name: string) => {
     setSelected(name);
     setView("project");
-    setSelectedFeatureId(null);
-    setSelectedTaskForceId(null);
-    loadLogsFor(name);
+    setCockpitTarget(null);
+    setExpandFeatureId(null);
   };
 
-  const openTaskForce = (featureId: string, taskForceId: string) => {
-    setSelectedFeatureId(featureId);
-    setSelectedTaskForceId(taskForceId);
+  const openTaskForce = useCallback((featureId: string, taskForceId: string) => {
+    setCockpitTarget({ kind: "taskForce", featureId, taskForceId });
     setView("cockpit");
-  };
+  }, []);
+
+  const openWorktreePath = useCallback((worktreePath: string) => {
+    setCockpitTarget({ kind: "worktree", worktreePath });
+    setView("cockpit");
+  }, []);
 
   // Global attention inbox — jump straight into a task force's cockpit from any project,
-  // without going through the sidebar's project → factory drill-down.
+  // without going through the project menu's drill-down.
   const inboxQuery = useInbox();
 
   // Desktop notifications: reuse the inbox's project::taskForceId → name mapping for
@@ -238,36 +210,63 @@ function AppContent() {
   useAgentNotifications(notifications, nameForKey);
   const openInboxEntry = (entry: InboxEntry) => {
     setSelected(entry.project);
-    setSelectedFeatureId(entry.featureId);
-    setSelectedTaskForceId(entry.taskForceId);
-    setView("cockpit");
-    loadLogsFor(entry.project);
+    openTaskForce(entry.featureId, entry.taskForceId);
   };
 
-  // Resolve the selected Feature/TaskForce objects (for the cockpit's breadcrumb + content)
-  // from the same factory overview the Features browser uses, rather than fetching separately.
-  const factoryQuery = useFactory(selected ?? "");
-  const selectedFeature = useMemo(() => {
-    if (!selectedFeatureId) return null;
-    return factoryQuery.data?.features.find((f) => f.id === selectedFeatureId) ?? null;
-  }, [factoryQuery.data, selectedFeatureId]);
-  const selectedTaskForce = useMemo(() => {
-    if (!selectedTaskForceId) return null;
-    for (const f of factoryQuery.data?.features ?? []) {
-      const tf = f.taskForces.find((t) => t.id === selectedTaskForceId);
-      if (tf) return tf;
-    }
-    return null;
-  }, [factoryQuery.data, selectedTaskForceId]);
-
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
-  const selectedServer = selected ? servers[selected] ?? null : null;
 
-  // Sidebar "recent 10" lists + ⌘K palette — branches/worktrees work even in the browser
-  // reference server (useBranches/useWorktrees aren't isTauri-gated); useFactory is, so
-  // features/taskForces are simply empty there (buildProjectEntities handles empty arrays fine).
+  // Project-scoped queries feeding both the ProjectMenu's Features/Worktrees/Branches lists and
+  // the cockpit target resolution below — branches/worktrees work even in the browser reference
+  // server (not isTauri-gated); useFactory is, so features/taskForces are simply empty there.
+  const factoryQuery = useFactory(selected ?? "");
   const branchesQuery = useBranches(selected ?? "");
   const worktreesQuery = useWorktrees(selected ?? "");
+
+  const openBranchByName = useCallback(
+    (branchName: string) => {
+      const wt = (worktreesQuery.data ?? []).find((w) => w.branch === branchName);
+      if (wt) openWorktreePath(wt.path);
+      else {
+        setCockpitTarget({ kind: "branch", branch: branchName });
+        setView("cockpit");
+      }
+    },
+    [worktreesQuery.data, openWorktreePath],
+  );
+
+  const openWorktreeEntity = useCallback(
+    (entity: ProjectEntity) => {
+      if (entity.worktreePath) openWorktreePath(entity.worktreePath);
+    },
+    [openWorktreePath],
+  );
+
+  const openFeatureHome = useCallback((featureId: string) => {
+    setExpandFeatureId(featureId);
+    setCockpitTarget(null);
+    setView("project");
+  }, []);
+
+  // Resolve the current cockpit target's live objects (feature/task-force, worktree, or branch)
+  // from the same queries the ProjectMenu's lists use, rather than fetching separately or caching
+  // a stale copy on App's own state.
+  const resolvedTarget: CockpitTarget | null = useMemo(() => {
+    if (!cockpitTarget) return null;
+    if (cockpitTarget.kind === "taskForce") {
+      const feature = factoryQuery.data?.features.find((f) => f.id === cockpitTarget.featureId);
+      const taskForce = feature?.taskForces.find((t) => t.id === cockpitTarget.taskForceId);
+      if (!feature || !taskForce) return null;
+      return { kind: "taskForce", feature, taskForce };
+    }
+    if (cockpitTarget.kind === "worktree") {
+      const worktree = worktreesQuery.data?.find((w) => w.path === cockpitTarget.worktreePath);
+      if (!worktree) return null;
+      return { kind: "worktree", worktree };
+    }
+    const branch = branchesQuery.data?.find((b) => b.name === cockpitTarget.branch);
+    if (!branch) return null;
+    return { kind: "branch", branch };
+  }, [cockpitTarget, factoryQuery.data, worktreesQuery.data, branchesQuery.data]);
 
   const workingTaskForceIds = useMemo(() => {
     const set = new Set<string>();
@@ -304,58 +303,48 @@ function AppContent() {
     [factoryQuery.data, selected, unread],
   );
 
-  const openFeature = useCallback((featureId: string) => {
-    setExpandFeatureId(featureId);
-    setProjectTab("features");
-    setView("project");
-  }, []);
-
-  const openBranch = useCallback((_name: string) => {
-    setProjectTab("branches");
-    setView("project");
-  }, []);
-
-  const openWorktreeEntity = useCallback(
-    (entity: ProjectEntity) => {
-      if (entity.taskForceId && entity.featureId) {
-        openTaskForce(entity.featureId, entity.taskForceId);
-      } else {
-        setProjectTab("branches");
-        setView("project");
-      }
-    },
-    // openTaskForce is redefined every render (it's not wrapped in useCallback), so it can't be
-    // listed as a dep without this effectively never memoizing — it only ever reads state setters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const viewAll = useCallback((kind: "features" | "branches" | "worktrees") => {
-    setProjectTab(kind === "features" ? "features" : "branches");
-    setView("project");
-  }, []);
+  // "View all" (a group has more than the sidebar's top-10) opens the unbounded ⌘K search
+  // instead of a dedicated list view — there's no more per-kind tab to land on.
+  const viewAll = useCallback(() => setCommandOpen(true), []);
 
   const selectEntity = useCallback(
     (entity: ProjectEntity) => {
       switch (entity.kind) {
         case "feature":
-          openFeature(entity.featureId ?? entity.id);
+          openFeatureHome(entity.featureId ?? entity.id);
           break;
         case "taskForce":
           if (entity.featureId && entity.taskForceId) openTaskForce(entity.featureId, entity.taskForceId);
           break;
         case "branch":
-          openBranch(entity.label);
+          openBranchByName(entity.label);
           break;
         case "worktree":
-          openWorktreeEntity(entity);
+          if (entity.taskForceId && entity.featureId) openTaskForce(entity.featureId, entity.taskForceId);
+          else if (entity.worktreePath) openWorktreePath(entity.worktreePath);
           break;
       }
       setCommandOpen(false);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [openFeature, openBranch, openWorktreeEntity],
+    [openFeatureHome, openTaskForce, openBranchByName, openWorktreePath],
   );
+
+  // Fetches all remotes for the selected project and invalidates branches/worktrees — the same
+  // action the old Branches & worktrees tab's "Fetch" button triggered, now surfaced in the
+  // ProjectMenu (SidebarRecent's Worktrees group header) since that tab is retired.
+  const fetchRemote = useCallback(async () => {
+    if (!selected) return;
+    try {
+      const res = await api.fetchRemote(selected);
+      toast.success(res.output || "Fetched.", { duration: 5000 });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.branches(selected) }),
+        queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) }),
+      ]);
+    } catch (err) {
+      toast.error(String(err), { duration: 8000 });
+    }
+  }, [selected, queryClient]);
 
   // Global ⌘K / Ctrl+K toggles the command palette from anywhere in the app.
   useEffect(() => {
@@ -369,151 +358,41 @@ function AppContent() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  const railActive = view === "inbox" ? "inbox" : view === "settings" ? "settings" : null;
+
   return (
-    <SidebarProvider
-      className="h-screen overflow-hidden"
-      style={{ "--sidebar-width": "19rem" } as CSSProperties}
-    >
-      <Sidebar collapsible="icon">
-        <SidebarHeader className="gap-2">
-          <div className="flex h-8 items-center gap-2 px-1.5">
-            <span className="size-2.5 shrink-0 rounded-full bg-primary" />
-            <span className="truncate font-semibold text-[15px] group-data-[collapsible=icon]:hidden">
-              Kablan.dev
-            </span>
-          </div>
-          <div className="group-data-[collapsible=icon]:hidden">
-            <ProjectSwitcher
-              projects={projects}
-              selected={selected}
-              onSelect={selectProject}
-              servers={servers}
-              onRescan={refreshProjects}
-            />
-          </div>
-        </SidebarHeader>
+    <div className="flex h-screen overflow-hidden">
+      <GlobalRail
+        inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
+        active={railActive}
+        onInbox={() => isTauri && setView("inbox")}
+        onSettings={() => setView("settings")}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
-        <SidebarContent className="overflow-hidden">
-          <SidebarGroup>
-            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  isActive={view === "project" || view === "cockpit"}
-                  tooltip="Projects"
-                  onClick={() => setView("project")}
-                >
-                  <FolderGit2 />
-                  <span>Projects</span>
-                </SidebarMenuButton>
-                {selected && unreadForProject(selected) > 0 && (
-                  <SidebarMenuBadge>{unreadForProject(selected)}</SidebarMenuBadge>
-                )}
-              </SidebarMenuItem>
-              {isTauri && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    isActive={view === "inbox"}
-                    tooltip="Inbox"
-                    onClick={() => setView("inbox")}
-                  >
-                    <Inbox />
-                    <span>Inbox</span>
-                  </SidebarMenuButton>
-                  {(inboxQuery.data?.length ?? 0) > 0 && (
-                    <SidebarMenuBadge>{inboxQuery.data!.length}</SidebarMenuBadge>
-                  )}
-                </SidebarMenuItem>
-              )}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  isActive={view === "settings"}
-                  tooltip="Settings"
-                  onClick={() => setView("settings")}
-                >
-                  <Settings />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
-          {selected && (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <SidebarRecent
-                features={projectEntities.features}
-                worktrees={projectEntities.worktrees}
-                branches={projectEntities.branches}
-                unreadFor={unreadForFeature}
-                onOpenFeature={openFeature}
-                onOpenTaskForce={openTaskForce}
-                onOpenBranch={openBranch}
-                onOpenWorktree={openWorktreeEntity}
-                onViewAll={viewAll}
-              />
-            </div>
-          )}
-        </SidebarContent>
+      <ProjectMenu
+        projects={projects}
+        selected={selected}
+        onSelectProject={selectProject}
+        servers={servers}
+        onRescan={refreshProjects}
+        entities={{
+          features: projectEntities.features,
+          taskForces: projectEntities.taskForces,
+          branches: projectEntities.branches,
+          worktrees: projectEntities.worktrees,
+        }}
+        unreadFor={unreadForFeature}
+        onOpenFeature={openFeatureHome}
+        onOpenTaskForce={openTaskForce}
+        onOpenBranch={openBranchByName}
+        onOpenWorktree={openWorktreeEntity}
+        onViewAll={viewAll}
+        onFetch={fetchRemote}
+      />
 
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="sm"
-                tooltip={theme === "dark" ? "Switch to light" : "Switch to dark"}
-                onClick={toggleTheme}
-              >
-                {theme === "dark" ? <Sun /> : <Moon />}
-                <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            {newVersion && (
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  className="text-[var(--success)]"
-                  tooltip={`Update available: v${newVersion}`}
-                  disabled={updating}
-                  onClick={() =>
-                    tauriUpdate
-                      ? runTauriUpdate()
-                      : window.open(DOWNLOAD_URL, "_blank", "noopener,noreferrer")
-                  }
-                >
-                  <ArrowUpCircle />
-                  <span>{updating ? "Updating…" : `Update to v${newVersion}`}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
-          </SidebarMenu>
-          <div className="px-2 pt-1 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-            Kablan.dev v{APP_VERSION}
-          </div>
-        </SidebarFooter>
-        <SidebarRail />
-      </Sidebar>
-
-      <SidebarInset className="h-screen overflow-hidden">
-        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
-          <SidebarTrigger />
-          <div className="flex flex-1 justify-center">
-            <button
-              type="button"
-              onClick={() => setCommandOpen(true)}
-              aria-label="Search the project"
-              className="flex w-full max-w-md items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70"
-            >
-              <Search className="size-4 shrink-0" />
-              <span className="truncate">Search features, task forces, branches…</span>
-              <kbd className="ml-auto hidden shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium sm:inline">
-                ⌘K
-              </kbd>
-            </button>
-          </div>
-          <div className="w-7 shrink-0" />
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {newVersion && !updateDismissed && (
           <div className="flex items-center gap-3 border-b border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm">
             <ArrowUpCircle className="size-4 shrink-0 text-[var(--success)]" />
@@ -561,13 +440,13 @@ function AppContent() {
         ) : view === "inbox" && isTauri ? (
           <InboxView onOpen={openInboxEntry} />
         ) : !selectedProject ? (
-          <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground gap-3">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
             <FolderGit2 className="size-10 opacity-40" />
             <div>Select a project to get started</div>
           </div>
         ) : view === "cockpit" ? (
-          <>
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
               <button
                 type="button"
                 onClick={() => setView("project")}
@@ -577,53 +456,28 @@ function AppContent() {
                 <ChevronLeft className="size-3.5" />
                 Back
               </button>
-              <nav
-                aria-label="Breadcrumb"
-                className="flex min-w-0 items-center gap-1.5 truncate text-sm text-muted-foreground"
-              >
-                <span className="truncate">{selectedProject.name}</span>
-                <ChevronRight className="size-3 shrink-0" />
-                <span className="truncate">{selectedFeature?.name ?? "…"}</span>
-                <ChevronRight className="size-3 shrink-0" />
-                <span className="truncate font-medium text-foreground">
-                  {selectedTaskForce?.name ?? "…"}
-                </span>
-              </nav>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col">
-              {selectedTaskForce ? (
-                <TaskForceCockpit
-                  key={`${selected}::${selectedTaskForce.id}`}
-                  project={selectedProject.name}
-                  taskForce={selectedTaskForce}
-                />
-              ) : (
-                <>
-                  <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-                    <SidebarTrigger className="shrink-0" />
-                    <h1 className="text-lg font-semibold">Task force cockpit</h1>
-                  </div>
-                  <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                    Task force not found.
-                  </div>
-                </>
-              )}
-            </div>
-          </>
+            {resolvedTarget ? (
+              <Cockpit
+                key={cockpitTargetRefKey(cockpitTarget!)}
+                project={selectedProject.name}
+                target={resolvedTarget}
+                onStarted={(wt) => setCockpitTarget({ kind: "worktree", worktreePath: wt.path })}
+              />
+            ) : (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Loading…
+              </div>
+            )}
+          </div>
         ) : (
           <ProjectView
             project={selectedProject}
-            server={selectedServer}
-            logs={logs[selectedProject.name] ?? []}
-            onCommandChange={refreshProjects}
-            linearWorkspace={linearWorkspace}
             onOpenTaskForce={openTaskForce}
-            tab={projectTab}
-            onTabChange={setProjectTab}
             expandFeatureId={expandFeatureId}
           />
         )}
-      </SidebarInset>
+      </div>
 
       <CommandPalette
         open={commandOpen}
@@ -638,6 +492,6 @@ function AppContent() {
       />
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
-    </SidebarProvider>
+    </div>
   );
 }

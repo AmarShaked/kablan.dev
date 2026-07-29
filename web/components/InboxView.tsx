@@ -1,7 +1,6 @@
 import { useInbox } from "../queries.ts";
 import { AgentDot } from "./AgentDot.tsx";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { AgentStatus, InboxEntry } from "../api.ts";
 
 /** Global attention inbox — every task force across every project that's awaiting input or
@@ -14,7 +13,6 @@ export function InboxView({ onOpen }: { onOpen: (entry: InboxEntry) => void }) {
   return (
     <>
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-        <SidebarTrigger className="shrink-0" />
         <h1 className="text-lg font-semibold">Inbox</h1>
       </div>
 

@@ -17,7 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -241,7 +240,6 @@ export function SettingsPage({
     <>
       <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <SidebarTrigger className="shrink-0" />
           <div>
             <h1 className="text-lg font-semibold">Settings</h1>
             <p className="text-xs text-muted-foreground">

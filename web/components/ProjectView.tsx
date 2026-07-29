@@ -5,13 +5,9 @@ import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot, UnreadPill } from "./AgentDot.tsx";
 import { CreateFeatureDialog } from "./CreateFeatureDialog.tsx";
 import { CreateTaskForceDialog } from "./CreateTaskForceDialog.tsx";
-import { OverviewTab } from "./OverviewTab.tsx";
 import { IconPicker } from "./IconPicker.tsx";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { isTauri } from "../lib/version.ts";
-import type { LogLine, ProjectSummary, RunningServer } from "../api.ts";
+import type { ProjectSummary } from "../api.ts";
 
 /** Features/task-forces browser for the project's main-area home — absorbs the old
  * FactorySidebar's Features section (expand/collapse, unread pills, New feature/task force)
@@ -150,86 +146,36 @@ function FeaturesBrowser({
   );
 }
 
-/** A project's home in the main area: a breadcrumb, then Features (task-force browser) and
- * Branches & worktrees (today's OverviewTab, unchanged) as flat tabs — replaces the old
- * sidebar's project → factory drill-down now that the sidebar is single-level. */
+/** A project's home in the main area: a breadcrumb, then the Features (task-force) browser —
+ * the "Branches & worktrees" tab moved to the `ProjectMenu` rail (`SidebarRecent`'s Worktrees/
+ * Branches groups) now that the sidebar is two-level (global rail + project menu) instead of a
+ * per-project tab. */
 export function ProjectView({
   project,
-  server,
-  logs,
-  onCommandChange,
-  linearWorkspace,
   onOpenTaskForce,
-  tab: tabProp,
-  onTabChange,
   expandFeatureId = null,
 }: {
   project: ProjectSummary;
-  server: RunningServer | null;
-  logs: LogLine[];
-  onCommandChange: () => void;
-  linearWorkspace: string;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
-  /** Optional controlled tab — falls back to internal state when absent so existing
-   * (uncontrolled) callers/tests are unaffected. Lets App drive the tab from sidebar/palette
-   * navigation (e.g. "open this branch" jumps to the Branches tab). */
-  tab?: "features" | "branches";
-  onTabChange?: (tab: "features" | "branches") => void;
   /** Feature id to force-expand in the Features browser (sidebar/palette "open feature"). */
   expandFeatureId?: string | null;
 }) {
-  // The Features browser needs the desktop app's factory backend (useFactory is isTauri-gated);
-  // in the browser-only reference server there's nothing to show there, so land on Branches &
-  // worktrees instead — matching the pre-redesign default for that mode.
-  const [internalTab, setInternalTab] = useState<"features" | "branches">(
-    isTauri ? "features" : "branches",
-  );
-  const tab = tabProp ?? internalTab;
-  const setTab = (next: "features" | "branches") => {
-    if (onTabChange) onTabChange(next);
-    else setInternalTab(next);
-  };
-
   return (
     <>
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-        <SidebarTrigger className="shrink-0" />
         <IconPicker project={project.name} />
         <nav aria-label="Breadcrumb" className="min-w-0">
           <h1 className="truncate text-lg font-semibold">{project.name}</h1>
           <div className="truncate font-mono text-xs text-muted-foreground">{project.path}</div>
         </nav>
       </div>
-
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as "features" | "branches")}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        <div className="border-b border-border px-6">
-          <TabsList variant="line" className="h-10">
-            <TabsTrigger value="features">Features</TabsTrigger>
-            <TabsTrigger value="branches">Branches &amp; worktrees</TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="features" className="mt-0 min-h-0 flex-1 overflow-y-auto custom-scroll">
-          <FeaturesBrowser
-            project={project.name}
-            onOpenTaskForce={onOpenTaskForce}
-            expandFeatureId={expandFeatureId}
-          />
-        </TabsContent>
-        <TabsContent value="branches" className="mt-0 min-h-0 flex-1 overflow-hidden">
-          <OverviewTab
-            key={project.name}
-            project={project}
-            server={server}
-            logs={logs}
-            onCommandChange={onCommandChange}
-            linearWorkspace={linearWorkspace}
-          />
-        </TabsContent>
-      </Tabs>
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scroll">
+        <FeaturesBrowser
+          project={project.name}
+          onOpenTaskForce={onOpenTaskForce}
+          expandFeatureId={expandFeatureId}
+        />
+      </div>
     </>
   );
 }

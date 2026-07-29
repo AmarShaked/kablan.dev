@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import { SidebarProvider } from "./ui/sidebar.tsx";
 import { InboxView } from "./InboxView.tsx";
 import type { InboxEntry } from "../api.ts";
 
@@ -32,11 +31,7 @@ vi.mock("../queries.ts", () => ({
 }));
 
 function renderView(onOpen = vi.fn()) {
-  render(
-    <SidebarProvider>
-      <InboxView onOpen={onOpen} />
-    </SidebarProvider>,
-  );
+  render(<InboxView onOpen={onOpen} />);
   return onOpen;
 }
 

@@ -3,14 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentStreamProvider } from "../hooks/useAgentStream.tsx";
-import { SidebarProvider } from "./ui/sidebar.tsx";
 import { ProjectView } from "./ProjectView.tsx";
 import type { Feature, ProjectSummary } from "../api.ts";
 
 vi.mock("../api.ts");
 
-// ProjectView defaults to the Branches tab outside Tauri (no factory backend to show there);
-// force isTauri so these tests can exercise the Features-tab-first default like the desktop app.
+// ProjectView's Features browser needs the desktop app's factory backend (useFactory is
+// isTauri-gated); force isTauri so these tests exercise it like the desktop app does.
 vi.mock("../lib/version.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/version.ts")>();
   return { ...actual, isTauri: true };
@@ -30,11 +29,6 @@ const features: Feature[] = [
 
 vi.mock("../queries.ts", () => ({
   useFactory: () => ({ data: { features, orphaned: [] }, isPending: false }),
-  useBranches: () => ({ data: [], isPending: false }),
-  useWorktrees: () => ({ data: [], isPending: false }),
-  useGitlabOverview: () => ({ data: undefined, isPending: false }),
-  useCommits: () => ({ data: [], isPending: false }),
-  qk: { projects: ["projects"], branches: (n: string) => ["branches", n], worktrees: (n: string) => ["worktrees", n] },
 }));
 
 const project: ProjectSummary = {
@@ -51,21 +45,15 @@ const project: ProjectSummary = {
 function renderView(overrides: Partial<Parameters<typeof ProjectView>[0]> = {}) {
   const props = {
     project,
-    server: null,
-    logs: [],
-    onCommandChange: vi.fn(),
-    linearWorkspace: "",
     onOpenTaskForce: vi.fn(),
     ...overrides,
   };
   const qc = new QueryClient();
   render(
     <QueryClientProvider client={qc}>
-      <SidebarProvider>
-        <AgentStreamProvider>
-          <ProjectView {...props} />
-        </AgentStreamProvider>
-      </SidebarProvider>
+      <AgentStreamProvider>
+        <ProjectView {...props} />
+      </AgentStreamProvider>
     </QueryClientProvider>,
   );
   return props;
@@ -77,7 +65,7 @@ describe("ProjectView", () => {
     expect(screen.getByText("proj")).toBeInTheDocument();
   });
 
-  it("shows both feature names on the Features tab by default", () => {
+  it("shows both feature names", () => {
     renderView();
     expect(screen.getByText("Feature One")).toBeInTheDocument();
     expect(screen.getByText("Feature Two")).toBeInTheDocument();
@@ -98,11 +86,9 @@ describe("ProjectView", () => {
     expect(props.onOpenTaskForce).toHaveBeenCalledWith("f1", "t1");
   });
 
-  it("switching to the Branches tab renders the overview content", async () => {
-    renderView();
-    await userEvent.click(screen.getByRole("tab", { name: /branches/i }));
-    // OverviewTab renders a "Search…" input as part of its filter bar.
-    expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+  it("force-expands the feature named by expandFeatureId", () => {
+    renderView({ expandFeatureId: "f1" });
+    expect(screen.getByText("TF One")).toBeInTheDocument();
   });
 
   it("opens the create-feature dialog when New feature is clicked", async () => {
