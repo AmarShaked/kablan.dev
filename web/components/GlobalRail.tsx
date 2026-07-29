@@ -33,8 +33,8 @@ function RailButton({
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex w-12 shrink-0 flex-col items-center gap-1 rounded-md py-2 text-[10px] font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-neutral-50",
-        active && "bg-white/10 text-neutral-50",
+        "relative flex w-12 shrink-0 flex-col items-center gap-1 rounded-md py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        active && "bg-sidebar-accent text-sidebar-foreground",
       )}
     >
       <Icon className="size-[18px]" />
@@ -65,7 +65,7 @@ export function GlobalRail({
   onToggleTheme,
 }: GlobalRailProps) {
   return (
-    <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 bg-neutral-950 py-3">
+    <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border bg-sidebar py-3">
       <div
         aria-label="Kablan.dev"
         className="mb-2 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground"
@@ -79,7 +79,7 @@ export function GlobalRail({
 
       <div className="flex-1" />
 
-      <div className="flex w-full flex-col items-center gap-2 border-t border-white/10 pt-2">
+      <div className="flex w-full flex-col items-center gap-2 border-t border-sidebar-border pt-2">
         <RailButton
           icon={theme === "dark" ? Sun : Moon}
           label="Theme"
@@ -87,7 +87,7 @@ export function GlobalRail({
         />
         <div
           aria-label="User"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-neutral-300"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-muted-foreground"
         >
           <User className="size-4" />
         </div>
