@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, RefreshCw, Boxes, FolderTree, GitBranch, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentDot, UnreadPill } from "./AgentDot.tsx";
-import { filterEntities, type ProjectEntity } from "../lib/projectEntities.ts";
+import { type ProjectEntity } from "../lib/projectEntities.ts";
 
 const MAX_ROWS = 10;
 const SKELETON_ROWS = 4;
@@ -135,13 +134,12 @@ export function SidebarRecent({
   worktreesLoading = false,
   branchesLoading = false,
 }: SidebarRecentProps) {
-  const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fetching, setFetching] = useState(false);
 
-  const filteredFeatures = filterEntities(features, q);
-  const filteredWorktrees = filterEntities(worktrees, q);
-  const filteredBranches = filterEntities(branches, q);
+  const filteredFeatures = features;
+  const filteredWorktrees = worktrees;
+  const filteredBranches = branches;
 
   const taskForcesByFeature = useMemo(() => {
     const m = new Map<string, ProjectEntity[]>();
@@ -174,14 +172,7 @@ export function SidebarRecent({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1 px-2 pt-1">
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Find a feature, worktree, branch…"
-        aria-label="Find a feature, worktree, or branch"
-        className="h-8 text-sm"
-      />
+    <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scroll">
         <GroupLabel icon={Boxes} color="text-primary" count={features.length}>Features</GroupLabel>
         {featuresLoading && features.length === 0 ? (

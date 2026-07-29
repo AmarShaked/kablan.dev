@@ -66,19 +66,6 @@ describe("SidebarRecent", () => {
     expect(screen.getByText("main")).toBeInTheDocument();
   });
 
-  it("filters all three groups by the filter input", async () => {
-    renderComponent({
-      features: [feature({ label: "Login flow" }), feature({ id: "f2", featureId: "f2", label: "Zzz other" })],
-    });
-    expect(screen.getByText("Login flow")).toBeInTheDocument();
-    expect(screen.getByText("Zzz other")).toBeInTheDocument();
-
-    await userEvent.type(screen.getByPlaceholderText(/find a feature/i), "login");
-
-    expect(screen.getByText("Login flow")).toBeInTheDocument();
-    expect(screen.queryByText("Zzz other")).not.toBeInTheDocument();
-  });
-
   it("clicking a feature row calls onOpenFeature with the feature id", async () => {
     const props = renderComponent();
     await userEvent.click(screen.getByText("Feature One"));
