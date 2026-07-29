@@ -401,12 +401,14 @@ describe("SidebarRecent", () => {
       const row = screen.getByText("main");
       expect(() => fireEvent.dragStart(row, { dataTransfer: transfer })).not.toThrow();
 
-      expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();
-
-      fireEvent(document, new MouseEvent("dragover", { bubbles: true, clientX: 42, clientY: 24 }));
-
+      // The ghost mounts on dragStart (positioned off-screen until the first cursor move, so it's
+      // effectively invisible) and shows what's being dragged; a move repositions it via a ref
+      // (requestAnimationFrame, no re-render) — it must not throw.
       const chip = screen.getByTestId("drag-ghost");
       expect(within(chip).getByText("main")).toBeInTheDocument();
+      expect(() =>
+        fireEvent(document, new MouseEvent("dragover", { bubbles: true, clientX: 42, clientY: 24 })),
+      ).not.toThrow();
 
       fireEvent.dragEnd(row, { dataTransfer: transfer });
       expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();

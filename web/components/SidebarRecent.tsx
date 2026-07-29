@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, RefreshCw, Boxes, Folder, GitBranch, MoreHorizontal, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -356,26 +356,35 @@ export function SidebarRecent({
   const [fetching, setFetching] = useState(false);
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
-
-  // Floating drag-ghost position: tracked via a document-level "dragover" listener (rather than
-  // each row's own onDragOver) so the chip follows the cursor everywhere, including over gaps
-  // between rows/groups that have no drag handler of their own. Only subscribed while a drag is
-  // actually in progress.
+  // Floating drag-ghost: positioned via a ref + requestAnimationFrame (NOT React state) so
+  // following the cursor never re-renders the sidebar. A document-level "dragover" listener
+  // tracks the pointer everywhere (including gaps between rows); writes are coalesced to one per
+  // animation frame and applied straight to the element's transform. (Updating state on every
+  // dragover re-rendered every feature/branch row ~60×/s and made dragging stutter.)
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const ghostPos = useRef({ x: 0, y: 0 });
+  const ghostRaf = useRef<number | null>(null);
   useEffect(() => {
-    if (!dragging) {
-      setDragPos(null);
-      return;
-    }
+    if (!dragging) return;
     const onDocDragOver = (e: DragEvent) => {
-      // Some of this file's own tests fire a bare "dragover" Event (jsdom has no DragEvent
-      // constructor, and @testing-library/dom's fireEvent.dragOver falls back to a plain Event
-      // with no clientX/clientY) — ignore those rather than posting the ghost chip at NaN,NaN.
+      // jsdom's fireEvent.dragOver falls back to a bare Event with no clientX/Y — ignore those.
       if (typeof e.clientX !== "number" || typeof e.clientY !== "number") return;
-      setDragPos({ x: e.clientX, y: e.clientY });
+      ghostPos.current = { x: e.clientX, y: e.clientY };
+      if (ghostRaf.current != null) return;
+      ghostRaf.current = requestAnimationFrame(() => {
+        ghostRaf.current = null;
+        const el = ghostRef.current;
+        if (el) el.style.transform = `translate3d(${ghostPos.current.x + 12}px, ${ghostPos.current.y + 8}px, 0)`;
+      });
     };
     document.addEventListener("dragover", onDocDragOver);
-    return () => document.removeEventListener("dragover", onDocDragOver);
+    return () => {
+      document.removeEventListener("dragover", onDocDragOver);
+      if (ghostRaf.current != null) {
+        cancelAnimationFrame(ghostRaf.current);
+        ghostRaf.current = null;
+      }
+    };
   }, [dragging]);
 
   const features = featureGroups.map((g) => g.feature);
@@ -718,11 +727,12 @@ export function SidebarRecent({
           )}
         </div>
       </div>
-      {dragging && dragPos && (
+      {dragging && (
         <div
+          ref={ghostRef}
           data-testid="drag-ghost"
-          className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
-          style={{ left: dragPos.x + 12, top: dragPos.y + 8 }}
+          className="pointer-events-none fixed left-0 top-0 z-50 flex items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+          style={{ transform: "translate3d(-9999px, -9999px, 0)" }}
         >
           {dragging.kind === "branch" ? (
             <>
