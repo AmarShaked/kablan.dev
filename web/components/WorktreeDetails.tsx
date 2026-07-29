@@ -212,7 +212,7 @@ export function WorktreeDetails({
   // "running server" leg, since a running server implies a cwd here already).
   const canEnv = hasWorktree || entry.current;
   // A synthetic ProjectSummary for EnvTab, which only reads `.name`/`.path` off it — Cockpit
-  // only carries a project *name* (like TaskForceCockpit today), not a full ProjectSummary.
+  // only carries a project *name* (like Cockpit itself), not a full ProjectSummary.
   const envProject: ProjectSummary = {
     name: project,
     path: entry.cwd ?? "",

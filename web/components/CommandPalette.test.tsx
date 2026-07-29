@@ -2,27 +2,31 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { CommandPalette } from "./CommandPalette.tsx";
-import type { ProjectEntity } from "../lib/projectEntities.ts";
+import type { BranchEntity } from "../lib/projectEntities.ts";
 
-const features: ProjectEntity[] = [
-  { kind: "feature", id: "f1", label: "Billing redesign", ts: 300, featureId: "f1" },
-  { kind: "feature", id: "f2", label: "Onboarding flow", ts: 200, featureId: "f2" },
-];
-const taskForces: ProjectEntity[] = [
-  { kind: "taskForce", id: "t1", label: "Login TF", branch: "feat/login", ts: 150, featureId: "f2", taskForceId: "t1" },
-];
-const branches: ProjectEntity[] = [
-  { kind: "branch", id: "main", label: "main", branch: "main", ts: 100 },
-];
-const worktrees: ProjectEntity[] = [
-  { kind: "worktree", id: "/wt/one", label: "one", branch: "feat/one", ts: 90, worktreePath: "/wt/one" },
+function branchEntity(overrides: Partial<BranchEntity> = {}): BranchEntity {
+  return {
+    name: "main",
+    hasWorktree: false,
+    serverRunning: false,
+    isCurrent: false,
+    dirty: false,
+    ts: 100,
+    ...overrides,
+  };
+}
+
+const branches: BranchEntity[] = [
+  branchEntity({ name: "main", ts: 300 }),
+  branchEntity({ name: "feat/login", ts: 200, agentStatus: "awaitingInput" }),
+  branchEntity({ name: "feat/one", ts: 100 }),
 ];
 
 function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> = {}) {
   const props = {
     open: true,
     onOpenChange: vi.fn(),
-    entities: { features, taskForces, branches, worktrees },
+    branches,
     onSelect: vi.fn(),
     ...overrides,
   };
@@ -31,21 +35,12 @@ function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> 
 }
 
 describe("CommandPalette", () => {
-  it("shows all groups with all entities when the query is empty", () => {
+  it("shows all branches when the query is empty", () => {
     renderPalette();
-    expect(screen.getByText("Billing redesign")).toBeInTheDocument();
-    expect(screen.getByText("Onboarding flow")).toBeInTheDocument();
-    expect(screen.getByText("Login TF")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
-    expect(screen.getByText("one")).toBeInTheDocument();
-  });
-
-  it("renders grouped headers by kind", () => {
-    renderPalette();
-    expect(screen.getByText("Features")).toBeInTheDocument();
-    expect(screen.getByText("Task Forces")).toBeInTheDocument();
+    expect(screen.getByText("feat/login")).toBeInTheDocument();
+    expect(screen.getByText("feat/one")).toBeInTheDocument();
     expect(screen.getByText("Branches")).toBeInTheDocument();
-    expect(screen.getByText("Worktrees")).toBeInTheDocument();
   });
 
   it("autofocuses the search input on open", async () => {
@@ -53,13 +48,13 @@ describe("CommandPalette", () => {
     await waitFor(() => expect(screen.getByRole("searchbox")).toHaveFocus());
   });
 
-  it("typing filters results across all groups", async () => {
+  it("typing filters results by branch name", async () => {
     renderPalette();
     await userEvent.type(screen.getByRole("searchbox"), "login");
 
-    expect(screen.getByText("Login TF")).toBeInTheDocument();
-    expect(screen.queryByText("Billing redesign")).not.toBeInTheDocument();
+    expect(screen.getByText("feat/login")).toBeInTheDocument();
     expect(screen.queryByText("main")).not.toBeInTheDocument();
+    expect(screen.queryByText("feat/one")).not.toBeInTheDocument();
   });
 
   it("ArrowDown then Enter selects the second visible result", async () => {
@@ -68,22 +63,20 @@ describe("CommandPalette", () => {
     input.focus();
     await userEvent.keyboard("{ArrowDown}{Enter}");
 
-    // Flattened order follows group order: features, taskForces, branches, worktrees.
-    // First item is Billing redesign (f1); ArrowDown moves to Onboarding flow (f2).
-    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "f2" }));
+    expect(props.onSelect).toHaveBeenCalledWith("feat/login");
   });
 
   it("Enter with no navigation selects the first visible result", async () => {
     const props = renderPalette();
     screen.getByRole("searchbox").focus();
     await userEvent.keyboard("{Enter}");
-    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "f1" }));
+    expect(props.onSelect).toHaveBeenCalledWith("main");
   });
 
-  it("clicking a result calls onSelect with that entity", async () => {
+  it("clicking a result calls onSelect with that branch's name", async () => {
     const props = renderPalette();
-    await userEvent.click(screen.getByText("main"));
-    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "main" }));
+    await userEvent.click(screen.getByText("feat/one"));
+    expect(props.onSelect).toHaveBeenCalledWith("feat/one");
   });
 
   it("Escape closes the palette", async () => {
@@ -96,5 +89,11 @@ describe("CommandPalette", () => {
   it("shows nothing (no dialog content) when closed", () => {
     renderPalette({ open: false });
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
+  it("shows 'No results.' when the query matches nothing", async () => {
+    renderPalette();
+    await userEvent.type(screen.getByRole("searchbox"), "nonexistent");
+    expect(screen.getByText("No results.")).toBeInTheDocument();
   });
 });

@@ -44,9 +44,9 @@ export const sendDesktopNotification: SendNotification = ({ title, body }) => {
  * `shouldNotify` decides based on `notifications.enabled`/`.events` and
  * whether the status actually changed (no repeats).
  *
- * `nameFor` resolves a `${project}::${taskForceId}` key to a display name
- * (e.g. from the inbox/factory data already loaded elsewhere); the key itself
- * is used as a fallback when no name is available.
+ * `nameFor` resolves a branch's `agentKey` (`${project}::branch:${branch}`, see
+ * `../lib/agentKey.ts`) to a display name (e.g. from the inbox/factory data already loaded
+ * elsewhere); the key itself is used as a fallback when no name is available.
  *
  * Safe to call unconditionally (including outside Tauri) — the real send is
  * gated on `isTauri` inside `sendDesktopNotification`; only the injectable

@@ -154,11 +154,10 @@ function ThinkingRow() {
 }
 
 /**
- * The cockpit's chat pane — extracted from `TaskForceCockpit` so it can drive either a task
- * force's agent or a plain worktree's agent. The parent owns the actual API calls (so this
- * component doesn't need to know which `api.factory.*` family to call) and supplies them as
- * `onStart`/`onMessage`/`onStop`; it's keyed into `useAgentStream` via the caller-supplied
- * `agentKey` (`taskForceKey`/`worktreeKey` from `../lib/agentKey.ts`).
+ * The cockpit's chat pane — drives a single branch's agent. The parent (`Cockpit`) owns the
+ * actual API calls (so this component doesn't need to know about `api.factory.*` at all) and
+ * supplies them as `onStart`/`onMessage`/`onStop`; it's keyed into `useAgentStream` via the
+ * caller-supplied `agentKey` (`branchKey` from `../lib/agentKey.ts`).
  *
  * `onBackfill`, if supplied, is called once (when nothing has streamed in live yet) to seed the
  * transcript from the backend's persisted history — mirrors the original cockpit's behavior of

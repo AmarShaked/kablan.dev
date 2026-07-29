@@ -3,9 +3,8 @@ import { AgentDot } from "./AgentDot.tsx";
 import { Button } from "@/components/ui/button";
 import type { AgentStatus, InboxEntry } from "../api.ts";
 
-/** Global attention inbox — every task force across every project that's awaiting input or
- * has failed, so the user has one place to see what needs them without hunting through
- * projects/features. Mirrors FeaturePage's task-force row styling. */
+/** Global attention inbox — every branch across every project that's awaiting input or has
+ * failed, so the user has one place to see what needs them without hunting through projects. */
 export function InboxView({ onOpen }: { onOpen: (entry: InboxEntry) => void }) {
   const { data, isPending } = useInbox();
   const entries = data ?? [];
@@ -25,19 +24,20 @@ export function InboxView({ onOpen }: { onOpen: (entry: InboxEntry) => void }) {
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
             {entries.map((entry) => (
               <div
-                key={`${entry.project}::${entry.taskForceId}`}
+                key={`${entry.project}::${entry.branch}`}
                 className="flex items-center gap-3 px-3 py-2.5 text-sm"
               >
                 <AgentDot status={entry.status as AgentStatus} />
                 <span className="truncate">
                   {entry.project} <span className="text-muted-foreground">›</span>{" "}
-                  {entry.featureName} <span className="text-muted-foreground">›</span>{" "}
-                  {entry.taskForceName}
+                  {entry.featureName && (
+                    <>
+                      {entry.featureName} <span className="text-muted-foreground">›</span>{" "}
+                    </>
+                  )}
+                  <span className="font-mono text-xs">{entry.branch}</span>
                 </span>
-                <span className="ml-auto truncate font-mono text-xs text-muted-foreground">
-                  {entry.branch}
-                </span>
-                <Button size="sm" variant="secondary" onClick={() => onOpen(entry)}>
+                <Button size="sm" variant="secondary" className="ml-auto" onClick={() => onOpen(entry)}>
                   Open
                 </Button>
               </div>

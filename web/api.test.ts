@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from "vitest";
-import type { AppConfig, FactorySettings, FactoryOverview, TaskForce, AgentView, AgentStatus, InboxEntry } from "./api.ts";
+import type { AppConfig, FactorySettings, FactoryOverview, Feature, BranchState, AgentView, AgentStatus, InboxEntry } from "./api.ts";
 import { api } from "./api.ts";
 
 describe("AppConfig factory types", () => {
@@ -11,21 +11,33 @@ describe("AppConfig factory types", () => {
 });
 
 describe("factory types", () => {
-  it("factory types", () => {
-    expectTypeOf<FactoryOverview["features"][number]["taskForces"]>().toEqualTypeOf<TaskForce[]>();
+  it("Feature is a folder of branch names", () => {
+    expectTypeOf<Feature["branches"]>().toEqualTypeOf<string[]>();
     expectTypeOf<AgentView["status"]>().toEqualTypeOf<AgentStatus>();
-    expectTypeOf<TaskForce["agentSessionId"]>().toEqualTypeOf<string | undefined>();
+  });
+
+  it("FactoryOverview pairs features with a branch-keyed state map", () => {
+    expectTypeOf<FactoryOverview["features"]>().toEqualTypeOf<Feature[]>();
+    expectTypeOf<FactoryOverview["branchState"]>().toEqualTypeOf<Record<string, BranchState>>();
+    expectTypeOf<BranchState["worktreePath"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<BranchState["agentSessionId"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<BranchState["createdAt"]>().toBeNumber();
+  });
+
+  it("api.factory exposes branch-keyed calls (branch never a path segment)", () => {
+    expectTypeOf<typeof api.factory.agentStart>().parameters.toEqualTypeOf<[string, string]>();
+    expectTypeOf<typeof api.factory.agentMessage>().parameters.toEqualTypeOf<[string, string, string]>();
+    expectTypeOf<typeof api.factory.agentStop>().parameters.toEqualTypeOf<[string, string]>();
+    expectTypeOf<typeof api.factory.getAgent>().parameters.toEqualTypeOf<[string, string]>();
   });
 });
 
 describe("inbox types", () => {
-  it("InboxEntry has correct shape", () => {
+  it("InboxEntry is branch-keyed, with an optional feature", () => {
     expectTypeOf<InboxEntry["project"]>().toBeString();
-    expectTypeOf<InboxEntry["featureId"]>().toBeString();
-    expectTypeOf<InboxEntry["featureName"]>().toBeString();
-    expectTypeOf<InboxEntry["taskForceId"]>().toBeString();
-    expectTypeOf<InboxEntry["taskForceName"]>().toBeString();
     expectTypeOf<InboxEntry["branch"]>().toBeString();
+    expectTypeOf<InboxEntry["featureId"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<InboxEntry["featureName"]>().toEqualTypeOf<string | undefined>();
     expectTypeOf<InboxEntry["status"]>().toBeString();
   });
 

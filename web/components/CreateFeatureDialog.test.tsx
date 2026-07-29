@@ -45,7 +45,7 @@ describe("CreateFeatureDialog", () => {
   });
 
   it("creates the feature, notifies, and closes on success", async () => {
-    const feature: Feature = { id: "f1", name: "My Feature", taskForces: [] };
+    const feature: Feature = { id: "f1", name: "My Feature", branches: [] };
     vi.mocked(api.factory.createFeature).mockResolvedValue(feature);
     const props = renderDialog();
 

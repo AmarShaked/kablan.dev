@@ -1,14 +1,12 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api } from "../api.ts";
 import { ProjectSwitcher } from "./ProjectSwitcher.tsx";
 import { SidebarRecent } from "./SidebarRecent.tsx";
+import { CreateFeatureDialog } from "./CreateFeatureDialog.tsx";
 import type { ProjectSummary, RunningServer } from "../api.ts";
-import type { ProjectEntity } from "../lib/projectEntities.ts";
-
-export interface ProjectMenuEntities {
-  features: ProjectEntity[];
-  taskForces: ProjectEntity[];
-  branches: ProjectEntity[];
-  worktrees: ProjectEntity[];
-}
+import type { BranchEntity, FeatureGroup } from "../lib/projectEntities.ts";
 
 export interface ProjectMenuProps {
   projects: ProjectSummary[];
@@ -16,27 +14,23 @@ export interface ProjectMenuProps {
   onSelectProject: (name: string) => void;
   servers: Record<string, RunningServer>;
   onRescan: () => void;
-  entities: ProjectMenuEntities;
-  unreadFor: (featureId: string) => number;
-  onOpenFeature: (featureId: string) => void;
-  onOpenTaskForce: (featureId: string, taskForceId: string) => void;
+  featureGroups: FeatureGroup[];
+  unfiled: BranchEntity[];
   onOpenBranch: (name: string) => void;
-  onOpenWorktree: (e: ProjectEntity) => void;
   /** Fetches all remotes for the selected project (`git fetch --all --prune`) and invalidates
-   * the branches/worktrees queries — the same action `OverviewTab`'s "Fetch" button used to
-   * trigger, now surfaced here (in the Worktrees group header) since the Branches tab is gone. */
+   * the branches/worktrees queries — surfaced in the Branches group header. */
   onFetch: () => Promise<void> | void;
-  /** Pending state of the underlying Features/Worktrees/Branches queries — threaded down to
+  /** Pending state of the underlying factory/branches queries — threaded down to
    * `SidebarRecent` so it can show skeleton rows instead of a premature "No …" empty state. */
   featuresLoading?: boolean;
-  worktreesLoading?: boolean;
   branchesLoading?: boolean;
 }
 
 /**
- * The project column: `ProjectSwitcher` at top, then `SidebarRecent`'s Features/Worktrees/
- * Branches lists + filter box ("Find a feature, worktree, branch…"). Scrolls internally
- * (`SidebarRecent` owns its own scroll region) so only the switcher header stays fixed.
+ * The project column: `ProjectSwitcher` at top, then `SidebarRecent`'s Feature folders +
+ * Branches list. Also owns filing/unfiling a branch into a feature and the "New feature" dialog
+ * — both are project-scoped factory mutations that only this column's `SidebarRecent` triggers,
+ * so they're kept local here rather than threaded all the way up through `App`.
  */
 export function ProjectMenu({
   projects,
@@ -44,17 +38,38 @@ export function ProjectMenu({
   onSelectProject,
   servers,
   onRescan,
-  entities,
-  unreadFor,
-  onOpenFeature,
-  onOpenTaskForce,
+  featureGroups,
+  unfiled,
   onOpenBranch,
-  onOpenWorktree,
   onFetch,
   featuresLoading,
-  worktreesLoading,
   branchesLoading,
 }: ProjectMenuProps) {
+  const queryClient = useQueryClient();
+  const [newFeatureOpen, setNewFeatureOpen] = useState(false);
+
+  const invalidateFactory = () => queryClient.invalidateQueries({ queryKey: ["factory", selected] });
+
+  const fileBranch = async (featureId: string, branch: string) => {
+    if (!selected) return;
+    try {
+      await api.factory.fileBranch(selected, featureId, branch);
+      await invalidateFactory();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
+  const unfileBranch = async (featureId: string, branch: string) => {
+    if (!selected) return;
+    try {
+      await api.factory.unfileBranch(selected, featureId, branch);
+      await invalidateFactory();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="border-b border-border p-2">
@@ -68,21 +83,26 @@ export function ProjectMenu({
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <SidebarRecent
-          features={entities.features}
-          taskForces={entities.taskForces}
-          worktrees={entities.worktrees}
-          branches={entities.branches}
-          unreadFor={unreadFor}
-          onOpenFeature={onOpenFeature}
-          onOpenTaskForce={onOpenTaskForce}
+          featureGroups={featureGroups}
+          unfiled={unfiled}
           onOpenBranch={onOpenBranch}
-          onOpenWorktree={onOpenWorktree}
+          onFileBranch={fileBranch}
+          onUnfileBranch={unfileBranch}
+          onNewFeature={() => setNewFeatureOpen(true)}
           onFetch={onFetch}
           featuresLoading={featuresLoading}
-          worktreesLoading={worktreesLoading}
           branchesLoading={branchesLoading}
         />
       </div>
+
+      {selected && (
+        <CreateFeatureDialog
+          project={selected}
+          open={newFeatureOpen}
+          onOpenChange={setNewFeatureOpen}
+          onCreated={() => {}}
+        />
+      )}
     </div>
   );
 }

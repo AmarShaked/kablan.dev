@@ -121,39 +121,26 @@ export interface AgentView {
   startedAt: number;
   exitCode: number | null;
 }
-export interface TaskForce {
-  id: string;
-  name: string;
-  branch: string;
-  baseBranch: string;
-  worktreePath: string;
-  linearTicket?: string;
-  createdAt: number;
-  agentSessionId?: string;
-}
 export interface Feature {
   id: string;
   name: string;
-  taskForces: TaskForce[];
+  branches: string[];
+}
+export interface BranchState {
+  worktreePath?: string;
+  agentSessionId?: string;
+  createdAt: number;
 }
 export interface FactoryOverview {
   features: Feature[];
-  orphaned: string[];
-}
-export interface CreateTaskForceArgs {
-  name: string;
-  baseBranch?: string;
-  linearTicket?: string;
-  start?: boolean;
+  branchState: Record<string, BranchState>;
 }
 
 export interface InboxEntry {
   project: string;
-  featureId: string;
-  featureName: string;
-  taskForceId: string;
-  taskForceName: string;
   branch: string;
+  featureId?: string;
+  featureName?: string;
   status: string;
 }
 
@@ -218,13 +205,6 @@ export const api = {
   listProjects: () => req<ProjectSummary[]>("/api/projects"),
   getBranches: (name: string) => req<Branch[]>(`/api/projects/${encodeURIComponent(name)}/branches`),
   getWorktrees: (name: string) => req<Worktree[]>(`/api/projects/${encodeURIComponent(name)}/worktrees`),
-  /** Creates a worktree for an existing branch (`git worktree add`), so a plain branch can
-   * become an agent-drivable cockpit target ("Start a session"). */
-  createWorktree: (name: string, branch: string) =>
-    req<Worktree>(`/api/projects/${encodeURIComponent(name)}/worktrees`, {
-      method: "POST",
-      body: JSON.stringify({ branch }),
-    }),
   getCommits: (name: string, opts: { ref?: string; cwd?: string } = {}) => {
     const p = new URLSearchParams();
     if (opts.ref) p.set("ref", opts.ref);
@@ -307,41 +287,46 @@ export const api = {
   factory: {
     list: (name: string) => req<FactoryOverview>(`/api/projects/${encodeURIComponent(name)}/factory`),
     createFeature: (name: string, featureName: string) =>
-      req<Feature>(`/api/projects/${encodeURIComponent(name)}/factory/features`, { method: "POST", body: JSON.stringify({ name: featureName }) }),
-    createTaskForce: (name: string, featureId: string, args: CreateTaskForceArgs) =>
-      req<TaskForce>(`/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(featureId)}/taskforces`, { method: "POST", body: JSON.stringify(args) }),
-    deleteTaskForce: (name: string, tid: string, removeWorktree = true) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}`, { method: "DELETE", body: JSON.stringify({ removeWorktree }) }),
-    agentStart: (name: string, tid: string) =>
-      req<AgentView>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/start`, { method: "POST" }),
-    agentMessage: (name: string, tid: string, text: string) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/message`, { method: "POST", body: JSON.stringify({ text }) }),
-    agentStop: (name: string, tid: string) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/stop`, { method: "POST" }),
-    getAgent: (name: string, tid: string) =>
-      req<{ agent: AgentView | null; events: unknown[] }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent`),
+      req<Feature>(`/api/projects/${encodeURIComponent(name)}/factory/features`, {
+        method: "POST",
+        body: JSON.stringify({ name: featureName }),
+      }),
+    deleteFeature: (name: string, fid: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(fid)}`, {
+        method: "DELETE",
+      }),
+    fileBranch: (name: string, fid: string, branch: string) =>
+      req<{ ok: boolean }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(fid)}/file`,
+        { method: "POST", body: JSON.stringify({ branch }) },
+      ),
+    unfileBranch: (name: string, fid: string, branch: string) =>
+      req<{ ok: boolean }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(fid)}/unfile`,
+        { method: "POST", body: JSON.stringify({ branch }) },
+      ),
 
-    // Worktree-keyed agent calls — same shapes as the task-force agent calls above, but for a
-    // plain worktree (no task force involved). See docs/superpowers/plans/2026-07-29-worktree-cockpit.md
-    // §"API contract" for the backend routes (built in parallel against this same contract).
-    worktreeAgentStart: (name: string, worktreePath: string) =>
-      req<AgentView>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/start`, {
+    // Branch-keyed agent calls — branch always travels in the body/query (never the path),
+    // since branch names contain `/`. See `branchKey` (`../lib/agentKey.ts`) for the matching
+    // WS/agent-stream key.
+    agentStart: (name: string, branch: string) =>
+      req<AgentView>(`/api/projects/${encodeURIComponent(name)}/factory/agent/start`, {
         method: "POST",
-        body: JSON.stringify({ worktreePath }),
+        body: JSON.stringify({ branch }),
       }),
-    worktreeAgentMessage: (name: string, worktreePath: string, text: string) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/message`, {
+    agentMessage: (name: string, branch: string, text: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/message`, {
         method: "POST",
-        body: JSON.stringify({ worktreePath, text }),
+        body: JSON.stringify({ branch, text }),
       }),
-    worktreeAgentStop: (name: string, worktreePath: string) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/stop`, {
+    agentStop: (name: string, branch: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/stop`, {
         method: "POST",
-        body: JSON.stringify({ worktreePath }),
+        body: JSON.stringify({ branch }),
       }),
-    getWorktreeAgent: (name: string, worktreePath: string) =>
+    getAgent: (name: string, branch: string) =>
       req<{ agent: AgentView | null; events: unknown[] }>(
-        `/api/projects/${encodeURIComponent(name)}/worktree-agent?worktreePath=${encodeURIComponent(worktreePath)}`,
+        `/api/projects/${encodeURIComponent(name)}/factory/agent?branch=${encodeURIComponent(branch)}`,
       ),
   },
 

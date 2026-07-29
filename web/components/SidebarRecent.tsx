@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw, Boxes, FolderTree, GitBranch, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, RefreshCw, Boxes, GitBranch, MoreHorizontal, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AgentDot, UnreadPill } from "./AgentDot.tsx";
-import { type ProjectEntity } from "../lib/projectEntities.ts";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AgentDot } from "./AgentDot.tsx";
+import { type BranchEntity, type FeatureGroup } from "../lib/projectEntities.ts";
 
 const MAX_ROWS = 10;
 const SKELETON_ROWS = 4;
@@ -28,21 +29,9 @@ function relativeLabel(ts: number): string {
   return `${Math.floor(mo / 12)}y`;
 }
 
-function Row({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-    >
-      {children}
-    </button>
-  );
-}
-
 /** Placeholder row shown while a group's query is still pending — same height/padding/gap as
- * the real `Row` (dot + text line + trailing time) so data arriving causes zero layout shift. */
-function SkeletonRow({ group }: { group: "features" | "worktrees" | "branches" }) {
+ * the real row (dot + text line + trailing time) so data arriving causes zero layout shift. */
+function SkeletonRow({ group }: { group: "features" | "branches" }) {
   return (
     <div className="flex w-full items-center gap-2 px-2 py-1.5" data-testid={`skeleton-row-${group}`}>
       <Skeleton className="size-2 shrink-0 rounded-full" />
@@ -52,7 +41,7 @@ function SkeletonRow({ group }: { group: "features" | "worktrees" | "branches" }
   );
 }
 
-function SkeletonGroup({ group }: { group: "features" | "worktrees" | "branches" }) {
+function SkeletonGroup({ group }: { group: "features" | "branches" }) {
   return (
     <>
       {Array.from({ length: SKELETON_ROWS }, (_, i) => (
@@ -62,9 +51,9 @@ function SkeletonGroup({ group }: { group: "features" | "worktrees" | "branches"
   );
 }
 
-/** Group header: a per-group accent icon + colored uppercase label + total count, so the three
- * sections (Features / Worktrees / Branches) read at a glance. Accent colors reuse the app's
- * palette — primary (features), violet (worktrees), sky (branches) — matching the row icons. */
+/** Group header: a per-group accent icon + colored uppercase label + total count, so the two
+ * sections (Features / Branches) read at a glance. Accent colors reuse the app's palette —
+ * primary (features), sky (branches). */
 function GroupLabel({
   icon: Icon,
   color,
@@ -72,7 +61,7 @@ function GroupLabel({
   action,
   children,
 }: {
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
   count?: number;
   action?: React.ReactNode;
@@ -92,65 +81,166 @@ function GroupLabel({
   );
 }
 
-export interface SidebarRecentProps {
-  features: ProjectEntity[];
-  /** Task forces for the project, joined to their feature via `featureId` — grouped here so
-   * expanding a Features row can list its task forces inline. */
-  taskForces: ProjectEntity[];
-  worktrees: ProjectEntity[];
-  branches: ProjectEntity[];
-  unreadFor: (featureId: string) => number;
-  onOpenFeature: (featureId: string) => void;
-  onOpenTaskForce: (featureId: string, taskForceId: string) => void;
+/** File/unfile affordance for one branch row: a "＋" for an unfiled branch (choose a feature to
+ * file it into) or a "···" for a filed one (remove it from its feature). Hidden entirely when
+ * there's nothing useful to offer (no features exist yet, and the branch isn't filed). Built
+ * from Popover rather than the shadcn DropdownMenu primitive, matching `OpenMenu`'s pattern
+ * elsewhere in the cockpit. */
+function FileMenu({
+  entity,
+  features,
+  onFileBranch,
+  onUnfileBranch,
+}: {
+  entity: BranchEntity;
+  features: { id: string; name: string }[];
+  onFileBranch: (featureId: string, branch: string) => void;
+  onUnfileBranch: (featureId: string, branch: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!entity.featureId && features.length === 0) return null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          aria-label={entity.featureId ? `Remove ${entity.name} from its feature` : `File ${entity.name} into a feature`}
+          className={cn(
+            "shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100",
+            open && "opacity-100",
+          )}
+        >
+          {entity.featureId ? <MoreHorizontal className="size-3.5" /> : <Plus className="size-3.5" />}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-48 p-1" onClick={(e) => e.stopPropagation()}>
+        {entity.featureId ? (
+          <button
+            type="button"
+            onClick={() => {
+              onUnfileBranch(entity.featureId!, entity.name);
+              setOpen(false);
+            }}
+            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+          >
+            Remove from feature
+          </button>
+        ) : (
+          <>
+            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              File into
+            </div>
+            {features.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  onFileBranch(f.id, entity.name);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+              >
+                {f.name}
+              </button>
+            ))}
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** One branch row: agent dot + a small green dot when its dev server is running + the branch
+ * name (mono, bold when it's the repo's current branch) + relative time + the file/unfile
+ * affordance. */
+function BranchRow({
+  entity,
+  features,
+  onOpenBranch,
+  onFileBranch,
+  onUnfileBranch,
+}: {
+  entity: BranchEntity;
+  features: { id: string; name: string }[];
   onOpenBranch: (name: string) => void;
-  onOpenWorktree: (e: ProjectEntity) => void;
+  onFileBranch: (featureId: string, branch: string) => void;
+  onUnfileBranch: (featureId: string, branch: string) => void;
+}) {
+  const time = relativeLabel(entity.ts);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenBranch(entity.name)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenBranch(entity.name);
+        }
+      }}
+      className="group flex w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+    >
+      <AgentDot status={entity.agentStatus} />
+      {entity.serverRunning && (
+        <span
+          className="size-1.5 shrink-0 rounded-full bg-emerald-500"
+          title="Dev server running"
+          aria-label="Dev server running"
+        />
+      )}
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate font-mono text-xs",
+          entity.isCurrent && "font-semibold text-foreground",
+        )}
+      >
+        {entity.name}
+      </span>
+      {time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}
+      <FileMenu entity={entity} features={features} onFileBranch={onFileBranch} onUnfileBranch={onUnfileBranch} />
+    </div>
+  );
+}
+
+export interface SidebarRecentProps {
+  featureGroups: FeatureGroup[];
+  unfiled: BranchEntity[];
+  onOpenBranch: (name: string) => void;
+  onFileBranch: (featureId: string, branch: string) => void;
+  onUnfileBranch: (featureId: string, branch: string) => void;
+  onNewFeature: () => void;
   /** Fetches all remotes (git fetch --all --prune) for the active project — surfaced as a
-   * small action in the Worktrees group header (where `OverviewTab`'s Fetch button used to
-   * live). Omitted entirely when there's nothing to fetch for (no project selected). */
+   * small action in the Branches group header. Omitted entirely when there's nothing to fetch
+   * for (no project selected). */
   onFetch?: () => Promise<void> | void;
   /** True while the respective query is still in flight. Only shows skeleton rows when there's
    * no data yet — a background refetch (stale-while-revalidate) keeps showing the real rows. */
   featuresLoading?: boolean;
-  worktreesLoading?: boolean;
   branchesLoading?: boolean;
 }
 
-/** Sidebar "recent 10" lists for the active project — Features / Worktrees / Branches, each
- * already sorted by last activity (App builds the entities via buildProjectEntities). Purely
- * presentational: takes entities + callbacks, owns only the local filter-box text and each
- * feature row's expand/collapse state. */
+/** Sidebar "recent" lists for the active project — Feature folders (each expands to its member
+ * branches) plus a flat Branches group for unfiled ones. Every branch is exactly ONE row,
+ * wherever it appears: `AgentDot` + a server dot + name + relative time + a file/unfile
+ * affordance. Purely presentational: takes the grouped entities + callbacks, owns only the
+ * local expand/collapse state per feature. */
 export function SidebarRecent({
-  features,
-  taskForces,
-  worktrees,
-  branches,
-  unreadFor,
-  onOpenFeature,
-  onOpenTaskForce,
+  featureGroups,
+  unfiled,
   onOpenBranch,
-  onOpenWorktree,
+  onFileBranch,
+  onUnfileBranch,
+  onNewFeature,
   onFetch,
   featuresLoading = false,
-  worktreesLoading = false,
   branchesLoading = false,
 }: SidebarRecentProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fetching, setFetching] = useState(false);
 
-  const filteredFeatures = features;
-  const filteredWorktrees = worktrees;
-  const filteredBranches = branches;
-
-  const taskForcesByFeature = useMemo(() => {
-    const m = new Map<string, ProjectEntity[]>();
-    for (const tf of taskForces) {
-      if (!tf.featureId) continue;
-      const list = m.get(tf.featureId);
-      if (list) list.push(tf);
-      else m.set(tf.featureId, [tf]);
-    }
-    return m;
-  }, [taskForces]);
+  const features = featureGroups.map((g) => g.feature);
 
   const toggleExpanded = (featureId: string) => {
     setExpanded((prev) => {
@@ -174,24 +264,37 @@ export function SidebarRecent({
   return (
     <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scroll">
-        <GroupLabel icon={Boxes} color="text-primary" count={features.length}>Features</GroupLabel>
-        {featuresLoading && features.length === 0 ? (
+        <GroupLabel
+          icon={Boxes}
+          color="text-primary"
+          count={featureGroups.length}
+          action={
+            <button
+              type="button"
+              onClick={onNewFeature}
+              aria-label="New feature"
+              title="New feature"
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          }
+        >
+          Features
+        </GroupLabel>
+        {featuresLoading && featureGroups.length === 0 ? (
           <SkeletonGroup group="features" />
-        ) : filteredFeatures.length === 0 ? (
+        ) : featureGroups.length === 0 ? (
           <p className="px-2 py-1 text-xs text-muted-foreground">No features.</p>
         ) : (
-          filteredFeatures.slice(0, MAX_ROWS).map((entity) => {
-            const featureId = entity.featureId ?? entity.id;
-            const isExpanded = expanded.has(featureId);
-            const forces = taskForcesByFeature.get(featureId) ?? [];
+          featureGroups.slice(0, MAX_ROWS).map(({ feature, branches }) => {
+            const isExpanded = expanded.has(feature.id);
             return (
-              <div key={entity.id}>
+              <div key={feature.id}>
                 <button
                   type="button"
-                  onClick={() => {
-                    toggleExpanded(featureId);
-                    onOpenFeature(featureId);
-                  }}
+                  onClick={() => toggleExpanded(feature.id)}
+                  aria-label={isExpanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
                   className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                 >
                   {isExpanded ? (
@@ -199,28 +302,25 @@ export function SidebarRecent({
                   ) : (
                     <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <AgentDot status={entity.status} />
-                  <span className="min-w-0 flex-1 truncate">{entity.label}</span>
-                  <UnreadPill count={unreadFor(featureId)} />
+                  <span className="min-w-0 flex-1 truncate">{feature.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {branches.length} branch{branches.length === 1 ? "" : "es"}
+                  </span>
                 </button>
                 {isExpanded && (
                   <div className="ml-4 flex flex-col border-l border-border pl-2">
-                    {forces.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-muted-foreground">No task forces.</p>
+                    {branches.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-muted-foreground">No branches yet.</p>
                     ) : (
-                      forces.map((tf) => (
-                        <Row
-                          key={tf.id}
-                          onClick={() => onOpenTaskForce(tf.featureId!, tf.taskForceId!)}
-                        >
-                          <AgentDot status={tf.status} />
-                          <span className="min-w-0 flex-1 truncate">{tf.label}</span>
-                          {tf.branch && (
-                            <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-xs text-muted-foreground">
-                              {tf.branch}
-                            </span>
-                          )}
-                        </Row>
+                      branches.map((entity) => (
+                        <BranchRow
+                          key={entity.name}
+                          entity={entity}
+                          features={features}
+                          onOpenBranch={onOpenBranch}
+                          onFileBranch={onFileBranch}
+                          onUnfileBranch={onUnfileBranch}
+                        />
                       ))
                     )}
                   </div>
@@ -231,9 +331,9 @@ export function SidebarRecent({
         )}
 
         <GroupLabel
-          icon={FolderTree}
-          color="text-violet-400"
-          count={worktrees.length}
+          icon={GitBranch}
+          color="text-sky-400"
+          count={unfiled.length}
           action={
             onFetch && (
               <button
@@ -249,65 +349,25 @@ export function SidebarRecent({
             )
           }
         >
-          Worktrees
+          Branches
         </GroupLabel>
-        {worktreesLoading && worktrees.length === 0 ? (
-          <SkeletonGroup group="worktrees" />
-        ) : filteredWorktrees.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No worktrees.</p>
-        ) : (
-          filteredWorktrees.slice(0, MAX_ROWS).map((entity) => {
-            const time = relativeLabel(entity.ts);
-            const routesToTaskForce = !!(entity.taskForceId && entity.featureId);
-            return (
-              <Row
-                key={entity.id}
-                onClick={() =>
-                  routesToTaskForce
-                    ? onOpenTaskForce(entity.featureId!, entity.taskForceId!)
-                    : onOpenWorktree(entity)
-                }
-              >
-                {routesToTaskForce ? (
-                  <AgentDot status={entity.status} />
-                ) : (
-                  <FolderTree className="size-3.5 shrink-0 text-violet-400/80" />
-                )}
-                <span className="min-w-0 flex-1 truncate">{entity.label}</span>
-                {entity.branch && (
-                  <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-xs text-muted-foreground">
-                    {entity.branch}
-                  </span>
-                )}
-                {time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}
-              </Row>
-            );
-          })
-        )}
-
-        <GroupLabel icon={GitBranch} color="text-sky-400" count={branches.length}>Branches</GroupLabel>
-        {branchesLoading && branches.length === 0 ? (
+        {branchesLoading && unfiled.length === 0 ? (
           <SkeletonGroup group="branches" />
-        ) : filteredBranches.length === 0 ? (
+        ) : unfiled.length === 0 ? (
           <p className="px-2 py-1 text-xs text-muted-foreground">No branches.</p>
         ) : (
-          filteredBranches.slice(0, MAX_ROWS).map((entity) => {
-            const time = relativeLabel(entity.ts);
-            return (
-              <Row key={entity.id} onClick={() => onOpenBranch(entity.label)}>
-                <GitBranch className="size-3.5 shrink-0 text-sky-400/80" />
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate font-mono text-xs",
-                    entity.isCurrent && "font-semibold text-foreground",
-                  )}
-                >
-                  {entity.label}
-                </span>
-                {time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}
-              </Row>
-            );
-          })
+          unfiled
+            .slice(0, MAX_ROWS)
+            .map((entity) => (
+              <BranchRow
+                key={entity.name}
+                entity={entity}
+                features={features}
+                onOpenBranch={onOpenBranch}
+                onFileBranch={onFileBranch}
+                onUnfileBranch={onUnfileBranch}
+              />
+            ))
         )}
       </div>
     </div>

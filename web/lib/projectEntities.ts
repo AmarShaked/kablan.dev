@@ -1,146 +1,108 @@
-import type { Feature, Branch, Worktree, AgentStatus } from "../api.ts";
+import type { Branch, Worktree, Feature, FactoryOverview, AgentStatus } from "../api.ts";
 
-export type EntityKind = "feature" | "taskForce" | "branch" | "worktree";
-
-export interface ProjectEntity {
-  kind: EntityKind;
-  id: string;
-  label: string;
-  sublabel?: string;
-  branch?: string;
-  ts: number;
+/** One row in the branch-centric sidebar/palette/cockpit-nav — the single unit the whole app
+ * now navigates around (a git branch, joined with its working copy, feature filing, and live
+ * agent/server state). Replaces the old feature/taskForce/worktree/branch `ProjectEntity` union. */
+export interface BranchEntity {
+  name: string;
+  /** The feature this branch is filed into, if any — a branch belongs to at most one feature
+   * (enforced server-side by `file_branch`). */
   featureId?: string;
-  taskForceId?: string;
   worktreePath?: string;
-  isCurrent?: boolean;
-  dirty?: boolean;
-  status?: AgentStatus;
+  /** True once a working copy exists for this branch — either a live git worktree or a
+   * persisted (but not-yet-reconciled) `branchState.worktreePath`. Gates the cockpit's chat. */
+  hasWorktree: boolean;
+  agentStatus?: AgentStatus;
+  serverRunning: boolean;
+  isCurrent: boolean;
+  dirty: boolean;
+  ts: number;
 }
 
-export interface BuildProjectEntitiesArgs {
-  features: Feature[];
+export interface FeatureGroup {
+  feature: Feature;
+  branches: BranchEntity[];
+}
+
+export interface BuildBranchEntitiesArgs {
   branches: Branch[];
   worktrees: Worktree[];
-  workingTaskForceIds: Set<string>;
+  factory: FactoryOverview;
+  statusFor: (branch: string) => AgentStatus | undefined;
+  isServerRunning: (cwd?: string) => boolean;
 }
 
-export interface ProjectEntities {
-  features: ProjectEntity[];
-  taskForces: ProjectEntity[];
-  branches: ProjectEntity[];
-  worktrees: ProjectEntity[];
+export interface BranchEntities {
+  featureGroups: FeatureGroup[];
+  unfiled: BranchEntity[];
+  all: BranchEntity[];
 }
 
-/** Basename of a filesystem path, tolerant of a trailing slash. */
-function basename(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  const idx = trimmed.lastIndexOf("/");
-  return idx === -1 ? trimmed : trimmed.slice(idx + 1);
-}
-
-/** Sorts by ts desc, then label asc as a stable tie-break. */
-function sortEntities(list: ProjectEntity[]): ProjectEntity[] {
+/** Sorts by ts desc, then name asc as a stable tie-break. */
+function sortByTsDesc(list: BranchEntity[]): BranchEntity[] {
   return [...list].sort((a, b) => {
     if (b.ts !== a.ts) return b.ts - a.ts;
-    return a.label.localeCompare(b.label);
+    return a.name.localeCompare(b.name);
   });
 }
 
-export function buildProjectEntities({
-  features,
+/**
+ * Builds the app's single list of branch entities from git truth (`branches`/`worktrees`),
+ * the factory's feature filing + persisted branch state, and live agent/server status —
+ * then groups them into feature folders (in `factory.features` order) plus a flat "unfiled"
+ * list, both sorted by last activity (a working agent floats to the very top).
+ */
+export function buildBranchEntities({
   branches,
   worktrees,
-  workingTaskForceIds,
-}: BuildProjectEntitiesArgs): ProjectEntities {
-  const worktreeByPath = new Map(worktrees.map((w) => [w.path, w]));
-
-  // Find, for a given worktree path, the task force (and its feature) that claims it — used
-  // both to compute taskForce ts (needs the worktree's lastCommitTs) and to join worktree
-  // entities back to their task force/feature for routing.
-  const taskForceByWorktreePath = new Map<string, { featureId: string; taskForceId: string }>();
-  for (const feature of features) {
-    for (const tf of feature.taskForces) {
-      taskForceByWorktreePath.set(tf.worktreePath, { featureId: feature.id, taskForceId: tf.id });
-    }
+  factory,
+  statusFor,
+  isServerRunning,
+}: BuildBranchEntitiesArgs): BranchEntities {
+  const worktreeByBranch = new Map(
+    worktrees.filter((w): w is Worktree & { branch: string } => !!w.branch).map((w) => [w.branch, w]),
+  );
+  const featureIdByBranch = new Map<string, string>();
+  for (const feature of factory.features) {
+    for (const branch of feature.branches) featureIdByBranch.set(branch, feature.id);
   }
 
-  const taskForceEntities: ProjectEntity[] = [];
-  const featureEntities: ProjectEntity[] = [];
-
-  for (const feature of features) {
-    let featureTs = 0;
-    for (const tf of feature.taskForces) {
-      const matchingWorktree = worktreeByPath.get(tf.worktreePath);
-      let ts = Math.max(matchingWorktree?.lastCommitTs ?? 0, tf.createdAt);
-      if (workingTaskForceIds.has(tf.id)) ts = Number.MAX_SAFE_INTEGER;
-      featureTs = Math.max(featureTs, ts);
-      taskForceEntities.push({
-        kind: "taskForce",
-        id: tf.id,
-        label: tf.name,
-        branch: tf.branch,
-        ts,
-        featureId: feature.id,
-        taskForceId: tf.id,
-        worktreePath: tf.worktreePath,
-        status: workingTaskForceIds.has(tf.id) ? "working" : undefined,
-      });
-    }
-    featureEntities.push({
-      kind: "feature",
-      id: feature.id,
-      label: feature.name,
-      ts: featureTs,
-      featureId: feature.id,
-    });
-  }
-
-  const branchEntities: ProjectEntity[] = branches.map((b) => ({
-    kind: "branch",
-    id: b.name,
-    label: b.name,
-    branch: b.name,
-    ts: b.lastCommitTs ?? 0,
-    isCurrent: b.current,
-  }));
-
-  const worktreeEntities: ProjectEntity[] = worktrees.map((w) => {
-    const joined = taskForceByWorktreePath.get(w.path);
-    const isWorking = !!joined && workingTaskForceIds.has(joined.taskForceId);
+  const all: BranchEntity[] = branches.map((b) => {
+    const wt = worktreeByBranch.get(b.name);
+    const state = factory.branchState[b.name];
+    const worktreePath = wt?.path ?? state?.worktreePath;
+    const agentStatus = statusFor(b.name);
+    const lastCommitTs = wt?.lastCommitTs ?? b.lastCommitTs ?? null;
+    const ts = agentStatus === "working" ? Number.MAX_SAFE_INTEGER : lastCommitTs || state?.createdAt || 0;
     return {
-      kind: "worktree",
-      id: w.path,
-      label: basename(w.path),
-      sublabel: w.path,
-      branch: w.branch ?? undefined,
-      ts: w.lastCommitTs ?? 0,
-      worktreePath: w.path,
-      dirty: w.dirty,
-      ...(joined
-        ? {
-            featureId: joined.featureId,
-            taskForceId: joined.taskForceId,
-            status: (isWorking ? "working" : undefined) as AgentStatus | undefined,
-          }
-        : {}),
+      name: b.name,
+      featureId: featureIdByBranch.get(b.name),
+      worktreePath,
+      hasWorktree: !!worktreePath,
+      agentStatus,
+      serverRunning: isServerRunning(worktreePath),
+      isCurrent: b.current,
+      dirty: wt?.dirty ?? false,
+      ts,
     };
   });
 
-  return {
-    features: sortEntities(featureEntities),
-    taskForces: sortEntities(taskForceEntities),
-    branches: sortEntities(branchEntities),
-    worktrees: sortEntities(worktreeEntities),
-  };
+  const byName = new Map(all.map((e) => [e.name, e]));
+  const featureGroups: FeatureGroup[] = factory.features.map((feature) => ({
+    feature,
+    branches: sortByTsDesc(
+      feature.branches.map((name) => byName.get(name)).filter((e): e is BranchEntity => !!e),
+    ),
+  }));
+  const unfiled = sortByTsDesc(all.filter((e) => !e.featureId));
+
+  return { featureGroups, unfiled, all: sortByTsDesc(all) };
 }
 
-/** Case-insensitive substring match over label + sublabel + branch. Empty/whitespace query
- * returns the list unchanged (no-op filter). */
-export function filterEntities(list: ProjectEntity[], q: string): ProjectEntity[] {
+/** Case-insensitive substring match over the branch name. Empty/whitespace query returns the
+ * list unchanged (no-op filter) — mirrors the retired `filterEntities`, scoped to branches. */
+export function filterBranchEntities(list: BranchEntity[], q: string): BranchEntity[] {
   const query = q.trim().toLowerCase();
   if (!query) return list;
-  return list.filter((e) => {
-    const haystack = `${e.label} ${e.sublabel ?? ""} ${e.branch ?? ""}`.toLowerCase();
-    return haystack.includes(query);
-  });
+  return list.filter((e) => e.name.toLowerCase().includes(query));
 }

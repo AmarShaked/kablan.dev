@@ -9,17 +9,11 @@ const entries: InboxEntry[] = [
     project: "proj-a",
     featureId: "f1",
     featureName: "Feature One",
-    taskForceId: "t1",
-    taskForceName: "TF One",
     branch: "feat/one",
     status: "awaitingInput",
   },
   {
     project: "proj-b",
-    featureId: "f2",
-    featureName: "Feature Two",
-    taskForceId: "t2",
-    taskForceName: "TF Two",
     branch: "feat/two",
     status: "failed",
   },
@@ -36,18 +30,15 @@ function renderView(onOpen = vi.fn()) {
 }
 
 describe("InboxView", () => {
-  it("renders a row per entry with its path and branch", () => {
+  it("renders a row per entry with its project, feature (when filed), and branch", () => {
     useInboxMock.mockReturnValue({ data: entries, isPending: false });
     renderView();
 
     expect(screen.getByText(/proj-a/)).toBeInTheDocument();
     expect(screen.getByText(/Feature One/)).toBeInTheDocument();
-    expect(screen.getByText(/TF One/)).toBeInTheDocument();
     expect(screen.getByText("feat/one")).toBeInTheDocument();
 
     expect(screen.getByText(/proj-b/)).toBeInTheDocument();
-    expect(screen.getByText(/Feature Two/)).toBeInTheDocument();
-    expect(screen.getByText(/TF Two/)).toBeInTheDocument();
     expect(screen.getByText("feat/two")).toBeInTheDocument();
   });
 

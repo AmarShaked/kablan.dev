@@ -1,33 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronRight, Play } from "lucide-react";
-import {
-  api,
-  type Feature,
-  type TaskForce,
-  type Worktree,
-  type Branch,
-  type RunningServer,
-  type LogLine,
-} from "../api.ts";
-import { useBranches } from "../queries.ts";
-import { taskForceKey, worktreeKey } from "../lib/agentKey.ts";
+import { api, type RunningServer, type LogLine } from "../api.ts";
+import { useBranches, useWorktrees, useFactory, qk } from "../queries.ts";
+import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
 import { AgentChat } from "./AgentChat.tsx";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import { Button } from "@/components/ui/button";
 import { isTauri } from "../lib/version.ts";
 
-export type CockpitTarget =
-  // `feature` is optional: it isn't used by Cockpit today (no per-feature behavior yet), and
-  // `TaskForceCockpit` — which delegates here — doesn't carry a `Feature` object today either
-  // (see its own doc comment). Kept on the type for whoever wires up feature/breadcrumb display.
-  | { kind: "taskForce"; feature?: Feature; taskForce: TaskForce }
-  | { kind: "worktree"; worktree: Worktree }
-  | { kind: "branch"; branch: Branch };
-
-/** Find the first localhost URL a dev server printed, so it can be opened. Mirrors
- * ItemDrawer's/TaskForceCockpit's helper of the same name — kept local like those are. */
+/** Find the first localhost URL a dev server printed, so it can be opened. */
 function findServerUrl(logs: LogLine[]): string | null {
   const re = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+(?:\/\S*)?/;
   for (const l of logs) {
@@ -37,91 +21,59 @@ function findServerUrl(logs: LogLine[]): string | null {
   return null;
 }
 
-function targetTitle(target: CockpitTarget): string {
-  if (target.kind === "taskForce") return target.taskForce.name;
-  if (target.kind === "worktree") return target.worktree.branch ?? target.worktree.path;
-  return target.branch.name;
-}
-
-/** A task force always has a worktree (created alongside it), so it always builds a
- * `worktree`-kind entry — unlike a plain branch, which is only a worktree entry once
- * "Start a session" has created one. */
-function taskForceToEntry(taskForce: TaskForce, meta: Branch | undefined): Entry {
-  return {
-    id: `tf:${taskForce.id}`,
-    kind: "worktree",
-    name: taskForce.branch,
-    head: null,
-    current: false,
-    isMain: false,
-    locked: false,
-    upstream: meta?.upstream ?? null,
-    behind: meta?.behind ?? 0,
-    branchName: taskForce.branch,
-    author: null,
-    ts: taskForce.createdAt,
-    dateRel: null,
-    cwd: taskForce.worktreePath,
-    runBranch: null,
-    inWorktree: null,
-    remoteOnly: false,
-    dirty: false,
-    linearId: taskForce.linearTicket ?? null,
-    baseBranch: taskForce.baseBranch,
-  };
-}
-
 /**
- * The unified cockpit — chat (left) + details (right) — for a task force, a plain worktree, or
- * a bare branch. Extracted so `TaskForceCockpit` can delegate to it (Task 7) and a later task
- * can wire it in for worktrees/branches too (see docs/superpowers/plans/2026-07-29-worktree-cockpit.md).
+ * The unified cockpit for a single branch — chat (left) + details (right) once it has a working
+ * copy, or a "Start working" empty state when it doesn't. Replaces the old task-force/worktree/
+ * bare-branch `CockpitTarget` union: every branch, filed or not, opens here.
  *
- * For a `branch` target with no worktree yet, chat is disabled (`AgentChat canChat={false}`) and
- * a "Start a session" banner offers to `createWorktree` — on success this transitions to a
- * `worktree` target, either by lifting it to the caller via `onStarted` (so the caller's own
- * selection/breadcrumb/sidebar stay in sync) or, if that's not supplied, by tracking it locally.
+ * `hasWorktree` (whether a git worktree or a persisted `factory.branchState[branch].worktreePath`
+ * exists) gates which of the two is shown. "Start working" calls `api.factory.agentStart` — which
+ * creates the working copy server-side if missing, then starts the agent — and invalidates the
+ * factory + worktrees queries so this re-resolves as live on the next render.
  */
 export function Cockpit({
   project,
-  target,
-  onStarted,
+  branch,
   logs = [],
 }: {
   project: string;
-  target: CockpitTarget;
-  onStarted?: (worktree: Worktree) => void;
+  branch: string;
   /** Dev-server output for this project (App owns the WS "log"-frame capture and history
-   * backfill; see `App.tsx`'s `logs` state) — rendered in `WorktreeDetails`' Logs card (I3). */
+   * backfill; see `App.tsx`'s `logs` state) — rendered in `WorktreeDetails`' Logs card. */
   logs?: LogLine[];
 }) {
-  const [localTarget, setLocalTarget] = useState<CockpitTarget | null>(null);
-  useEffect(() => setLocalTarget(null), [target]);
-  const effective = localTarget ?? target;
-
-  // Branch metadata (upstream/behind) for the entry — the same query OverviewTab already uses
-  // for its list, so this rides on react-query's cache rather than re-fetching separately.
+  const queryClient = useQueryClient();
   const branches = useBranches(project).data ?? [];
-  const branchByName = useMemo(() => new Map(branches.map((b) => [b.name, b])), [branches]);
+  const worktrees = useWorktrees(project).data ?? [];
+  const factory = useFactory(project).data;
+
+  const branchMeta = useMemo(() => branches.find((b) => b.name === branch), [branches, branch]);
+  const worktree = useMemo(() => worktrees.find((w) => w.branch === branch), [worktrees, branch]);
+  const branchState = factory?.branchState[branch];
+  const worktreePath = worktree?.path ?? branchState?.worktreePath;
+  const hasWorktree = !!worktreePath;
 
   const entry: Entry = useMemo(() => {
-    if (effective.kind === "taskForce") {
-      return taskForceToEntry(effective.taskForce, branchByName.get(effective.taskForce.branch));
-    }
-    if (effective.kind === "worktree") {
-      const w = effective.worktree;
-      return worktreeToEntry(w, w.branch ? branchByName.get(w.branch) : undefined, null);
-    }
-    return branchToEntry(effective.branch, null, false);
-  }, [effective, branchByName]);
+    if (worktree) return worktreeToEntry(worktree, branchMeta, null);
+    return branchToEntry(
+      branchMeta ?? {
+        name: branch,
+        current: false,
+        upstream: null,
+        lastCommit: null,
+        lastCommitDate: null,
+        lastCommitTs: null,
+        author: null,
+        ahead: 0,
+        behind: 0,
+        remoteOnly: false,
+      },
+      worktreePath ?? null,
+      false,
+    );
+  }, [worktree, branchMeta, branch, worktreePath]);
 
-  const agentKey =
-    effective.kind === "taskForce"
-      ? taskForceKey(project, effective.taskForce.id)
-      : effective.kind === "worktree"
-        ? worktreeKey(project, effective.worktree.path)
-        : // A bare branch never has a real agent (canChat is false below) — a stable, inert key
-          // is enough so useAgentStream has somewhere to look it up.
-          worktreeKey(project, `branch:${effective.branch.name}`);
+  const agentKey = branchKey(project, branch);
 
   const [linearWorkspace, setLinearWorkspace] = useState("");
   useEffect(() => {
@@ -132,8 +84,7 @@ export function Cockpit({
       .catch(() => {});
   }, []);
 
-  // Dev server — scoped to this entry's cwd (mirrors the original TaskForceCockpit's
-  // AssetsRail, generalized: bare-branch entries have no cwd, so there's nothing to scope to).
+  // Dev server — scoped to this branch's working-copy cwd.
   const [server, setServer] = useState<RunningServer | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [serverBusy, setServerBusy] = useState(false);
@@ -189,41 +140,46 @@ export function Cockpit({
     }
   };
 
-  const [creating, setCreating] = useState(false);
-  const startSession = async () => {
-    if (effective.kind !== "branch") return;
-    setCreating(true);
+  const [starting, setStarting] = useState(false);
+  const startWorking = async () => {
+    setStarting(true);
     try {
-      const wt = await api.createWorktree(project, effective.branch.name);
-      setLocalTarget({ kind: "worktree", worktree: wt });
-      onStarted?.(wt);
+      await api.factory.agentStart(project, branch);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["factory", project] }),
+        queryClient.invalidateQueries({ queryKey: qk.worktrees(project) }),
+      ]);
     } catch (err) {
       toast.error(String(err));
     } finally {
-      setCreating(false);
+      setStarting(false);
     }
   };
 
-  // Agent calls dispatch to the task-force or worktree family depending on the target kind — a
-  // bare branch has neither (chat is disabled for it, so these are never actually invoked).
-  const startAgent = async () => {
-    if (effective.kind === "taskForce") await api.factory.agentStart(project, effective.taskForce.id);
-    else if (effective.kind === "worktree") await api.factory.worktreeAgentStart(project, effective.worktree.path);
-  };
-  const messageAgent = async (text: string) => {
-    if (effective.kind === "taskForce") await api.factory.agentMessage(project, effective.taskForce.id, text);
-    else if (effective.kind === "worktree")
-      await api.factory.worktreeAgentMessage(project, effective.worktree.path, text);
-  };
-  const stopAgent = async () => {
-    if (effective.kind === "taskForce") await api.factory.agentStop(project, effective.taskForce.id);
-    else if (effective.kind === "worktree") await api.factory.worktreeAgentStop(project, effective.worktree.path);
-  };
-  const backfillAgent = async () => {
-    if (effective.kind === "taskForce") return api.factory.getAgent(project, effective.taskForce.id);
-    if (effective.kind === "worktree") return api.factory.getWorktreeAgent(project, effective.worktree.path);
-    return { agent: null, events: [] };
-  };
+  const startAgent = () => api.factory.agentStart(project, branch);
+  const messageAgent = (text: string) => api.factory.agentMessage(project, branch, text);
+  const stopAgent = () => api.factory.agentStop(project, branch);
+  const backfillAgent = () => api.factory.getAgent(project, branch);
+
+  if (!hasWorktree) {
+    return (
+      <>
+        <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+            <span className="truncate">{project}</span>
+            <ChevronRight className="size-3 shrink-0" />
+            <span className="truncate font-mono font-medium text-foreground">{branch}</span>
+          </nav>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <p>No working copy yet for this branch.</p>
+          <Button disabled={starting} onClick={startWorking}>
+            <Play className="size-3.5" /> {starting ? "Starting…" : "Start working"}
+          </Button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -231,25 +187,16 @@ export function Cockpit({
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
           <span className="truncate">{project}</span>
           <ChevronRight className="size-3 shrink-0" />
-          <span className="truncate font-medium text-foreground">{targetTitle(effective)}</span>
+          <span className="truncate font-mono font-medium text-foreground">{branch}</span>
         </nav>
       </div>
 
       <div className="flex min-h-0 flex-1">
         {/* Left pane: agent chat */}
         <div className="flex min-w-0 flex-1 flex-col border-r border-border">
-          {effective.kind === "branch" && (
-            <div className="flex items-center gap-3 border-b border-border bg-accent/30 px-4 py-3">
-              <p className="flex-1 text-sm text-muted-foreground">No worktree yet for this branch.</p>
-              <Button size="sm" disabled={creating} onClick={startSession}>
-                <Play className="size-3.5" /> {creating ? "Starting…" : "Start a session"}
-              </Button>
-            </div>
-          )}
           <AgentChat
             project={project}
             agentKey={agentKey}
-            canChat={effective.kind !== "branch"}
             onStart={startAgent}
             onMessage={messageAgent}
             onStop={stopAgent}
