@@ -66,7 +66,11 @@ fn main() {
                 .title("Kablan.dev")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 600.0)
-                .initialization_script(&init);
+                .initialization_script(&init)
+                // Disable Tauri's OS-level drag-drop (file-drop) handler: it otherwise intercepts
+                // drag events before the webview sees them, breaking the sidebar's HTML5
+                // drag-and-drop (reorder branches / file into a feature). Required for in-page DnD.
+                .disable_drag_drop_handler();
             // Slack-style overlay title bar: the mac traffic-lights float over our own titlebar
             // row (which reserves space for them) instead of Tauri drawing its native bar above
             // our content — `hidden_title` drops the OS-drawn window title text since we don't
