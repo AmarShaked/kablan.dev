@@ -91,7 +91,7 @@ export function ProjectMenu({
   };
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full w-72 shrink-0 flex-col border-r border-border text-foreground">
       <div className="border-b border-border p-2">
         <ProjectSwitcher
           projects={projects}

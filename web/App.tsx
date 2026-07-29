@@ -75,7 +75,7 @@ function AppContent() {
   const { ingest, agentFor, version: agentStreamVersion, snapshotStatuses } = useAgentStream();
   const { data: projects = [] } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState<View>("project");
+  const [view, setView] = useState<View>("home");
   const [cockpitBranch, setCockpitBranch] = useState<string | null>(null);
   const [linearWorkspace, setLinearWorkspace] = useState("");
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
@@ -198,15 +198,18 @@ function AppContent() {
     setCockpitBranch(null);
   };
 
-  // Auto-select a default project once the project list first loads, so the app doesn't open on
-  // an empty "Select a project" screen every time. Guarded on `selected === null` so this only
-  // ever fires before the user (or this same effect) has made a choice — it never overrides a
-  // later manual selection, including a user re-choosing `null` isn't possible via the UI.
+  // Auto-select a default project once the project list first loads, so the ProjectMenu is
+  // populated — but WITHOUT switching the view (the app opens on Home). Guarded on
+  // `selected === null` so this only ever fires before the user (or this same effect) has made a
+  // choice — it never overrides a later manual selection.
   useEffect(() => {
     if (selected !== null || projects.length === 0) return;
     const lastOpened = localStorage.getItem(LAST_PROJECT_KEY);
     const name = pickDefaultProject(projects, lastOpened);
-    if (name) selectProject(name);
+    if (name) {
+      localStorage.setItem(LAST_PROJECT_KEY, name);
+      setSelected(name); // keep the current view (Home on startup); don't jump to the project view
+    }
     // selectProject is redefined every render (not memoized) — reacting to `projects`/`selected`
     // is what matters here, and the `selected` guard above makes this idempotent regardless.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,10 +333,13 @@ function AppContent() {
     view === "inbox" ? "inbox" : view === "home" ? "home" : view === "settings" ? "settings" : null;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-sidebar">
       <TitleBar isTauri={isTauri} projectLabel={selected} onOpenSearch={() => setCommandOpen(true)} />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* Slack-style shell: TitleBar + GlobalRail are the outer chrome (bg-sidebar); the sub-sidebar
+          (ProjectMenu) + the main section sit together inside one rounded, bordered panel that
+          floats within the shell. */}
+      <div className="flex min-h-0 flex-1 overflow-hidden bg-sidebar">
         <GlobalRail
           inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
           active={railActive}
@@ -344,6 +350,7 @@ function AppContent() {
           onToggleTheme={toggleTheme}
         />
 
+        <div className="m-2 flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-background">
         <ProjectMenu
           projects={projects}
           selected={selected}
@@ -442,6 +449,7 @@ function AppContent() {
           ) : (
             <ProjectView project={selectedProject} />
           )}
+        </div>
         </div>
       </div>
 

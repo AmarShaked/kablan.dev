@@ -65,7 +65,7 @@ export function GlobalRail({
   onToggleTheme,
 }: GlobalRailProps) {
   return (
-    <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border bg-sidebar py-3">
+    <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 bg-sidebar py-3">
       <div
         aria-label="Kablan.dev"
         className="mb-2 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground"
