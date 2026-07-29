@@ -75,7 +75,10 @@ fn main() {
             {
                 b = b
                     .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
+                    .hidden_title(true)
+                    // Vertically center the traffic-lights within our 46px title-bar row
+                    // ((46 - 12)/2 ≈ 17). x is the standard left margin.
+                    .traffic_light_position(tauri::LogicalPosition::new(19.0, 17.0));
             }
             b.build()?;
             Ok(())
