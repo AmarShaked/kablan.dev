@@ -634,11 +634,28 @@ async fn put_command(Path(name): Path<String>, body: Bytes) -> ApiResult {
 async fn get_servers(State(st): State<AppState>) -> ApiResult {
     Ok(Json(serde_json::to_value(st.procs.get_all()).unwrap()))
 }
-async fn get_project_server(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult {
-    Ok(Json(serde_json::to_value(st.procs.get_server(&name)).unwrap()))
+async fn get_project_server(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+) -> ApiResult {
+    // `?cwd=` targets a specific working copy; no cwd → the project's main path (backward-compat).
+    let cwd = match q.get("cwd").filter(|s| !s.is_empty()) {
+        Some(c) => c.clone(),
+        None => projects::project_path_from_name(&name).map_err(server_err)?,
+    };
+    Ok(Json(serde_json::to_value(st.procs.get_server(&cwd)).unwrap()))
 }
-async fn get_logs(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult {
-    Ok(Json(serde_json::to_value(st.procs.get_logs(&name)).unwrap()))
+async fn get_logs(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+) -> ApiResult {
+    let cwd = match q.get("cwd").filter(|s| !s.is_empty()) {
+        Some(c) => c.clone(),
+        None => projects::project_path_from_name(&name).map_err(server_err)?,
+    };
+    Ok(Json(serde_json::to_value(st.procs.get_logs(&cwd)).unwrap()))
 }
 async fn post_start(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
     let dir = projects::project_path_from_name(&name).map_err(server_err)?;
@@ -668,8 +685,14 @@ async fn post_start(State(st): State<AppState>, Path(name): Path<String>, body: 
     let server = st.procs.start(&name, &working_dir, &command, branch);
     Ok(Json(serde_json::to_value(server).unwrap()))
 }
-async fn post_stop(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult {
-    let stopped = st.procs.stop(&name, false);
+async fn post_stop(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    // `{cwd}` targets a specific working copy; no cwd → the project's main path (backward-compat).
+    let cwd = match b.get("cwd").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        Some(c) => c.to_string(),
+        None => projects::project_path_from_name(&name).map_err(server_err)?,
+    };
+    let stopped = st.procs.stop(&cwd, false);
     Ok(Json(json!({ "stopped": stopped })))
 }
 

@@ -25,13 +25,17 @@ import { isTauri } from "../lib/version.ts";
 export function Cockpit({
   project,
   branch,
-  logs = [],
+  logs = {},
+  onSeedLogs,
 }: {
   project: string;
   branch: string;
-  /** Dev-server output for this project (App owns the WS "log"-frame capture and history
-   * backfill; see `App.tsx`'s `logs` state) — rendered in `WorktreeDetails`' Logs card. */
-  logs?: LogLine[];
+  /** Live dev-server output keyed by working-copy `cwd` (App owns the WS "log"-frame capture; see
+   * `App.tsx`'s `logs` state). This cockpit renders only its own branch's cwd slice. */
+  logs?: Record<string, LogLine[]>;
+  /** Seeds `logs[cwd]` with the process's already-emitted history when this cockpit opens onto a
+   * running server (the WS stream only appends going forward). */
+  onSeedLogs?: (cwd: string, lines: LogLine[]) => void;
 }) {
   const queryClient = useQueryClient();
   const branches = useBranches(project).data ?? [];
@@ -88,19 +92,21 @@ export function Cockpit({
       return;
     }
     try {
-      const s = await api.getServer(project);
-      const mine = s && s.cwd === cwd ? s : null;
-      setServer(mine);
-      if (mine) {
-        const lines = await api.getLogs(project);
+      const s = await api.getServer(project, cwd);
+      setServer(s);
+      if (s) {
+        const lines = await api.getLogs(project, cwd);
         setUrl(findServerUrl(lines));
+        // Backfill App's per-cwd log history so the Logs card shows output emitted before this
+        // cockpit (and its WS stream) was open.
+        onSeedLogs?.(cwd, lines);
       } else {
         setUrl(null);
       }
     } catch {
       /* no server yet */
     }
-  }, [project, cwd]);
+  }, [project, cwd, onSeedLogs]);
 
   useEffect(() => {
     if (isTauri) refreshServer();
@@ -119,9 +125,10 @@ export function Cockpit({
     }
   };
   const stopServer = async () => {
+    if (!cwd) return;
     setServerBusy(true);
     try {
-      await api.stopServer(project);
+      await api.stopServer(project, cwd);
       setServer(null);
       setUrl(null);
     } catch (err) {
@@ -207,7 +214,7 @@ export function Cockpit({
             onStopServer={stopServer}
             onRefreshServer={refreshServer}
             linearWorkspace={linearWorkspace}
-            logs={logs}
+            logs={cwd ? logs[cwd] ?? [] : []}
           />
         </div>
       </div>

@@ -329,9 +329,9 @@ export function WorktreeDetails({
       </Card>
 
       {/* Logs — the dev server's stdout/stderr, live-streamed via App's WS "log" frames plus
-          whatever `api.getLogs` already had on record. Only one dev server runs per project at a
-          time (see `server/processes.ts`), so `logs` (project-scoped) and `server` (this entry's
-          cwd, already filtered by the caller) describe the same process here. */}
+          whatever `api.getLogs` already had on record. Servers are keyed per working-copy cwd
+          (see `server/processes.ts`), so `logs` and `server` here are both already scoped to this
+          entry's cwd by the caller (`Cockpit`). */}
       {hasWorktree && (
         <Card title="Logs">
           <LogsTab project={envProject} server={server} logs={logs} />

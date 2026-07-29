@@ -360,15 +360,25 @@ export const api = {
       body: JSON.stringify({ devCommand }),
     }),
 
-  getServer: (name: string) => req<RunningServer | null>(`/api/projects/${encodeURIComponent(name)}/server`),
-  getLogs: (name: string) => req<LogLine[]>(`/api/projects/${encodeURIComponent(name)}/logs`),
+  // `cwd` targets a specific working copy; omit it for the project's main-path server (backward-compat).
+  getServer: (name: string, cwd?: string) =>
+    req<RunningServer | null>(
+      `/api/projects/${encodeURIComponent(name)}/server${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`,
+    ),
+  getLogs: (name: string, cwd?: string) =>
+    req<LogLine[]>(
+      `/api/projects/${encodeURIComponent(name)}/logs${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`,
+    ),
   startServer: (name: string, body: { cwd?: string; command?: string; branch?: string | null }) =>
     req<RunningServer>(`/api/projects/${encodeURIComponent(name)}/server/start`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  stopServer: (name: string) =>
-    req<{ stopped: boolean }>(`/api/projects/${encodeURIComponent(name)}/server/stop`, { method: "POST" }),
+  stopServer: (name: string, cwd?: string) =>
+    req<{ stopped: boolean }>(`/api/projects/${encodeURIComponent(name)}/server/stop`, {
+      method: "POST",
+      body: JSON.stringify(cwd ? { cwd } : {}),
+    }),
   getAllServers: () => req<RunningServer[]>("/api/servers"),
 
   inbox: () => req<InboxEntry[]>("/api/inbox"),

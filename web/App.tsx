@@ -82,9 +82,11 @@ function AppContent() {
 
   const [commandOpen, setCommandOpen] = useState(false);
 
+  // Dev servers keyed by working-copy `cwd` (globally unique) — multiple working copies of the
+  // same project can run at once. Fed by the WS hello/status frames below.
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
-  // Dev-server output, per project name — fed by the WS "log" frames below and seeded from
-  // `api.getLogs` on project select. Threaded into the cockpit's Dev server area.
+  // Dev-server output, keyed by working-copy `cwd` — fed by the WS "log" frames below and seeded
+  // per-cwd from `api.getLogs` when a cockpit opens. Threaded into the cockpit's Dev server area.
   const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [tauriUpdate, setTauriUpdate] = useState<TauriUpdate | null>(null);
@@ -116,16 +118,12 @@ function AppContent() {
     [queryClient],
   );
 
-  // Seeds `logs[name]` with whatever the dev-server process has already emitted (e.g. a server
-  // that was started before this project was selected) — the WS "log" handler below only
-  // appends going forward, it can't backfill history for a session it wasn't open for.
-  const loadLogsFor = useCallback(async (name: string) => {
-    try {
-      const existing = await api.getLogs(name);
-      setLogs((prev) => ({ ...prev, [name]: existing }));
-    } catch {
-      /* no server yet */
-    }
+  // Seeds `logs[cwd]` with whatever the dev-server process at that working copy has already
+  // emitted (e.g. a server started before its cockpit was opened) — the WS "log" handler below
+  // only appends going forward, it can't backfill history for a session it wasn't open for.
+  // Called by the Cockpit once it knows its branch's working-copy cwd.
+  const seedLogs = useCallback((cwd: string, lines: LogLine[]) => {
+    setLogs((prev) => ({ ...prev, [cwd]: lines }));
   }, []);
 
   useEffect(() => {
@@ -146,31 +144,36 @@ function AppContent() {
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data);
         if (msg.type === "hello") {
+          // Servers are keyed by working-copy cwd (globally unique).
           const map: Record<string, RunningServer> = {};
-          for (const s of msg.servers as RunningServer[]) map[s.projectName] = s;
+          for (const s of msg.servers as RunningServer[]) map[s.cwd] = s;
           setServers(map);
         } else if (msg.type === "status") {
           const s = msg.server as RunningServer | null;
+          const cwd = (msg.cwd as string) ?? s?.cwd;
           setServers((prev) => {
             const next = { ...prev };
-            if (s) next[msg.projectName] = s;
+            if (s && cwd) next[cwd] = s;
+            else if (cwd) delete next[cwd];
             return next;
           });
           // Surface an abnormal exit so failures aren't silent. A clean stop
           // kills via signal (exitCode null), so this only fires on real crashes
-          // (e.g. "command not found", a dev server that errored out).
+          // (e.g. "command not found", a dev server that errored out). Name the
+          // working copy (branch, else the cwd's folder) so it's clear which one.
           if (s && (s.status === "error" || (s.status === "exited" && !!s.exitCode))) {
+            const where = s.branch ?? s.cwd.split("/").filter(Boolean).pop() ?? s.cwd;
             toast.error(
-              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Logs card for details.`,
+              `${msg.projectName} · ${where}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Logs card for details.`,
               { duration: 8000 },
             );
           }
         } else if (msg.type === "log") {
-          const { projectName, line } = msg as { projectName: string; line: LogLine };
+          const { cwd, line } = msg as { cwd: string; line: LogLine };
           setLogs((prev) => {
-            const arr = prev[projectName] ? [...prev[projectName], line] : [line];
+            const arr = prev[cwd] ? [...prev[cwd], line] : [line];
             if (arr.length > 3000) arr.splice(0, arr.length - 3000);
-            return { ...prev, [projectName]: arr };
+            return { ...prev, [cwd]: arr };
           });
         } else if (msg.type?.startsWith("agent-")) {
           ingest(msg);
@@ -193,7 +196,6 @@ function AppContent() {
     setSelected(name);
     setView("project");
     setCockpitBranch(null);
-    loadLogsFor(name);
   };
 
   // Auto-select a default project once the project list first loads, so the app doesn't open on
@@ -216,25 +218,20 @@ function AppContent() {
   }, []);
 
   // Cross-project jump targets used by the Activity view — an agent row selects its project
-  // then opens its branch cockpit; a server row (project-level today, see Phase 3 note) at least
-  // selects the project. Mirrors `openInboxEntry` below.
+  // then opens its branch cockpit; a server row selects the project. The cockpit seeds its own
+  // per-cwd logs on open, so no project-level backfill is needed here. Mirrors `openInboxEntry`.
   const openBranchFromActivity = useCallback(
     (project: string, branch: string) => {
       setSelected(project);
       openBranch(branch);
-      loadLogsFor(project);
     },
-    [openBranch, loadLogsFor],
+    [openBranch],
   );
-  const openProjectFromActivity = useCallback(
-    (project: string) => {
-      setSelected(project);
-      setView("project");
-      setCockpitBranch(null);
-      loadLogsFor(project);
-    },
-    [loadLogsFor],
-  );
+  const openProjectFromActivity = useCallback((project: string) => {
+    setSelected(project);
+    setView("project");
+    setCockpitBranch(null);
+  }, []);
 
   // Global attention inbox — jump straight into a branch's cockpit from any project, without
   // going through the project menu's drill-down.
@@ -254,7 +251,6 @@ function AppContent() {
   const openInboxEntry = (entry: InboxEntry) => {
     setSelected(entry.project);
     openBranch(entry.branch);
-    loadLogsFor(entry.project);
   };
 
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
@@ -268,11 +264,11 @@ function AppContent() {
 
   const isServerRunning = useCallback(
     (cwd?: string) => {
-      if (!selected || !cwd) return false;
-      const s = servers[selected];
-      return !!s && s.cwd === cwd && (s.status === "running" || s.status === "starting");
+      if (!cwd) return false;
+      const s = servers[cwd];
+      return !!s && (s.status === "running" || s.status === "starting");
     },
-    [selected, servers],
+    [servers],
   );
 
   const statusFor = useCallback(
@@ -439,7 +435,8 @@ function AppContent() {
                 key={`${selectedProject.name}::${cockpitBranch}`}
                 project={selectedProject.name}
                 branch={cockpitBranch}
-                logs={logs[selectedProject.name] ?? []}
+                logs={logs}
+                onSeedLogs={seedLogs}
               />
             </div>
           ) : (

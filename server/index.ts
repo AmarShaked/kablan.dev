@@ -275,11 +275,14 @@ api.put("/projects/:name/command", (req, res) => {
 api.get("/servers", (_req, res) => res.json(getAllServers()));
 
 api.get("/projects/:name/server", (req, res) => {
-  res.json(getServer(req.params.name));
+  // `?cwd=` targets a specific working copy; no cwd → the project's main path (backward-compat).
+  const cwd = (typeof req.query.cwd === "string" && req.query.cwd) || projectPathFromName(req.params.name);
+  res.json(getServer(cwd));
 });
 
 api.get("/projects/:name/logs", (req, res) => {
-  res.json(getLogs(req.params.name));
+  const cwd = (typeof req.query.cwd === "string" && req.query.cwd) || projectPathFromName(req.params.name);
+  res.json(getLogs(cwd));
 });
 
 api.post("/projects/:name/server/start", async (req, res) => {
@@ -308,7 +311,10 @@ api.post("/projects/:name/server/start", async (req, res) => {
 });
 
 api.post("/projects/:name/server/stop", async (req, res) => {
-  const stopped = await stopServer(req.params.name);
+  // `{cwd}` targets a specific working copy; no cwd → the project's main path (backward-compat).
+  const { cwd } = req.body ?? {};
+  const target: string = cwd || projectPathFromName(req.params.name);
+  const stopped = await stopServer(target);
   res.json({ stopped });
 });
 
@@ -327,12 +333,12 @@ const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
 wss.on("connection", (ws: WebSocket) => {
-  const onLog = (payload: { projectName: string; line: unknown }) => {
+  const onLog = (payload: { projectName: string; cwd: string; line: unknown }) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "log", ...payload }));
   };
-  const onUpdate = (projectName: string) => {
+  const onUpdate = ({ projectName, cwd }: { projectName: string; cwd: string }) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "status", projectName, server: getServer(projectName) }));
+      ws.send(JSON.stringify({ type: "status", projectName, cwd, server: getServer(cwd) }));
     }
   };
   serverEvents.on("log", onLog);

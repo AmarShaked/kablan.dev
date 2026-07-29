@@ -37,10 +37,12 @@ export function ProjectSwitcher({
   const query = filter.trim().toLowerCase();
   const visible = query ? projects.filter((p) => p.name.toLowerCase().includes(query)) : projects;
 
-  const isRunning = (name: string) => {
-    const s = servers[name];
-    return s?.status === "running" || s?.status === "starting";
-  };
+  // Servers are keyed by working-copy cwd (multiple per project), so scan for any live one
+  // belonging to this project to light up its row dot.
+  const runningFor = (name: string) =>
+    Object.values(servers).find(
+      (s) => s.projectName === name && (s.status === "running" || s.status === "starting"),
+    );
 
   return (
     <Popover
@@ -88,7 +90,7 @@ export function ProjectSwitcher({
             </div>
           )}
           {visible.map((p) => {
-            const running = isRunning(p.name);
+            const runningServer = runningFor(p.name);
             const unread = unreadForProject(p.name);
             return (
               <button
@@ -106,7 +108,7 @@ export function ProjectSwitcher({
               >
                 <ProjectIcon name={iconNameFor(p.name, projectIcons)} className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                {running && <StatusDot status={servers[p.name]!.status} />}
+                {runningServer && <StatusDot status={runningServer.status} />}
                 <UnreadPill count={unread} testId={`unread-pill-switcher-${p.name}`} />
               </button>
             );

@@ -26,10 +26,14 @@ interface ServerRecord extends RunningServer {
   logs: LogLine[];
 }
 
-/** Emits: "update" (projectName), "log" ({ projectName, line }). */
+/** Emits: "update" ({ projectName, cwd }), "log" ({ projectName, cwd, line }). */
 export const serverEvents = new EventEmitter();
 
-/** One running server per project name — starting a new one replaces the old. */
+/**
+ * Running servers keyed by their working-copy `cwd` (an absolute, globally-unique
+ * path). Multiple working copies of the same project can run concurrently;
+ * starting again in the SAME cwd replaces (kill + restart) the server there.
+ */
 const servers = new Map<string, ServerRecord>();
 
 function publicView(rec: ServerRecord): RunningServer {
@@ -37,15 +41,15 @@ function publicView(rec: ServerRecord): RunningServer {
   return rest;
 }
 
-function emitUpdate(projectName: string) {
-  serverEvents.emit("update", projectName);
+function emitUpdate(rec: ServerRecord) {
+  serverEvents.emit("update", { projectName: rec.projectName, cwd: rec.cwd });
 }
 
 function pushLog(rec: ServerRecord, line: LogLine) {
   rec.logs.push(line);
   const max = loadConfig().maxLogLines;
   if (rec.logs.length > max) rec.logs.splice(0, rec.logs.length - max);
-  serverEvents.emit("log", { projectName: rec.projectName, line });
+  serverEvents.emit("log", { projectName: rec.projectName, cwd: rec.cwd, line });
 }
 
 export interface StartOptions {
@@ -56,8 +60,8 @@ export interface StartOptions {
 }
 
 export async function startServer(opts: StartOptions): Promise<RunningServer> {
-  // Enforce single-server-per-project: stop any existing one first.
-  await stopServer(opts.projectName, { silent: true });
+  // One server per working-copy cwd: stop any existing one at this cwd first.
+  await stopServer(opts.cwd, { silent: true });
 
   const rec: ServerRecord = {
     projectName: opts.projectName,
@@ -71,7 +75,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     child: null,
     logs: [],
   };
-  servers.set(opts.projectName, rec);
+  servers.set(opts.cwd, rec);
   pushLog(rec, { ts: Date.now(), stream: "system", text: `$ ${opts.command}  (cwd: ${opts.cwd})` });
 
   // Run through the shell so commands like "npm run dev" work as typed.
@@ -85,7 +89,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   rec.child = child;
   rec.pid = child.pid ?? null;
   rec.status = "running";
-  emitUpdate(opts.projectName);
+  emitUpdate(rec);
 
   child.stdout?.on("data", (buf: Buffer) => {
     pushLog(rec, { ts: Date.now(), stream: "stdout", text: buf.toString() });
@@ -96,11 +100,11 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   child.on("error", (err) => {
     rec.status = "error";
     pushLog(rec, { ts: Date.now(), stream: "system", text: `Process error: ${err.message}` });
-    emitUpdate(opts.projectName);
+    emitUpdate(rec);
   });
   child.on("exit", (code, signal) => {
-    // Only reflect exit if this record is still the active one.
-    if (servers.get(opts.projectName) === rec) {
+    // Only reflect exit if this record is still the active one at this cwd.
+    if (servers.get(opts.cwd) === rec) {
       rec.status = rec.status === "starting" ? "error" : "exited";
       rec.exitCode = code;
       rec.pid = null;
@@ -110,7 +114,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
         stream: "system",
         text: `Process exited (code=${code ?? "null"}${signal ? `, signal=${signal}` : ""})`,
       });
-      emitUpdate(opts.projectName);
+      emitUpdate(rec);
     }
   });
 
@@ -118,10 +122,10 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
 }
 
 export async function stopServer(
-  projectName: string,
+  cwd: string,
   { silent = false }: { silent?: boolean } = {},
 ): Promise<boolean> {
-  const rec = servers.get(projectName);
+  const rec = servers.get(cwd);
   if (!rec || !rec.child || rec.pid == null) return false;
 
   const pid = rec.pid;
@@ -163,8 +167,8 @@ export async function stopServer(
   });
 }
 
-export function getServer(projectName: string): RunningServer | null {
-  const rec = servers.get(projectName);
+export function getServer(cwd: string): RunningServer | null {
+  const rec = servers.get(cwd);
   return rec ? publicView(rec) : null;
 }
 
@@ -172,8 +176,8 @@ export function getAllServers(): RunningServer[] {
   return [...servers.values()].map(publicView);
 }
 
-export function getLogs(projectName: string): LogLine[] {
-  return servers.get(projectName)?.logs ?? [];
+export function getLogs(cwd: string): LogLine[] {
+  return servers.get(cwd)?.logs ?? [];
 }
 
 /** Best-effort cleanup of all child servers on shutdown. */

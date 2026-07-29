@@ -1,5 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { startServer, initRepo, createBranch, type TestServer } from "./harness.ts";
 
@@ -55,7 +56,7 @@ describe("server lifecycle API", () => {
     }
   });
 
-  test("starting again replaces the previous server (one per project)", async () => {
+  test("starting again in the SAME cwd replaces the previous server", async () => {
     const s = await startServer();
     try {
       const main = join(s.workspace, "repo");
@@ -67,7 +68,71 @@ describe("server lifecycle API", () => {
       assert.equal(second.command, RUN_CMD);
       assert.notEqual(second.startedAt < first.startedAt, true);
       const all = (await s.api.get("/api/servers")).json;
-      assert.equal(all.length, 1, "still a single server for the project");
+      assert.equal(all.length, 1, "same cwd → still a single server");
+    } finally {
+      await s.api.post("/api/projects/repo/server/stop", {}).catch(() => {});
+      await s.stop();
+    }
+  });
+
+  test("servers in two different cwds run concurrently and both list in /api/servers", async () => {
+    const s = await startServer();
+    try {
+      const main = join(s.workspace, "repo");
+      await initRepo(main);
+      // A second working copy (a branch's worktree, modelled here as a plain dir).
+      const other = join(s.workspace, "repo-wt");
+      mkdirSync(other, { recursive: true });
+
+      // First server: no cwd → defaults to the project's main path (backward-compat).
+      await s.api.post("/api/projects/repo/server/start", { command: IDLE_CMD });
+      // Second server: an explicit, different cwd.
+      await s.api.post("/api/projects/repo/server/start", { command: IDLE_CMD, cwd: other });
+
+      await waitFor(async () => (await s.api.get("/api/servers")).json?.length === 2);
+      const all = (await s.api.get("/api/servers")).json;
+      assert.equal(all.length, 2, "both working copies run at once");
+      const cwds = all.map((x: any) => x.cwd).sort();
+      assert.deepEqual(cwds, [main, other].sort());
+      assert.ok(
+        all.every((x: any) => x.status === "running" || x.status === "starting"),
+        "both are live",
+      );
+      assert.ok(all.every((x: any) => x.projectName === "repo"));
+
+      // Single-view with no cwd returns the MAIN-path server (backward-compat).
+      const mainView = (await s.api.get("/api/projects/repo/server")).json;
+      assert.equal(mainView.cwd, main);
+      // Single-view with an explicit ?cwd returns the server at that working copy.
+      const otherView = (await s.api.get(`/api/projects/repo/server?cwd=${encodeURIComponent(other)}`)).json;
+      assert.equal(otherView.cwd, other);
+    } finally {
+      await s.api.post("/api/projects/repo/server/stop", {}).catch(() => {});
+      await s.api.post("/api/projects/repo/server/stop", { cwd: join(s.workspace, "repo-wt") }).catch(() => {});
+      await s.stop();
+    }
+  });
+
+  test("stop targets the server at the given cwd, leaving others running", async () => {
+    const s = await startServer();
+    try {
+      const main = join(s.workspace, "repo");
+      await initRepo(main);
+      const other = join(s.workspace, "repo-wt2");
+      mkdirSync(other, { recursive: true });
+      await s.api.post("/api/projects/repo/server/start", { command: IDLE_CMD });
+      await s.api.post("/api/projects/repo/server/start", { command: IDLE_CMD, cwd: other });
+      await waitFor(async () => (await s.api.get("/api/servers")).json?.length === 2);
+
+      // Stop only the "other" cwd; the main-path server keeps running.
+      const { json } = await s.api.post("/api/projects/repo/server/stop", { cwd: other });
+      assert.equal(json.stopped, true);
+      await waitFor(async () => {
+        const st = (await s.api.get(`/api/projects/repo/server?cwd=${encodeURIComponent(other)}`)).json?.status;
+        return st !== "running" && st !== "starting";
+      });
+      const mainView = (await s.api.get("/api/projects/repo/server")).json;
+      assert.ok(["running", "starting"].includes(mainView.status), "main server untouched");
     } finally {
       await s.api.post("/api/projects/repo/server/stop", {}).catch(() => {});
       await s.stop();

@@ -1,7 +1,10 @@
 //! Dev-server process management — mirrors server/processes.ts.
-//! One server per project (starting a new one replaces the old); processes run
-//! in their own group so the whole tree can be killed. Log + status events are
-//! broadcast as pre-serialized WS messages.
+//! Servers are keyed by their working-copy `cwd` (an absolute, globally-unique
+//! path), so multiple working copies of the same project can run at once;
+//! starting again in the SAME cwd replaces (kill + restart) the server there.
+//! Processes run in their own group so the whole tree can be killed. Log +
+//! status events are broadcast as pre-serialized WS messages tagged with both
+//! `projectName` and `cwd`.
 use crate::config;
 use serde::Serialize;
 use serde_json::json;
@@ -67,45 +70,52 @@ impl Processes {
         self.tx.subscribe()
     }
 
-    pub fn get_server(&self, project: &str) -> Option<RunningServer> {
-        self.registry.lock().unwrap().get(project).map(|r| r.view.clone())
+    pub fn get_server(&self, cwd: &str) -> Option<RunningServer> {
+        self.registry.lock().unwrap().get(cwd).map(|r| r.view.clone())
     }
 
     pub fn get_all(&self) -> Vec<RunningServer> {
         self.registry.lock().unwrap().values().map(|r| r.view.clone()).collect()
     }
 
-    pub fn get_logs(&self, project: &str) -> Vec<LogLine> {
+    pub fn get_logs(&self, cwd: &str) -> Vec<LogLine> {
         self.registry
             .lock()
             .unwrap()
-            .get(project)
+            .get(cwd)
             .map(|r| r.logs.clone())
             .unwrap_or_default()
     }
 
-    fn emit_update(&self, project: &str) {
-        let server = self.get_server(project);
-        let msg = json!({ "type": "status", "projectName": project, "server": server });
+    fn emit_update(&self, cwd: &str) {
+        let (project, server) = {
+            let reg = self.registry.lock().unwrap();
+            match reg.get(cwd) {
+                Some(r) => (r.view.project_name.clone(), Some(r.view.clone())),
+                None => return,
+            }
+        };
+        let msg = json!({ "type": "status", "projectName": project, "cwd": cwd, "server": server });
         let _ = self.tx.send(msg.to_string());
     }
 
-    fn push_log(&self, project: &str, line: LogLine) {
+    fn push_log(&self, cwd: &str, line: LogLine) {
         let max = config::load().max_log_lines as usize;
-        {
+        let project = {
             let mut reg = self.registry.lock().unwrap();
-            match reg.get_mut(project) {
+            match reg.get_mut(cwd) {
                 Some(rec) => {
                     rec.logs.push(line.clone());
                     if rec.logs.len() > max {
                         let excess = rec.logs.len() - max;
                         rec.logs.drain(0..excess);
                     }
+                    rec.view.project_name.clone()
                 }
                 None => return,
             }
-        }
-        let msg = json!({ "type": "log", "projectName": project, "line": line });
+        };
+        let msg = json!({ "type": "log", "projectName": project, "cwd": cwd, "line": line });
         let _ = self.tx.send(msg.to_string());
     }
 
@@ -116,8 +126,8 @@ impl Processes {
         command: &str,
         branch: Option<String>,
     ) -> RunningServer {
-        // Enforce single-server-per-project: stop any existing one first.
-        self.stop(project, true);
+        // One server per working-copy cwd: stop any existing one at this cwd first.
+        self.stop(cwd, true);
 
         let generation = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
         let started_at = now_ms();
@@ -132,11 +142,11 @@ impl Processes {
             exit_code: None,
         };
         self.registry.lock().unwrap().insert(
-            project.to_string(),
+            cwd.to_string(),
             ServerRecord { view, logs: vec![], generation },
         );
         self.push_log(
-            project,
+            cwd,
             LogLine { ts: now_ms(), stream: "system".into(), text: format!("$ {command}  (cwd: {cwd})") },
         );
 
@@ -158,43 +168,43 @@ impl Processes {
             Err(e) => {
                 {
                     let mut reg = self.registry.lock().unwrap();
-                    if let Some(r) = reg.get_mut(project) {
+                    if let Some(r) = reg.get_mut(cwd) {
                         r.view.status = "error".into();
                     }
                 }
                 self.push_log(
-                    project,
+                    cwd,
                     LogLine { ts: now_ms(), stream: "system".into(), text: format!("Process error: {e}") },
                 );
-                self.emit_update(project);
-                return self.get_server(project).unwrap();
+                self.emit_update(cwd);
+                return self.get_server(cwd).unwrap();
             }
         };
 
         let pid = child.id() as i32;
         {
             let mut reg = self.registry.lock().unwrap();
-            if let Some(r) = reg.get_mut(project) {
+            if let Some(r) = reg.get_mut(cwd) {
                 r.view.pid = Some(pid);
                 r.view.status = "running".into();
             }
         }
-        self.emit_update(project);
+        self.emit_update(cwd);
 
         if let Some(mut out) = child.stdout.take() {
             let me = Arc::clone(self);
-            let proj = project.to_string();
-            std::thread::spawn(move || read_stream(&mut out, "stdout", &me, &proj));
+            let key = cwd.to_string();
+            std::thread::spawn(move || read_stream(&mut out, "stdout", &me, &key));
         }
         if let Some(mut err) = child.stderr.take() {
             let me = Arc::clone(self);
-            let proj = project.to_string();
-            std::thread::spawn(move || read_stream(&mut err, "stderr", &me, &proj));
+            let key = cwd.to_string();
+            std::thread::spawn(move || read_stream(&mut err, "stderr", &me, &key));
         }
 
         // Waiter thread owns the child and reflects its exit (if still current).
         let me = Arc::clone(self);
-        let proj = project.to_string();
+        let key = cwd.to_string();
         std::thread::spawn(move || {
             let status = child.wait();
             let code = status.as_ref().ok().and_then(|s| s.code());
@@ -203,10 +213,10 @@ impl Processes {
             #[cfg(not(unix))]
             let signal: Option<i32> = None;
 
-            let mut fire = false;
+            let mut fire: Option<String> = None;
             {
                 let mut reg = me.registry.lock().unwrap();
-                if let Some(r) = reg.get_mut(&proj) {
+                if let Some(r) = reg.get_mut(&key) {
                     if r.generation == generation {
                         r.view.status = if r.view.status == "starting" { "error" } else { "exited" }.into();
                         r.view.exit_code = code;
@@ -217,32 +227,34 @@ impl Processes {
                             signal.map(|s| format!(", signal={s}")).unwrap_or_default()
                         );
                         r.logs.push(LogLine { ts: now_ms(), stream: "system".into(), text });
-                        fire = true;
+                        fire = Some(r.view.project_name.clone());
                     }
                 }
             }
-            if fire {
-                if let Some(line) = me.get_logs(&proj).last().cloned() {
-                    let _ = me.tx.send(json!({ "type": "log", "projectName": proj, "line": line }).to_string());
+            if let Some(project) = fire {
+                if let Some(line) = me.get_logs(&key).last().cloned() {
+                    let _ = me.tx.send(
+                        json!({ "type": "log", "projectName": project, "cwd": key, "line": line }).to_string(),
+                    );
                 }
-                me.emit_update(&proj);
+                me.emit_update(&key);
             }
         });
 
-        self.get_server(project).unwrap()
+        self.get_server(cwd).unwrap()
     }
 
-    pub fn stop(&self, project: &str, silent: bool) -> bool {
+    pub fn stop(&self, cwd: &str, silent: bool) -> bool {
         let pid = {
             let reg = self.registry.lock().unwrap();
-            match reg.get(project) {
+            match reg.get(cwd) {
                 Some(r) if r.view.pid.is_some() => r.view.pid.unwrap(),
                 _ => return false,
             }
         };
         if !silent {
             self.push_log(
-                project,
+                cwd,
                 LogLine { ts: now_ms(), stream: "system".into(), text: "Stopping server...".into() },
             );
         }
@@ -265,14 +277,14 @@ impl Processes {
     }
 }
 
-fn read_stream<R: Read>(reader: &mut R, stream: &str, me: &Arc<Processes>, project: &str) {
+fn read_stream<R: Read>(reader: &mut R, stream: &str, me: &Arc<Processes>, cwd: &str) {
     let mut buf = [0u8; 8192];
     loop {
         match reader.read(&mut buf) {
             Ok(0) | Err(_) => break,
             Ok(n) => {
                 let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                me.push_log(project, LogLine { ts: now_ms(), stream: stream.into(), text });
+                me.push_log(cwd, LogLine { ts: now_ms(), stream: stream.into(), text });
             }
         }
     }
@@ -295,4 +307,63 @@ fn kill_group(_pid: i32, _force: bool) {
 /// process-group kill logic without duplicating it.
 pub fn kill_group_pub(pid: i32, force: bool) {
     kill_group(pid, force);
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn tmpdir(tag: &str) -> String {
+        let p = std::env::temp_dir().join(format!("kablan-proc-{}-{}", tag, std::process::id()));
+        std::fs::create_dir_all(&p).unwrap();
+        p.to_string_lossy().to_string()
+    }
+
+    // A benign, long-lived child so the registry has a live pid to key on.
+    const IDLE: &str = "sleep 100";
+
+    fn wait_running(p: &Arc<Processes>, cwd: &str) {
+        for _ in 0..50 {
+            if matches!(p.get_server(cwd).map(|s| s.status), Some(ref st) if st == "running") {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn two_cwds_coexist_same_cwd_replaces_and_stop_by_cwd() {
+        let p = Processes::new();
+        let a = tmpdir("a");
+        let b = tmpdir("b");
+
+        // Two different working copies of the same project run concurrently.
+        p.start("proj", &a, IDLE, None);
+        p.start("proj", &b, IDLE, None);
+        wait_running(&p, &a);
+        wait_running(&p, &b);
+        assert_eq!(p.get_all().len(), 2, "both cwds coexist");
+        assert!(p.get_server(&a).is_some());
+        assert!(p.get_server(&b).is_some());
+        assert_eq!(p.get_server(&a).unwrap().project_name, "proj");
+
+        // Starting again in the SAME cwd replaces (still 2 records total).
+        let first_started = p.get_server(&a).unwrap().started_at;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        p.start("proj", &a, IDLE, None);
+        wait_running(&p, &a);
+        assert_eq!(p.get_all().len(), 2, "same cwd replaces, does not add");
+        assert!(p.get_server(&a).unwrap().started_at >= first_started);
+
+        // Stop by cwd targets only that working copy; the other keeps its pid.
+        assert!(p.stop(&a, true), "stop returns true when a live server exists");
+        assert!(p.get_server(&b).unwrap().pid.is_some(), "the other cwd is untouched");
+
+        // Stopping a cwd with nothing live returns false.
+        let unknown = tmpdir("nope");
+        assert!(!p.stop(&unknown, true));
+
+        p.stop(&b, true);
+        p.kill_all();
+    }
 }

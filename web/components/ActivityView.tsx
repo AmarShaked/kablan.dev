@@ -7,9 +7,9 @@ export interface ActivityViewProps {
   /** Every agent key's current status, across all projects — `useAgentStream().snapshotStatuses()`
    * re-scanned by the caller on its `version` counter so this stays live. */
   statuses: Record<string, AgentStatus>;
-  /** Running (or not) dev servers, keyed by project name — `App`'s WS-fed `servers` state. */
+  /** Running (or not) dev servers, keyed by working-copy cwd — `App`'s WS-fed `servers` state. */
   servers: Record<string, RunningServer>;
-  /** Dev-server output per project name, used to sniff out the localhost URL a server printed
+  /** Dev-server output per working-copy cwd, used to sniff out the localhost URL a server printed
    * (same heuristic the Cockpit's Dev-server card uses) — `App`'s WS-fed `logs` state. */
   logs: Record<string, LogLine[]>;
   onOpenBranch: (project: string, branch: string) => void;
@@ -86,10 +86,10 @@ export function ActivityView({ statuses, servers, logs, onOpenBranch, onOpenProj
           ) : (
             <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {serverRows.map((s) => {
-                const url = findServerUrl(logs[s.projectName] ?? []);
+                const url = findServerUrl(logs[s.cwd] ?? []);
                 return (
                   <div
-                    key={s.projectName}
+                    key={s.cwd}
                     data-testid={`server-row-${s.projectName}`}
                     role="button"
                     tabIndex={0}

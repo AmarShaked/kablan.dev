@@ -25,9 +25,14 @@ function makeServer(overrides: Partial<RunningServer> = {}): RunningServer {
   };
 }
 
+// Keyed by working-copy cwd, mirroring App's WS-fed `servers` state.
 const servers: Record<string, RunningServer> = {
-  "proj-a": makeServer({ projectName: "proj-a", cwd: "/repos/proj-a" }),
-  "proj-b": makeServer({ projectName: "proj-b", cwd: "/repos/proj-b-worktrees/feature-x", status: "stopped" }),
+  "/repos/proj-a": makeServer({ projectName: "proj-a", cwd: "/repos/proj-a" }),
+  "/repos/proj-b-worktrees/feature-x": makeServer({
+    projectName: "proj-b",
+    cwd: "/repos/proj-b-worktrees/feature-x",
+    status: "stopped",
+  }),
 };
 
 function renderView(overrides: Partial<Parameters<typeof ActivityView>[0]> = {}) {
@@ -85,7 +90,7 @@ describe("ActivityView", () => {
   it("shows an empty state when no dev servers are running", () => {
     renderView({
       servers: {
-        "proj-a": makeServer({ status: "stopped" }),
+        "/repos/proj-a": makeServer({ status: "stopped" }),
       },
     });
     expect(screen.getByText(/no dev servers running/i)).toBeInTheDocument();
@@ -101,7 +106,7 @@ describe("ActivityView", () => {
   it("shows a clickable URL when the server's logs contain one", () => {
     renderView({
       logs: {
-        "proj-a": [{ ts: 0, stream: "stdout", text: "ready at http://localhost:5173" }],
+        "/repos/proj-a": [{ ts: 0, stream: "stdout", text: "ready at http://localhost:5173" }],
       },
     });
     const link = screen.getByRole("link", { name: /localhost:5173/ });
