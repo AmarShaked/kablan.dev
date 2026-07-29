@@ -33,7 +33,7 @@ function RailButton({
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex w-12 shrink-0 flex-col items-center gap-1 rounded-md py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        "relative flex size-12 shrink-0 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
         active && "bg-sidebar-accent text-sidebar-foreground",
       )}
     >
@@ -65,7 +65,7 @@ export function GlobalRail({
   onToggleTheme,
 }: GlobalRailProps) {
   return (
-    <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 bg-sidebar py-3">
+    <div className="flex h-full w-[72px] shrink-0 flex-col items-center gap-1 bg-sidebar py-3 pl-2">
       <div
         aria-label="Kablan.dev"
         className="mb-2 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground"
