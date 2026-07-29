@@ -378,13 +378,13 @@ export function AgentChat({
         </div>
       )}
 
-      <div className="flex gap-2 border-t border-border p-3">
+      <div className="flex items-end gap-2 border-t border-border p-3">
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!chatEnabled}
           placeholder={!canChat ? "Start a session to chat" : "Message the agent…"}
-          className="min-h-[40px] flex-1 resize-none text-sm"
+          className="min-h-[40px] flex-1 resize-none text-sm focus-visible:ring-0"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -392,7 +392,7 @@ export function AgentChat({
             }
           }}
         />
-        <Button size="sm" disabled={!chatEnabled || busy || !text.trim()} onClick={send} aria-label="Send">
+        <Button size="icon-lg" disabled={!chatEnabled || busy || !text.trim()} onClick={send} aria-label="Send">
           <Send className="size-3.5" />
         </Button>
       </div>
