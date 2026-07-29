@@ -392,6 +392,42 @@ describe("SidebarRecent", () => {
     });
   });
 
+  describe("floating drag ghost", () => {
+    it("shows a floating chip with the branch name once dragging starts and the cursor moves, and hides it on dragEnd", () => {
+      renderComponent({ unfiled: [branchEntity({ name: "main" })] });
+
+      // fakeDataTransfer has no setDragImage — the component must guard around calling it.
+      const transfer = fakeDataTransfer();
+      const row = screen.getByText("main");
+      expect(() => fireEvent.dragStart(row, { dataTransfer: transfer })).not.toThrow();
+
+      expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();
+
+      fireEvent(document, new MouseEvent("dragover", { bubbles: true, clientX: 42, clientY: 24 }));
+
+      const chip = screen.getByTestId("drag-ghost");
+      expect(within(chip).getByText("main")).toBeInTheDocument();
+
+      fireEvent.dragEnd(row, { dataTransfer: transfer });
+      expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();
+    });
+
+    it("shows a floating chip with the feature name for a feature-folder drag", () => {
+      const featureGroups: FeatureGroup[] = [
+        { feature: { id: "f1", name: "Feature One", branches: [] }, branches: [] },
+      ];
+      renderComponent({ featureGroups, unfiled: [] });
+
+      const transfer = fakeDataTransfer();
+      const header = screen.getByRole("button", { name: /expand feature one/i });
+      expect(() => fireEvent.dragStart(header, { dataTransfer: transfer })).not.toThrow();
+
+      fireEvent(document, new MouseEvent("dragover", { bubbles: true, clientX: 10, clientY: 10 }));
+
+      expect(within(screen.getByTestId("drag-ghost")).getByText("Feature One")).toBeInTheDocument();
+    });
+  });
+
   describe("loading skeletons", () => {
     it("shows 4 skeleton rows for Features while loading with none yet, and hides the empty state", () => {
       renderComponent({ featureGroups: [], featuresLoading: true });

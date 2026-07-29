@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw, Boxes, GitBranch, MoreHorizontal, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, ChevronRight, RefreshCw, Boxes, Folder, GitBranch, MoreHorizontal, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AGENT_DOT_COLORS } from "./AgentDot.tsx";
+import { FeatureIconButton } from "./FeatureIconButton.tsx";
 import { type BranchEntity, type FeatureGroup } from "../lib/projectEntities.ts";
 import { type AgentStatus } from "../api.ts";
 import {
@@ -14,6 +15,25 @@ import {
   setFeatureDragData,
   getFeatureDragData,
 } from "../lib/dnd.ts";
+
+/** A fully transparent 1x1 GIF used as every drag's browser drag-image, so the only visible
+ * "ghost" while dragging is our own floating chip (see `dragPos`/`dragging` below) rather than
+ * the browser's default snapshot-of-the-row image. Built once at module scope; guarded for
+ * environments with no `Image` (e.g. this file's own tests run under jsdom, which does have it,
+ * but `setDragImage` itself is guarded separately since the tests' fake `DataTransfer` has no
+ * such method). */
+const TRANSPARENT_DRAG_IMAGE = (() => {
+  if (typeof Image === "undefined") return undefined;
+  const img = new Image();
+  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7";
+  return img;
+})();
+
+function suppressDragImage(e: React.DragEvent<HTMLElement>) {
+  if (TRANSPARENT_DRAG_IMAGE && e.dataTransfer.setDragImage) {
+    e.dataTransfer.setDragImage(TRANSPARENT_DRAG_IMAGE, 0, 0);
+  }
+}
 
 const MAX_ROWS = 10;
 const SKELETON_ROWS = 4;
@@ -336,6 +356,27 @@ export function SidebarRecent({
   const [fetching, setFetching] = useState(false);
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Floating drag-ghost position: tracked via a document-level "dragover" listener (rather than
+  // each row's own onDragOver) so the chip follows the cursor everywhere, including over gaps
+  // between rows/groups that have no drag handler of their own. Only subscribed while a drag is
+  // actually in progress.
+  useEffect(() => {
+    if (!dragging) {
+      setDragPos(null);
+      return;
+    }
+    const onDocDragOver = (e: DragEvent) => {
+      // Some of this file's own tests fire a bare "dragover" Event (jsdom has no DragEvent
+      // constructor, and @testing-library/dom's fireEvent.dragOver falls back to a plain Event
+      // with no clientX/clientY) — ignore those rather than posting the ghost chip at NaN,NaN.
+      if (typeof e.clientX !== "number" || typeof e.clientY !== "number") return;
+      setDragPos({ x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener("dragover", onDocDragOver);
+    return () => document.removeEventListener("dragover", onDocDragOver);
+  }, [dragging]);
 
   const features = featureGroups.map((g) => g.feature);
   // Reordering only ever targets the rendered (capped-at-MAX_ROWS) subset — a feature/branch
@@ -370,6 +411,7 @@ export function SidebarRecent({
   // --- Branch rows (both a feature's member rows and the unfiled Branches rows share this) ---
 
   const handleBranchDragStart = (e: React.DragEvent<HTMLDivElement>, entity: BranchEntity) => {
+    suppressDragImage(e);
     setBranchDragData(e.dataTransfer, { branch: entity.name, sourceFeatureId: entity.featureId });
     setDragging({ kind: "branch", branch: entity.name, sourceFeatureId: entity.featureId });
   };
@@ -442,12 +484,13 @@ export function SidebarRecent({
     }
   };
 
-  const handleFeatureHeaderDragStart = (e: React.DragEvent<HTMLButtonElement>, featureId: string) => {
+  const handleFeatureHeaderDragStart = (e: React.DragEvent<HTMLElement>, featureId: string) => {
+    suppressDragImage(e);
     setFeatureDragData(e.dataTransfer, featureId);
     setDragging({ kind: "feature", featureId });
   };
 
-  const handleFeatureHeaderDragOver = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
+  const handleFeatureHeaderDragOver = (e: React.DragEvent<HTMLElement>, index: number) => {
     // Only intercepts a feature-folder drag — a branch dropped on a header falls through
     // (un-stopped) to the folder's own container fallback (file it into this feature).
     if (dragging?.kind !== "feature") return;
@@ -458,7 +501,7 @@ export function SidebarRecent({
     setDropTarget({ kind: "feature", index: side === "before" ? index : index + 1 });
   };
 
-  const handleFeatureHeaderDrop = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
+  const handleFeatureHeaderDrop = (e: React.DragEvent<HTMLElement>, index: number) => {
     const payload = getFeatureDragData(e.dataTransfer);
     if (!payload) return; // let a branch payload's drop bubble to the folder's own handler
     e.preventDefault();
@@ -553,27 +596,40 @@ export function SidebarRecent({
                     folderDropAfter && "border-b-2 border-primary",
                   )}
                 >
-                  <button
-                    type="button"
+                  <div
                     draggable
                     onDragStart={(e) => handleFeatureHeaderDragStart(e, feature.id)}
                     onDragEnd={clearDrag}
                     onDragOver={(e) => handleFeatureHeaderDragOver(e, featureIdx)}
                     onDrop={(e) => handleFeatureHeaderDrop(e, featureIdx)}
-                    onClick={() => toggleExpanded(feature.id)}
-                    aria-label={isExpanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
-                    className="flex w-full cursor-grab items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent active:cursor-grabbing"
+                    className="flex w-full cursor-grab items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent active:cursor-grabbing"
                   >
-                    {isExpanded ? (
-                      <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">{feature.name}</span>
+                    <FeatureIconButton featureId={feature.id} />
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(feature.id)}
+                      aria-label={isExpanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
+                      className="min-w-0 flex-1 truncate text-left"
+                    >
+                      {feature.name}
+                    </button>
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {branches.length} branch{branches.length === 1 ? "" : "es"}
                     </span>
-                  </button>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-hidden
+                      onClick={() => toggleExpanded(feature.id)}
+                      className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="size-3.5" />
+                      ) : (
+                        <ChevronRight className="size-3.5" />
+                      )}
+                    </button>
+                  </div>
                   {isExpanded && (
                     <div className="ml-4 flex flex-col border-l border-border pl-2">
                       {branches.length === 0 ? (
@@ -662,6 +718,27 @@ export function SidebarRecent({
           )}
         </div>
       </div>
+      {dragging && dragPos && (
+        <div
+          data-testid="drag-ghost"
+          className="pointer-events-none fixed z-50 flex items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+          style={{ left: dragPos.x + 12, top: dragPos.y + 8 }}
+        >
+          {dragging.kind === "branch" ? (
+            <>
+              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="font-mono">{dragging.branch}</span>
+            </>
+          ) : (
+            <>
+              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+              <span>
+                {featureGroups.find((g) => g.feature.id === dragging.featureId)?.feature.name ?? ""}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
