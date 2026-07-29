@@ -281,6 +281,10 @@ export function AgentChat({
     setTimeline((prev) => [...prev, { kind: "you", text: t }]);
     setBusy(true);
     try {
+      // Auto-start the agent on the first message so the user can just type — no explicit Start
+      // click. `running` is false until an agent process is alive for this branch; onStart()
+      // resolves once the process is spawned (stdin ready), then we deliver the message.
+      if (!running) await onStart();
       await onMessage(t);
       return true;
     } catch (err) {
@@ -297,7 +301,9 @@ export function AgentChat({
     await sendText(label);
   };
 
-  const chatEnabled = canChat && running;
+  // Composer is enabled whenever the branch can host an agent — the first message auto-starts it
+  // (see sendText), so we don't require a running process up front.
+  const chatEnabled = canChat;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -325,9 +331,7 @@ export function AgentChat({
           <p className="text-sm text-muted-foreground">
             {!canChat
               ? "Start a session to chat with an agent here."
-              : running
-                ? "Ready — send your first message to begin."
-                : "Start the agent to begin."}
+              : "Send a message to begin — the agent starts on your first message."}
           </p>
         ) : (
           timeline.map((item, i) =>
@@ -379,9 +383,7 @@ export function AgentChat({
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!chatEnabled}
-          placeholder={
-            !canChat ? "Start a session to chat" : running ? "Message the agent…" : "Start the agent to chat"
-          }
+          placeholder={!canChat ? "Start a session to chat" : "Message the agent…"}
           className="min-h-[40px] flex-1 resize-none text-sm"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

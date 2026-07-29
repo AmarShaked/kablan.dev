@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
@@ -58,6 +58,26 @@ describe("AgentChat", () => {
     expect(onMessage).toHaveBeenCalledWith("do the thing");
     expect(screen.getByText("You")).toBeInTheDocument();
     expect(screen.getByText("do the thing")).toBeInTheDocument();
+  });
+
+  it("auto-starts the agent on the first message when it isn't running", async () => {
+    const { onStart, onMessage } = renderChat([]); // no status seed → agent not running
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "kick off");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    // waitFor polls inside act(), flushing the async start→send→setBusy(false) chain.
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("kick off"));
+    expect(onStart).toHaveBeenCalled();
+    expect(screen.getByText("kick off")).toBeInTheDocument();
+  });
+
+  it("does not re-start an already-running agent when sending", async () => {
+    const { onStart, onMessage } = renderChat([workingStatus]); // already running
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "another");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("another"));
+    expect(onStart).not.toHaveBeenCalled();
   });
 
   it("shows a thinking indicator while the agent status is working", () => {
