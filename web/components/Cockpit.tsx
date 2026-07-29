@@ -6,20 +6,11 @@ import { api, type RunningServer, type LogLine } from "../api.ts";
 import { useBranches, useWorktrees, useFactory, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
+import { findServerUrl } from "../lib/serverUrl.ts";
 import { AgentChat } from "./AgentChat.tsx";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import { Button } from "@/components/ui/button";
 import { isTauri } from "../lib/version.ts";
-
-/** Find the first localhost URL a dev server printed, so it can be opened. */
-function findServerUrl(logs: LogLine[]): string | null {
-  const re = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+(?:\/\S*)?/;
-  for (const l of logs) {
-    const m = l.text.match(re);
-    if (m) return m[0].replace(/0\.0\.0\.0/, "localhost");
-  }
-  return null;
-}
 
 /**
  * The unified cockpit for a single branch — chat (left) + details (right) once it has a working

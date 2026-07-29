@@ -9,6 +9,7 @@ function renderRail(overrides: Partial<Parameters<typeof GlobalRail>[0]> = {}) {
     active: null,
     onInbox: vi.fn(),
     onSettings: vi.fn(),
+    onActivity: vi.fn(),
     theme: "dark" as const,
     onToggleTheme: vi.fn(),
     ...overrides,
@@ -18,11 +19,34 @@ function renderRail(overrides: Partial<Parameters<typeof GlobalRail>[0]> = {}) {
 }
 
 describe("GlobalRail", () => {
-  it("renders Inbox and Settings items with no badge when inboxCount is 0", () => {
+  it("renders Inbox, Activity and Settings items with no badge when inboxCount is 0", () => {
     renderRail();
     expect(screen.getByLabelText("Inbox")).toBeInTheDocument();
+    expect(screen.getByLabelText("Activity")).toBeInTheDocument();
     expect(screen.getByLabelText("Settings")).toBeInTheDocument();
     expect(screen.queryByText(/^\d+$/)).not.toBeInTheDocument();
+  });
+
+  it("places Activity between Inbox and Settings", () => {
+    renderRail();
+    const labels = screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    const inboxIdx = labels.indexOf("Inbox");
+    const activityIdx = labels.indexOf("Activity");
+    const settingsIdx = labels.indexOf("Settings");
+    expect(inboxIdx).toBeLessThan(activityIdx);
+    expect(activityIdx).toBeLessThan(settingsIdx);
+  });
+
+  it("fires onActivity when Activity is clicked", async () => {
+    const props = renderRail();
+    await userEvent.click(screen.getByLabelText("Activity"));
+    expect(props.onActivity).toHaveBeenCalled();
+  });
+
+  it("marks Activity current when active is 'activity'", () => {
+    renderRail({ active: "activity" });
+    expect(screen.getByLabelText("Activity")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByLabelText("Inbox")).not.toHaveAttribute("aria-current");
   });
 
   it("shows an unread badge on Inbox when inboxCount > 0", () => {

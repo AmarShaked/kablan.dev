@@ -29,6 +29,7 @@ import { ProjectMenu } from "./components/ProjectMenu.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { Cockpit } from "./components/Cockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
+import { ActivityView } from "./components/ActivityView.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { buildBranchEntities } from "./lib/projectEntities.ts";
 import { branchKey } from "./lib/agentKey.ts";
@@ -45,7 +46,7 @@ const LAST_PROJECT_KEY = "kablan.lastProject";
 // the unified branch Cockpit, "inbox" renders InboxView, "settings" renders SettingsPage. Every
 // branch — filed into a feature or not — opens the same cockpit; there's no separate
 // task-force/worktree/bare-branch target kind anymore (see `cockpitBranch` below).
-type View = "project" | "settings" | "cockpit" | "inbox";
+type View = "project" | "settings" | "cockpit" | "inbox" | "activity";
 type Theme = "light" | "dark";
 
 function useTheme(): [Theme, () => void] {
@@ -71,7 +72,7 @@ export function App() {
 function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
-  const { ingest, agentFor } = useAgentStream();
+  const { ingest, agentFor, version: agentStreamVersion, snapshotStatuses } = useAgentStream();
   const { data: projects = [] } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("project");
@@ -214,6 +215,27 @@ function AppContent() {
     setView("cockpit");
   }, []);
 
+  // Cross-project jump targets used by the Activity view — an agent row selects its project
+  // then opens its branch cockpit; a server row (project-level today, see Phase 3 note) at least
+  // selects the project. Mirrors `openInboxEntry` below.
+  const openBranchFromActivity = useCallback(
+    (project: string, branch: string) => {
+      setSelected(project);
+      openBranch(branch);
+      loadLogsFor(project);
+    },
+    [openBranch, loadLogsFor],
+  );
+  const openProjectFromActivity = useCallback(
+    (project: string) => {
+      setSelected(project);
+      setView("project");
+      setCockpitBranch(null);
+      loadLogsFor(project);
+    },
+    [loadLogsFor],
+  );
+
   // Global attention inbox — jump straight into a branch's cockpit from any project, without
   // going through the project menu's drill-down.
   const inboxQuery = useInbox();
@@ -258,6 +280,15 @@ function AppContent() {
     [selected, agentFor],
   );
 
+  // Live snapshot of every agent's status, across all projects — recomputed whenever the agent
+  // stream ingests something (`agentStreamVersion` bumps on every ingest), so the Activity view
+  // updates as statuses change without needing its own subscription plumbing.
+  const activityStatuses = useMemo(
+    () => snapshotStatuses(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapshotStatuses, agentStreamVersion],
+  );
+
   const branchEntities = useMemo(
     () =>
       buildBranchEntities({
@@ -299,7 +330,8 @@ function AppContent() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const railActive = view === "inbox" ? "inbox" : view === "settings" ? "settings" : null;
+  const railActive =
+    view === "inbox" ? "inbox" : view === "activity" ? "activity" : view === "settings" ? "settings" : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -310,6 +342,7 @@ function AppContent() {
           inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
           active={railActive}
           onInbox={() => isTauri && setView("inbox")}
+          onActivity={() => setView("activity")}
           onSettings={() => setView("settings")}
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -376,6 +409,14 @@ function AppContent() {
             />
           ) : view === "inbox" && isTauri ? (
             <InboxView onOpen={openInboxEntry} />
+          ) : view === "activity" ? (
+            <ActivityView
+              statuses={activityStatuses}
+              servers={servers}
+              logs={logs}
+              onOpenBranch={openBranchFromActivity}
+              onOpenProject={openProjectFromActivity}
+            />
           ) : !selectedProject ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
               <FolderGit2 className="size-10 opacity-40" />

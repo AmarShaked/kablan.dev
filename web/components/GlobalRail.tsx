@@ -1,12 +1,13 @@
-import { Inbox, Settings, Sun, Moon, User } from "lucide-react";
+import { Inbox, Activity, Settings, Sun, Moon, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type GlobalRailActive = "inbox" | "settings" | null;
+export type GlobalRailActive = "inbox" | "activity" | "settings" | null;
 
 export interface GlobalRailProps {
   inboxCount: number;
   active: GlobalRailActive;
   onInbox: () => void;
+  onActivity: () => void;
   onSettings: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -53,7 +54,15 @@ function RailButton({
  * and a user-avatar placeholder pinned to the bottom (behind a divider). Fixed width, no scroll —
  * project-scoped browsing lives one column over, in `ProjectMenu`.
  */
-export function GlobalRail({ inboxCount, active, onInbox, onSettings, theme, onToggleTheme }: GlobalRailProps) {
+export function GlobalRail({
+  inboxCount,
+  active,
+  onInbox,
+  onActivity,
+  onSettings,
+  theme,
+  onToggleTheme,
+}: GlobalRailProps) {
   return (
     <div className="flex h-full w-16 shrink-0 flex-col items-center gap-1 bg-neutral-950 py-3">
       <div
@@ -64,6 +73,7 @@ export function GlobalRail({ inboxCount, active, onInbox, onSettings, theme, onT
       </div>
 
       <RailButton icon={Inbox} label="Inbox" active={active === "inbox"} onClick={onInbox} badge={inboxCount} />
+      <RailButton icon={Activity} label="Activity" active={active === "activity"} onClick={onActivity} />
       <RailButton icon={Settings} label="Settings" active={active === "settings"} onClick={onSettings} />
 
       <div className="flex-1" />
