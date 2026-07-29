@@ -85,17 +85,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/inbox", get(get_inbox))
         .route("/api/projects/:name/factory", get(get_factory))
         .route("/api/projects/:name/factory/features", post(post_feature))
-        .route("/api/projects/:name/factory/features/:fid/taskforces", post(post_task_force))
-        .route("/api/projects/:name/factory/taskforces/:tid", delete(delete_task_force_route))
-        .route("/api/projects/:name/factory/taskforces/:tid/agent", get(get_agent))
-        .route("/api/projects/:name/factory/taskforces/:tid/agent/start", post(post_agent_start))
-        .route("/api/projects/:name/factory/taskforces/:tid/agent/message", post(post_agent_message))
-        .route("/api/projects/:name/factory/taskforces/:tid/agent/stop", post(post_agent_stop))
+        .route("/api/projects/:name/factory/features/:fid", delete(delete_feature_route))
+        .route("/api/projects/:name/factory/features/:fid/file", post(post_file_branch))
+        .route("/api/projects/:name/factory/features/:fid/unfile", post(post_unfile_branch))
+        .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
+        .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
+        .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
+        .route("/api/projects/:name/factory/agent", get(get_branch_agent))
         .route("/api/projects/:name/worktrees", post(post_worktree))
-        .route("/api/projects/:name/worktree-agent/start", post(post_worktree_agent_start))
-        .route("/api/projects/:name/worktree-agent/message", post(post_worktree_agent_message))
-        .route("/api/projects/:name/worktree-agent/stop", post(post_worktree_agent_stop))
-        .route("/api/projects/:name/worktree-agent", get(get_worktree_agent))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -264,14 +261,12 @@ fn factory_store_path() -> std::path::PathBuf {
 }
 
 async fn get_factory(Path(name): Path<String>) -> ApiResult {
-    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    projects::project_path_from_name(&name).map_err(bad)?;
     let key = name.clone();
     let out = blocking(move || {
         let file = factory::load_file(&factory_store_path());
-        let features = file.projects.get(&key).cloned().unwrap_or_default().features;
-        let orphaned = factory::orphaned_task_forces(&file, &key);
-        let _ = dir; // reserved for future git-based reconcile
-        json!({ "features": features, "orphaned": orphaned })
+        let pf = file.projects.get(&key).cloned().unwrap_or_default();
+        json!({ "features": pf.features, "branchState": pf.branch_state })
     })
     .await;
     Ok(Json(out))
@@ -294,67 +289,13 @@ async fn post_feature(Path(name): Path<String>, body: Bytes) -> ApiResult {
     Ok(Json(serde_json::to_value(feat).unwrap()))
 }
 
-async fn post_task_force(State(st): State<AppState>, Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
-    let dir = projects::project_path_from_name(&name).map_err(bad)?;
-    let b = parse_body(&body);
-    let tf_name = b.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let linear = b.get("linearTicket").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let base_override = b.get("baseBranch").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let start = b.get("start").and_then(|v| v.as_bool()).unwrap_or(false);
-    let key = name.clone();
-    let tf = blocking(move || {
-        let cfg = config::load();
-        let base = base_override
-            .or_else(|| { let d = cfg.factory.default_base_branch.trim(); if d.is_empty() { None } else { Some(d.to_string()) } })
-            .or_else(|| git::default_branch(&dir))
-            .unwrap_or_else(|| "main".to_string());
-        let wt_root = if cfg.factory.worktree_root.trim().is_empty() {
-            config::config_dir().join("worktrees")
-        } else {
-            std::path::PathBuf::from(cfg.factory.worktree_root.trim())
-        };
-        let created_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let path = factory_store_path();
-        let mut file = factory::load_file(&path);
-        let tf = factory::create_task_force(
-            &mut file, &key, &fid,
-            factory::CreateTfArgs { name: tf_name, base_branch: base, linear_ticket: linear },
-            std::path::Path::new(&dir), &wt_root, &cfg.factory.branch_pattern, created_at,
-        )?;
-        if let Err(e) = factory::save_file(&path, &file) {
-            // Roll back the just-created worktree + branch so a failed store
-            // save doesn't leave an orphaned worktree/branch behind.
-            let _ = git::git(&dir, &["worktree", "remove", "--force", "--", &tf.worktree_path]);
-            let _ = git::git(&dir, &["branch", "-D", &tf.branch]);
-            return Err(e);
-        }
-        Ok::<_, String>(tf)
-    })
-    .await
-    .map_err(bad)?;
-
-    let mut out = serde_json::to_value(&tf).unwrap();
-    if start {
-        match start_agent(&st, &name, &tf.id).await {
-            Ok(view) => out["agent"] = serde_json::to_value(view).unwrap(),
-            Err(e) => out["agentError"] = json!(e.1),
-        }
-    }
-    Ok(Json(out))
-}
-
-async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body: Bytes) -> ApiResult {
-    let dir = projects::project_path_from_name(&name).map_err(bad)?;
-    let b = parse_body(&body);
-    let remove_wt = b.get("removeWorktree").and_then(|v| v.as_bool()).unwrap_or(true);
+async fn delete_feature_route(Path((name, fid)): Path<(String, String)>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
     let key = name.clone();
     blocking(move || {
         let path = factory_store_path();
         let mut file = factory::load_file(&path);
-        factory::delete_task_force(&mut file, &key, &tid, std::path::Path::new(&dir), remove_wt)?;
+        factory::delete_feature(&mut file, &key, &fid)?;
         factory::save_file(&path, &file)?;
         Ok::<_, String>(())
     })
@@ -363,10 +304,53 @@ async fn delete_task_force_route(Path((name, tid)): Path<(String, String)>, body
     Ok(Json(json!({ "ok": true })))
 }
 
-/// Shared start logic for `POST .../agent/start` and `post_task_force`'s
-/// optional `start: true`. Looks up the task force's worktree + any stored
-/// session id, enforces the concurrent-agent limit, and starts the process.
-async fn start_agent(st: &AppState, name: &str, tid: &str) -> Result<agents::AgentView, ApiError> {
+async fn post_file_branch(Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = b.get("branch").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::file_branch(&mut file, &key, &fid, &branch)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn post_unfile_branch(Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = b.get("branch").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::unfile_branch(&mut file, &key, &fid, &branch)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Registry/WS key for a branch's owned agent. Branch names contain `/`, so
+/// they never appear as a path segment — always body/query — but they're
+/// safe to fold into this key since it's never itself used as a URL path.
+fn branch_agent_key(name: &str, branch: &str) -> String {
+    format!("{name}::branch:{branch}")
+}
+
+/// Shared start logic for `POST .../factory/agent/start`. Ensures the
+/// branch's working copy exists (reusing it if the branch is already
+/// checked out elsewhere), persists it, resumes from any stored session id,
+/// enforces the concurrent-agent limit, and starts the process.
+async fn start_branch_agent(st: &AppState, name: &str, branch: &str) -> Result<agents::AgentView, ApiError> {
+    let dir = projects::project_path_from_name(name).map_err(bad)?;
     let cfg = config::load();
     // TODO: running_count() is a soft cap — it's checked-then-acted-on without
     // holding a lock across the check and the later `agents.start()` call, so
@@ -375,43 +359,98 @@ async fn start_agent(st: &AppState, name: &str, tid: &str) -> Result<agents::Age
         return Err(bad("agent limit reached"));
     }
     let name2 = name.to_string();
-    let tid2 = tid.to_string();
-    let found = blocking(move || {
-        let file = factory::load_file(&factory_store_path());
-        factory::find_task_force(&file, &name2, &tid2)
-            .map(|tf| (tf.worktree_path.clone(), tf.agent_session_id.clone()))
+    let branch2 = branch.to_string();
+    let cfg2 = cfg.clone();
+    let (worktree_path, session_id) = blocking(move || {
+        let wt_root = if cfg2.factory.worktree_root.trim().is_empty() {
+            config::config_dir().join("worktrees")
+        } else {
+            std::path::PathBuf::from(cfg2.factory.worktree_root.trim())
+        };
+        let wt = git::ensure_worktree_for_branch(std::path::Path::new(&dir), &wt_root, &name2, &branch2)?;
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
+        let session_id = factory::get_branch_state(&file, &name2, &branch2).and_then(|s| s.agent_session_id.clone());
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>((wt.path, session_id))
     })
-    .await;
-    let (worktree_path, session_id) = found.ok_or_else(|| bad("Unknown task force"))?;
-    let key = format!("{name}::{tid}");
+    .await
+    .map_err(bad)?;
+
+    let key = branch_agent_key(name, branch);
     let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref());
     let view = st.agents.start(&key, &worktree_path, argv, session_id.as_deref());
     Ok(view)
 }
 
-async fn post_agent_start(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let view = start_agent(&st, &name, &tid).await?;
+fn branch_from_body(b: &Value) -> Result<String, ApiError> {
+    match b.get("branch").and_then(|v| v.as_str()).map(str::trim) {
+        Some(s) if !s.is_empty() => Ok(s.to_string()),
+        _ => Err(bad("branch is required")),
+    }
+}
+
+async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let view = start_branch_agent(&st, &name, &branch).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 
-async fn post_agent_message(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
     projects::project_path_from_name(&name).map_err(bad)?;
     let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
     let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if text.is_empty() {
         return Err(bad("text is required"));
     }
-    let key = format!("{name}::{tid}");
+    let key = branch_agent_key(&name, &branch);
     let ok = st.agents.send(&key, &text);
     Ok(Json(json!({ "ok": ok })))
 }
 
-async fn post_agent_stop(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
+async fn post_branch_agent_stop(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
     projects::project_path_from_name(&name).map_err(bad)?;
-    let key = format!("{name}::{tid}");
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let key = branch_agent_key(&name, &branch);
     let ok = st.agents.stop(&key);
     Ok(Json(json!({ "ok": ok })))
+}
+
+async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let branch = match q.get("branch").filter(|s| !s.is_empty()) {
+        Some(s) => s.clone(),
+        None => return Err(bad("branch is required")),
+    };
+    let key = branch_agent_key(&name, &branch);
+    let agent = st.agents.get(&key);
+    let events = st.agents.events(&key);
+
+    // Lightweight reconcile: the session id arrives asynchronously via the
+    // agent's stream, so persist it into the store the first time a
+    // reconnecting UI polls and finds one we haven't recorded yet.
+    if let Some(sid) = agent.as_ref().and_then(|a| a.session_id.clone()) {
+        let name2 = name.clone();
+        let branch2 = branch.clone();
+        blocking(move || {
+            let path = factory_store_path();
+            let mut file = factory::load_file(&path);
+            let needs_persist = factory::get_branch_state(&file, &name2, &branch2)
+                .map(|s| s.agent_session_id.is_none())
+                .unwrap_or(true);
+            if needs_persist {
+                factory::set_branch_session(&mut file, &name2, &branch2, &sid);
+                let _ = factory::save_file(&path, &file);
+            }
+        })
+        .await;
+    }
+
+    Ok(Json(json!({ "agent": agent, "events": events })))
 }
 
 async fn get_inbox(State(st): State<AppState>) -> ApiResult {
@@ -422,42 +461,6 @@ async fn get_inbox(State(st): State<AppState>) -> ApiResult {
         factory::build_inbox(&file, &statuses)
     }).await;
     Ok(Json(serde_json::to_value(out).unwrap()))
-}
-
-async fn get_agent(State(st): State<AppState>, Path((name, tid)): Path<(String, String)>) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let key = format!("{name}::{tid}");
-    let agent = st.agents.get(&key);
-    let events = st.agents.events(&key);
-
-    // Lightweight reconcile: the session id arrives asynchronously via the
-    // agent's stream, so persist it into the store the first time a
-    // reconnecting UI polls and finds one we haven't recorded yet.
-    if let Some(sid) = agent.as_ref().and_then(|a| a.session_id.clone()) {
-        let name2 = name.clone();
-        let tid2 = tid.clone();
-        blocking(move || {
-            let path = factory_store_path();
-            let mut file = factory::load_file(&path);
-            let needs_persist = factory::find_task_force(&file, &name2, &tid2)
-                .map(|tf| tf.agent_session_id.is_none())
-                .unwrap_or(false);
-            if needs_persist && factory::set_agent_session(&mut file, &name2, &tid2, &sid).is_ok() {
-                let _ = factory::save_file(&path, &file);
-            }
-        })
-        .await;
-    }
-
-    Ok(Json(json!({ "agent": agent, "events": events })))
-}
-
-// --- Ad-hoc worktree agents (any git worktree, not just task forces) ---
-
-/// WS/registry key for an agent running in an arbitrary worktree, as opposed
-/// to `{name}::{tid}` for task-force agents.
-fn worktree_agent_key(name: &str, worktree_path: &str) -> String {
-    format!("{name}::wt:{worktree_path}")
 }
 
 async fn post_worktree(Path(name): Path<String>, body: Bytes) -> ApiResult {
@@ -480,89 +483,6 @@ async fn post_worktree(Path(name): Path<String>, body: Bytes) -> ApiResult {
     .await
     .map_err(bad)?;
     Ok(Json(serde_json::to_value(wt).unwrap()))
-}
-
-async fn post_worktree_agent_start(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let b = parse_body(&body);
-    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if worktree_path.is_empty() {
-        return Err(bad("worktreePath is required"));
-    }
-    let cfg = config::load();
-    // Same soft cap (and TOCTOU caveat) as `start_agent` for task forces.
-    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
-        return Err(bad("agent limit reached"));
-    }
-    let name2 = name.clone();
-    let wt2 = worktree_path.clone();
-    let sid = blocking(move || {
-        let file = factory::load_file(&factory_store_path());
-        factory::get_worktree_session(&file, &name2, &wt2)
-    })
-    .await;
-    let argv = agents::build_agent_argv(&cfg.factory, sid.as_deref());
-    let key = worktree_agent_key(&name, &worktree_path);
-    let view = st.agents.start(&key, &worktree_path, argv, sid.as_deref());
-    Ok(Json(serde_json::to_value(view).unwrap()))
-}
-
-async fn post_worktree_agent_message(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let b = parse_body(&body);
-    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if worktree_path.is_empty() {
-        return Err(bad("worktreePath is required"));
-    }
-    if text.is_empty() {
-        return Err(bad("text is required"));
-    }
-    let key = worktree_agent_key(&name, &worktree_path);
-    let ok = st.agents.send(&key, &text);
-    Ok(Json(json!({ "ok": ok })))
-}
-
-async fn post_worktree_agent_stop(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let b = parse_body(&body);
-    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if worktree_path.is_empty() {
-        return Err(bad("worktreePath is required"));
-    }
-    let key = worktree_agent_key(&name, &worktree_path);
-    let ok = st.agents.stop(&key);
-    Ok(Json(json!({ "ok": ok })))
-}
-
-async fn get_worktree_agent(State(st): State<AppState>, Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
-    let worktree_path = match q.get("worktreePath").filter(|s| !s.is_empty()) {
-        Some(s) => s.clone(),
-        None => return Err(bad("worktreePath is required")),
-    };
-    let key = worktree_agent_key(&name, &worktree_path);
-    let agent = st.agents.get(&key);
-    let events = st.agents.events(&key);
-
-    // Same lightweight reconcile as `get_agent`, keyed by worktree path
-    // instead of task-force id.
-    if let Some(sid) = agent.as_ref().and_then(|a| a.session_id.clone()) {
-        let name2 = name.clone();
-        let wt2 = worktree_path.clone();
-        blocking(move || {
-            let path = factory_store_path();
-            let mut file = factory::load_file(&path);
-            let needs_persist = factory::get_worktree_session(&file, &name2, &wt2).is_none();
-            if needs_persist {
-                factory::set_worktree_session(&mut file, &name2, &wt2, &sid);
-                let _ = factory::save_file(&path, &file);
-            }
-        })
-        .await;
-    }
-
-    Ok(Json(json!({ "agent": agent, "events": events })))
 }
 
 async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {

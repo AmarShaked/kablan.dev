@@ -377,6 +377,23 @@ pub fn add_worktree_for_branch(
     }))
 }
 
+/// Return the existing worktree for `branch` if one is already checked out
+/// (scanning `list_worktrees`), else create one via `add_worktree_for_branch`.
+/// Used by the branch-centric agent-start flow so starting an agent twice on
+/// the same branch reuses its working copy instead of erroring.
+pub fn ensure_worktree_for_branch(
+    repo_dir: &Path,
+    worktree_root: &Path,
+    project: &str,
+    branch: &str,
+) -> Result<Worktree, String> {
+    let repo = repo_dir.to_string_lossy().to_string();
+    if let Some(existing) = list_worktrees(&repo).into_iter().find(|w| w.branch.as_deref() == Some(branch)) {
+        return Ok(existing);
+    }
+    add_worktree_for_branch(repo_dir, worktree_root, project, branch)
+}
+
 pub fn checkout(dir: &str, branch: &str) -> Result<(), String> {
     git(dir, &["checkout", branch]).map(|_| ())
 }
@@ -529,6 +546,23 @@ mod tests {
 
         let expected = std::fs::canonicalize(&wt_root).unwrap().join("acme-app").join("feature-cool-thing");
         assert_eq!(std::fs::canonicalize(&wt.path).unwrap(), expected);
+    }
+
+    #[test]
+    fn ensure_worktree_for_branch_creates_then_reuses() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        git(&d, &["branch", "feature/existing"]).unwrap();
+        let wt_root = tmp();
+
+        let first = ensure_worktree_for_branch(&repo, &wt_root, "acme/app", "feature/existing").unwrap();
+        assert!(Path::new(&first.path).exists());
+
+        // Second call must find the already-checked-out worktree, not error
+        // (git refuses to `worktree add` a branch that's already checked out).
+        let second = ensure_worktree_for_branch(&repo, &wt_root, "acme/app", "feature/existing").unwrap();
+        assert_eq!(second.path, first.path);
+        assert_eq!(second.branch.as_deref(), Some("feature/existing"));
     }
 
     #[test]
