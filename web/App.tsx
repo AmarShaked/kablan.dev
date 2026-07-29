@@ -12,6 +12,7 @@ import {
   Inbox,
   ChevronLeft,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import {
   api,
@@ -495,6 +496,24 @@ function AppContent() {
       </Sidebar>
 
       <SidebarInset className="h-screen overflow-hidden">
+        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
+          <SidebarTrigger />
+          <div className="flex flex-1 justify-center">
+            <button
+              type="button"
+              onClick={() => setCommandOpen(true)}
+              aria-label="Search the project"
+              className="flex w-full max-w-md items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70"
+            >
+              <Search className="size-4 shrink-0" />
+              <span className="truncate">Search features, task forces, branches…</span>
+              <kbd className="ml-auto hidden shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
+          <div className="w-7 shrink-0" />
+        </div>
         {newVersion && !updateDismissed && (
           <div className="flex items-center gap-3 border-b border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm">
             <ArrowUpCircle className="size-4 shrink-0 text-[var(--success)]" />
@@ -542,15 +561,10 @@ function AppContent() {
         ) : view === "inbox" && isTauri ? (
           <InboxView onOpen={openInboxEntry} />
         ) : !selectedProject ? (
-          <>
-            <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-              <SidebarTrigger />
-            </div>
-            <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground gap-3">
-              <FolderGit2 className="size-10 opacity-40" />
-              <div>Select a project to get started</div>
-            </div>
-          </>
+          <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground gap-3">
+            <FolderGit2 className="size-10 opacity-40" />
+            <div>Select a project to get started</div>
+          </div>
         ) : view === "cockpit" ? (
           <>
             <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
