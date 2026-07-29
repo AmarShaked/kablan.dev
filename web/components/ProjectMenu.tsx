@@ -22,11 +22,15 @@ export interface ProjectMenuProps {
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
   onOpenBranch: (name: string) => void;
   onOpenWorktree: (e: ProjectEntity) => void;
-  onViewAll: (kind: "features" | "branches" | "worktrees") => void;
   /** Fetches all remotes for the selected project (`git fetch --all --prune`) and invalidates
    * the branches/worktrees queries — the same action `OverviewTab`'s "Fetch" button used to
    * trigger, now surfaced here (in the Worktrees group header) since the Branches tab is gone. */
   onFetch: () => Promise<void> | void;
+  /** Pending state of the underlying Features/Worktrees/Branches queries — threaded down to
+   * `SidebarRecent` so it can show skeleton rows instead of a premature "No …" empty state. */
+  featuresLoading?: boolean;
+  worktreesLoading?: boolean;
+  branchesLoading?: boolean;
 }
 
 /**
@@ -46,8 +50,10 @@ export function ProjectMenu({
   onOpenTaskForce,
   onOpenBranch,
   onOpenWorktree,
-  onViewAll,
   onFetch,
+  featuresLoading,
+  worktreesLoading,
+  branchesLoading,
 }: ProjectMenuProps) {
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
@@ -71,8 +77,10 @@ export function ProjectMenu({
           onOpenTaskForce={onOpenTaskForce}
           onOpenBranch={onOpenBranch}
           onOpenWorktree={onOpenWorktree}
-          onViewAll={onViewAll}
           onFetch={onFetch}
+          featuresLoading={featuresLoading}
+          worktreesLoading={worktreesLoading}
+          branchesLoading={branchesLoading}
         />
       </div>
     </div>

@@ -25,13 +25,19 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { GlobalRail } from "./components/GlobalRail.tsx";
+import { TitleBar } from "./components/TitleBar.tsx";
 import { ProjectMenu } from "./components/ProjectMenu.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { Cockpit, type CockpitTarget } from "./components/Cockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { buildProjectEntities, type ProjectEntity } from "./lib/projectEntities.ts";
+import { pickDefaultProject } from "./lib/pickDefaultProject.ts";
 import { useProjects, useFactory, useBranches, useWorktrees, useInbox, qk } from "./queries.ts";
+
+/** localStorage key for the most-recently-selected project name — read on startup to restore the
+ * user's last project (see `pickDefaultProject`), written on every manual selection. */
+const LAST_PROJECT_KEY = "kablan.lastProject";
 
 // Two-rail shell (Slack-style): GlobalRail (Inbox/Settings/Theme, always visible) + ProjectMenu
 // (switcher + Features/Worktrees/Branches, visible once a project is selected) + a main area
@@ -206,12 +212,27 @@ function AppContent() {
   }, [ingest]);
 
   const selectProject = (name: string) => {
+    localStorage.setItem(LAST_PROJECT_KEY, name);
     setSelected(name);
     setView("project");
     setCockpitTarget(null);
     setExpandFeatureId(null);
     loadLogsFor(name);
   };
+
+  // Auto-select a default project once the project list first loads, so the app doesn't open on
+  // an empty "Select a project" screen every time. Guarded on `selected === null` so this only
+  // ever fires before the user (or this same effect) has made a choice — it never overrides a
+  // later manual selection, including a user re-choosing `null` isn't possible via the UI.
+  useEffect(() => {
+    if (selected !== null || projects.length === 0) return;
+    const lastOpened = localStorage.getItem(LAST_PROJECT_KEY);
+    const name = pickDefaultProject(projects, lastOpened);
+    if (name) selectProject(name);
+    // selectProject is redefined every render (not memoized) — reacting to `projects`/`selected`
+    // is what matters here, and the `selected` guard above makes this idempotent regardless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, selected]);
 
   const openTaskForce = useCallback((featureId: string, taskForceId: string) => {
     setCockpitTarget({ kind: "taskForce", featureId, taskForceId });
@@ -359,10 +380,6 @@ function AppContent() {
     [factoryQuery.data, selected, unread],
   );
 
-  // "View all" (a group has more than the sidebar's top-10) opens the unbounded ⌘K search
-  // instead of a dedicated list view — there's no more per-kind tab to land on.
-  const viewAll = useCallback(() => setCommandOpen(true), []);
-
   const selectEntity = useCallback(
     (entity: ProjectEntity) => {
       switch (entity.kind) {
@@ -417,153 +434,159 @@ function AppContent() {
   const railActive = view === "inbox" ? "inbox" : view === "settings" ? "settings" : null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <GlobalRail
-        inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
-        active={railActive}
-        onInbox={() => isTauri && setView("inbox")}
-        onSettings={() => setView("settings")}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+    <div className="flex h-screen flex-col overflow-hidden">
+      <TitleBar isTauri={isTauri} projectLabel={selected} onOpenSearch={() => setCommandOpen(true)} />
 
-      <ProjectMenu
-        projects={projects}
-        selected={selected}
-        onSelectProject={selectProject}
-        servers={servers}
-        onRescan={refreshProjects}
-        entities={{
-          features: projectEntities.features,
-          taskForces: projectEntities.taskForces,
-          branches: projectEntities.branches,
-          worktrees: projectEntities.worktrees,
-        }}
-        unreadFor={unreadForFeature}
-        onOpenFeature={openFeatureHome}
-        onOpenTaskForce={openTaskForce}
-        onOpenBranch={openBranchByName}
-        onOpenWorktree={openWorktreeEntity}
-        onViewAll={viewAll}
-        onFetch={fetchRemote}
-      />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <GlobalRail
+          inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
+          active={railActive}
+          onInbox={() => isTauri && setView("inbox")}
+          onSettings={() => setView("settings")}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {newVersion && !updateDismissed && (
-          <div className="flex items-center gap-3 border-b border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm">
-            <ArrowUpCircle className="size-4 shrink-0 text-[var(--success)]" />
-            <span>
-              Kablan.dev <strong>v{newVersion}</strong> is available.
-            </span>
-            {tauriUpdate ? (
+        <ProjectMenu
+          projects={projects}
+          selected={selected}
+          onSelectProject={selectProject}
+          servers={servers}
+          onRescan={refreshProjects}
+          entities={{
+            features: projectEntities.features,
+            taskForces: projectEntities.taskForces,
+            branches: projectEntities.branches,
+            worktrees: projectEntities.worktrees,
+          }}
+          unreadFor={unreadForFeature}
+          onOpenFeature={openFeatureHome}
+          onOpenTaskForce={openTaskForce}
+          onOpenBranch={openBranchByName}
+          onOpenWorktree={openWorktreeEntity}
+          onFetch={fetchRemote}
+          featuresLoading={factoryQuery.isPending}
+          worktreesLoading={worktreesQuery.isPending}
+          branchesLoading={branchesQuery.isPending}
+        />
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {newVersion && !updateDismissed && (
+            <div className="flex items-center gap-3 border-b border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm">
+              <ArrowUpCircle className="size-4 shrink-0 text-[var(--success)]" />
+              <span>
+                Kablan.dev <strong>v{newVersion}</strong> is available.
+              </span>
+              {tauriUpdate ? (
+                <button
+                  onClick={runTauriUpdate}
+                  disabled={updating}
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30 disabled:opacity-60"
+                >
+                  <Download className="size-3.5" /> {updating ? "Updating…" : "Update & restart"}
+                </button>
+              ) : (
+                <a
+                  href={DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30"
+                >
+                  <Download className="size-3.5" /> Download
+                </a>
+              )}
               <button
-                onClick={runTauriUpdate}
-                disabled={updating}
-                className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30 disabled:opacity-60"
+                onClick={() => setUpdateDismissed(true)}
+                aria-label="Dismiss"
+                className="ml-auto text-muted-foreground hover:text-foreground"
               >
-                <Download className="size-3.5" /> {updating ? "Updating…" : "Update & restart"}
-              </button>
-            ) : (
-              <a
-                href={DOWNLOAD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-md bg-[var(--success)]/20 px-2 py-0.5 font-medium text-[var(--success)] transition-colors hover:bg-[var(--success)]/30"
-              >
-                <Download className="size-3.5" /> Download
-              </a>
-            )}
-            <button
-              onClick={() => setUpdateDismissed(true)}
-              aria-label="Dismiss"
-              className="ml-auto text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        )}
-        {view === "settings" ? (
-          <SettingsPage
-            onClose={() => setView("project")}
-            onConfigChanged={async () => {
-              const c = await api.getConfig();
-              setLinearWorkspace(c.linearWorkspace);
-              setNotifications(c.factory.notifications);
-              await refreshProjects();
-            }}
-            projects={projects}
-          />
-        ) : view === "inbox" && isTauri ? (
-          <InboxView onOpen={openInboxEntry} />
-        ) : !selectedProject ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-            <FolderGit2 className="size-10 opacity-40" />
-            <div>Select a project to get started</div>
-          </div>
-        ) : view === "cockpit" ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
-              <button
-                type="button"
-                onClick={() => setView("project")}
-                aria-label="Back to project"
-                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <ChevronLeft className="size-3.5" />
-                Back
+                <X className="size-4" />
               </button>
             </div>
-            {resolvedCockpit.status === "ready" ? (
-              <Cockpit
-                key={cockpitTargetRefKey(cockpitTarget!)}
-                project={selectedProject.name}
-                target={resolvedCockpit.target}
-                logs={logs[selectedProject.name] ?? []}
-                onStarted={(wt: Worktree) => {
-                  // I1: "Start a session" created the worktree, but nothing had invalidated
-                  // `qk.worktrees` — the cache still didn't contain it, so switching the target
-                  // to `{kind:"worktree", path}` remounted `Cockpit` (new key) into a
-                  // `resolvedCockpit` that could never find it, i.e. permanent "Loading…"/
-                  // "notFound". `api.createWorktree`'s response is already the confirmed,
-                  // canonical entry (the backend looks it up via `list_worktrees` before
-                  // returning — see `git::add_worktree_for_branch`), so seed the cache with it
-                  // directly rather than invalidating: an invalidate-triggered background
-                  // refetch racing this seed could otherwise clobber it with a stale response
-                  // (e.g. a slow/cached list on the server side) before the seed ever renders.
-                  queryClient.setQueryData<Worktree[]>(qk.worktrees(selectedProject.name), (prev) => {
-                    const list = prev ?? [];
-                    return list.some((w) => w.path === wt.path) ? list : [...list, wt];
-                  });
-                  setCockpitTarget({ kind: "worktree", worktreePath: wt.path });
-                }}
-              />
-            ) : resolvedCockpit.status === "pending" ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Loading…
-              </div>
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-                <div>This {cockpitTargetLabel} no longer exists.</div>
-                {/* Distinct accessible name from the header's "Back to project" button above
-                    (same view, but this one is the empty state's own explicit call-to-action). */}
+          )}
+          {view === "settings" ? (
+            <SettingsPage
+              onClose={() => setView("project")}
+              onConfigChanged={async () => {
+                const c = await api.getConfig();
+                setLinearWorkspace(c.linearWorkspace);
+                setNotifications(c.factory.notifications);
+                await refreshProjects();
+              }}
+              projects={projects}
+            />
+          ) : view === "inbox" && isTauri ? (
+            <InboxView onOpen={openInboxEntry} />
+          ) : !selectedProject ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+              <FolderGit2 className="size-10 opacity-40" />
+              <div>Select a project to get started</div>
+            </div>
+          ) : view === "cockpit" ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
                 <button
                   type="button"
                   onClick={() => setView("project")}
-                  className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-accent"
+                  aria-label="Back to project"
+                  className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
-                  Back to features
+                  <ChevronLeft className="size-3.5" />
+                  Back
                 </button>
               </div>
-            )}
-          </div>
-        ) : (
-          <ProjectView
-            project={selectedProject}
-            onOpenTaskForce={openTaskForce}
-            expandFeatureId={expandFeatureId}
-            expandNonce={expandNonce}
-          />
-        )}
+              {resolvedCockpit.status === "ready" ? (
+                <Cockpit
+                  key={cockpitTargetRefKey(cockpitTarget!)}
+                  project={selectedProject.name}
+                  target={resolvedCockpit.target}
+                  logs={logs[selectedProject.name] ?? []}
+                  onStarted={(wt: Worktree) => {
+                    // I1: "Start a session" created the worktree, but nothing had invalidated
+                    // `qk.worktrees` — the cache still didn't contain it, so switching the target
+                    // to `{kind:"worktree", path}` remounted `Cockpit` (new key) into a
+                    // `resolvedCockpit` that could never find it, i.e. permanent "Loading…"/
+                    // "notFound". `api.createWorktree`'s response is already the confirmed,
+                    // canonical entry (the backend looks it up via `list_worktrees` before
+                    // returning — see `git::add_worktree_for_branch`), so seed the cache with it
+                    // directly rather than invalidating: an invalidate-triggered background
+                    // refetch racing this seed could otherwise clobber it with a stale response
+                    // (e.g. a slow/cached list on the server side) before the seed ever renders.
+                    queryClient.setQueryData<Worktree[]>(qk.worktrees(selectedProject.name), (prev) => {
+                      const list = prev ?? [];
+                      return list.some((w) => w.path === wt.path) ? list : [...list, wt];
+                    });
+                    setCockpitTarget({ kind: "worktree", worktreePath: wt.path });
+                  }}
+                />
+              ) : resolvedCockpit.status === "pending" ? (
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  Loading…
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                  <div>This {cockpitTargetLabel} no longer exists.</div>
+                  {/* Distinct accessible name from the header's "Back to project" button above
+                      (same view, but this one is the empty state's own explicit call-to-action). */}
+                  <button
+                    type="button"
+                    onClick={() => setView("project")}
+                    className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-accent"
+                  >
+                    Back to features
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <ProjectView
+              project={selectedProject}
+              onOpenTaskForce={openTaskForce}
+              expandFeatureId={expandFeatureId}
+              expandNonce={expandNonce}
+            />
+          )}
+        </div>
       </div>
 
       <CommandPalette

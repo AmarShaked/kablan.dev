@@ -49,7 +49,6 @@ function renderComponent(overrides: Partial<Parameters<typeof SidebarRecent>[0]>
     onOpenTaskForce: vi.fn(),
     onOpenBranch: vi.fn(),
     onOpenWorktree: vi.fn(),
-    onViewAll: vi.fn(),
     ...overrides,
   };
   render(<SidebarRecent {...props} />);
@@ -138,20 +137,11 @@ describe("SidebarRecent", () => {
     expect(props.onOpenBranch).toHaveBeenCalledWith("main");
   });
 
-  it('shows a "View all" row when a filtered group has more than 10 items, wired to onViewAll', async () => {
+  it('does not show a "View all" row even when a filtered group has more than 10 items', () => {
     const manyBranches = Array.from({ length: 12 }, (_, i) =>
       branchEntity({ id: `b${i}`, label: `branch-${i}`, branch: `branch-${i}`, ts: 100 - i }),
     );
-    const props = renderComponent({ branches: manyBranches });
-
-    const viewAllRows = screen.getAllByText(/view all/i);
-    expect(viewAllRows.length).toBeGreaterThan(0);
-    await userEvent.click(viewAllRows[0]);
-    expect(props.onViewAll).toHaveBeenCalledWith("branches");
-  });
-
-  it("does not show a View all row when a group has 10 or fewer items", () => {
-    renderComponent();
+    renderComponent({ branches: manyBranches });
     expect(screen.queryByText(/view all/i)).not.toBeInTheDocument();
   });
 
@@ -175,5 +165,49 @@ describe("SidebarRecent", () => {
     const button = screen.getByLabelText(/fetch remote/i);
     await userEvent.click(button);
     expect(onFetch).toHaveBeenCalled();
+  });
+
+  describe("loading skeletons", () => {
+    it("shows 4 skeleton rows for Features while loading with no features yet, and hides the empty state", () => {
+      renderComponent({ features: [], featuresLoading: true });
+      expect(screen.getAllByTestId("skeleton-row-features")).toHaveLength(4);
+      expect(screen.queryByText("No features.")).not.toBeInTheDocument();
+    });
+
+    it("does not show Features skeletons once features have loaded", () => {
+      renderComponent({ featuresLoading: false });
+      expect(screen.queryByTestId("skeleton-row-features")).not.toBeInTheDocument();
+      expect(screen.getByText("Feature One")).toBeInTheDocument();
+    });
+
+    it("does not show Features skeletons when loading but entities are already present", () => {
+      renderComponent({ featuresLoading: true });
+      expect(screen.queryByTestId("skeleton-row-features")).not.toBeInTheDocument();
+      expect(screen.getByText("Feature One")).toBeInTheDocument();
+    });
+
+    it("shows 4 skeleton rows for Worktrees while loading with no worktrees yet, and hides the empty state", () => {
+      renderComponent({ worktrees: [], worktreesLoading: true });
+      expect(screen.getAllByTestId("skeleton-row-worktrees")).toHaveLength(4);
+      expect(screen.queryByText("No worktrees.")).not.toBeInTheDocument();
+    });
+
+    it("does not show Worktrees skeletons once worktrees have loaded", () => {
+      renderComponent({ worktreesLoading: false });
+      expect(screen.queryByTestId("skeleton-row-worktrees")).not.toBeInTheDocument();
+      expect(screen.getByText("one")).toBeInTheDocument();
+    });
+
+    it("shows 4 skeleton rows for Branches while loading with no branches yet, and hides the empty state", () => {
+      renderComponent({ branches: [], branchesLoading: true });
+      expect(screen.getAllByTestId("skeleton-row-branches")).toHaveLength(4);
+      expect(screen.queryByText("No branches.")).not.toBeInTheDocument();
+    });
+
+    it("does not show Branches skeletons once branches have loaded", () => {
+      renderComponent({ branchesLoading: false });
+      expect(screen.queryByTestId("skeleton-row-branches")).not.toBeInTheDocument();
+      expect(screen.getByText("main")).toBeInTheDocument();
+    });
   });
 });

@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AgentDot, UnreadPill } from "./AgentDot.tsx";
 import { filterEntities, type ProjectEntity } from "../lib/projectEntities.ts";
 
 const MAX_ROWS = 10;
+const SKELETON_ROWS = 4;
 
 /** Local relative-time label — mirrors OverviewTab's relTime but adds the two special cases
  * projectEntities produces: ts===0 (no activity to show) and ts===MAX_SAFE_INTEGER (an agent
@@ -39,16 +41,25 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
   );
 }
 
-function ViewAllRow({ onClick }: { onClick: () => void }) {
+/** Placeholder row shown while a group's query is still pending — same height/padding/gap as
+ * the real `Row` (dot + text line + trailing time) so data arriving causes zero layout shift. */
+function SkeletonRow({ group }: { group: "features" | "worktrees" | "branches" }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      View all
-      <ArrowRight className="size-3" />
-    </button>
+    <div className="flex w-full items-center gap-2 px-2 py-1.5" data-testid={`skeleton-row-${group}`}>
+      <Skeleton className="size-2 shrink-0 rounded-full" />
+      <Skeleton className="h-3.5 min-w-0 flex-1" />
+      <Skeleton className="h-3 w-8 shrink-0" />
+    </div>
+  );
+}
+
+function SkeletonGroup({ group }: { group: "features" | "worktrees" | "branches" }) {
+  return (
+    <>
+      {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+        <SkeletonRow key={i} group={group} />
+      ))}
+    </>
   );
 }
 
@@ -73,11 +84,15 @@ export interface SidebarRecentProps {
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
   onOpenBranch: (name: string) => void;
   onOpenWorktree: (e: ProjectEntity) => void;
-  onViewAll: (kind: "features" | "branches" | "worktrees") => void;
   /** Fetches all remotes (git fetch --all --prune) for the active project — surfaced as a
    * small action in the Worktrees group header (where `OverviewTab`'s Fetch button used to
    * live). Omitted entirely when there's nothing to fetch for (no project selected). */
   onFetch?: () => Promise<void> | void;
+  /** True while the respective query is still in flight. Only shows skeleton rows when there's
+   * no data yet — a background refetch (stale-while-revalidate) keeps showing the real rows. */
+  featuresLoading?: boolean;
+  worktreesLoading?: boolean;
+  branchesLoading?: boolean;
 }
 
 /** Sidebar "recent 10" lists for the active project — Features / Worktrees / Branches, each
@@ -94,8 +109,10 @@ export function SidebarRecent({
   onOpenTaskForce,
   onOpenBranch,
   onOpenWorktree,
-  onViewAll,
   onFetch,
+  featuresLoading = false,
+  worktreesLoading = false,
+  branchesLoading = false,
 }: SidebarRecentProps) {
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -146,7 +163,9 @@ export function SidebarRecent({
       />
       <div className="min-h-0 flex-1 overflow-y-auto custom-scroll">
         <GroupLabel>Features</GroupLabel>
-        {filteredFeatures.length === 0 ? (
+        {featuresLoading && features.length === 0 ? (
+          <SkeletonGroup group="features" />
+        ) : filteredFeatures.length === 0 ? (
           <p className="px-2 py-1 text-xs text-muted-foreground">No features.</p>
         ) : (
           filteredFeatures.slice(0, MAX_ROWS).map((entity) => {
@@ -198,7 +217,6 @@ export function SidebarRecent({
             );
           })
         )}
-        {filteredFeatures.length > MAX_ROWS && <ViewAllRow onClick={() => onViewAll("features")} />}
 
         <GroupLabel
           action={
@@ -218,7 +236,9 @@ export function SidebarRecent({
         >
           Worktrees
         </GroupLabel>
-        {filteredWorktrees.length === 0 ? (
+        {worktreesLoading && worktrees.length === 0 ? (
+          <SkeletonGroup group="worktrees" />
+        ) : filteredWorktrees.length === 0 ? (
           <p className="px-2 py-1 text-xs text-muted-foreground">No worktrees.</p>
         ) : (
           filteredWorktrees.slice(0, MAX_ROWS).map((entity) => {
@@ -245,10 +265,11 @@ export function SidebarRecent({
             );
           })
         )}
-        {filteredWorktrees.length > MAX_ROWS && <ViewAllRow onClick={() => onViewAll("worktrees")} />}
 
         <GroupLabel>Branches</GroupLabel>
-        {filteredBranches.length === 0 ? (
+        {branchesLoading && branches.length === 0 ? (
+          <SkeletonGroup group="branches" />
+        ) : filteredBranches.length === 0 ? (
           <p className="px-2 py-1 text-xs text-muted-foreground">No branches.</p>
         ) : (
           filteredBranches.slice(0, MAX_ROWS).map((entity) => {
@@ -268,7 +289,6 @@ export function SidebarRecent({
             );
           })
         )}
-        {filteredBranches.length > MAX_ROWS && <ViewAllRow onClick={() => onViewAll("branches")} />}
       </div>
     </div>
   );

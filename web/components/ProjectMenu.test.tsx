@@ -43,7 +43,6 @@ function renderMenu(overrides: Partial<Parameters<typeof ProjectMenu>[0]> = {}) 
     onOpenTaskForce: vi.fn(),
     onOpenBranch: vi.fn(),
     onOpenWorktree: vi.fn(),
-    onViewAll: vi.fn(),
     onFetch: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -70,5 +69,17 @@ describe("ProjectMenu", () => {
     const props = renderMenu();
     await userEvent.click(screen.getByLabelText(/fetch remote/i));
     expect(props.onFetch).toHaveBeenCalled();
+  });
+
+  it("passes featuresLoading/worktreesLoading/branchesLoading through to SidebarRecent's skeletons", () => {
+    renderMenu({
+      entities: { features: [], taskForces: [], branches: [], worktrees: [] },
+      featuresLoading: true,
+      worktreesLoading: true,
+      branchesLoading: true,
+    });
+    expect(screen.getAllByTestId("skeleton-row-features").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("skeleton-row-worktrees").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("skeleton-row-branches").length).toBeGreaterThan(0);
   });
 });

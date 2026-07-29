@@ -62,12 +62,22 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+            let mut b = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Kablan.dev")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 600.0)
-                .initialization_script(&init)
-                .build()?;
+                .initialization_script(&init);
+            // Slack-style overlay title bar: the mac traffic-lights float over our own titlebar
+            // row (which reserves space for them) instead of Tauri drawing its native bar above
+            // our content — `hidden_title` drops the OS-drawn window title text since we don't
+            // show one.
+            #[cfg(target_os = "macos")]
+            {
+                b = b
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+            }
+            b.build()?;
             Ok(())
         })
         .build(tauri::generate_context!())

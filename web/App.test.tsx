@@ -38,10 +38,12 @@ vi.mock("./components/SettingsPage.tsx", () => ({ SettingsPage: () => null }));
 vi.mock("./components/ProjectView.tsx", () => ({ ProjectView: () => <div data-testid="project-view" /> }));
 vi.mock("./components/ProjectMenu.tsx", () => ({
   ProjectMenu: (props: {
+    selected: string | null;
     onSelectProject: (name: string) => void;
     onOpenBranch: (name: string) => void;
   }) => (
     <div>
+      <div data-testid="selected-project">{props.selected ?? ""}</div>
       <button onClick={() => props.onSelectProject("proj")}>select-proj</button>
       <button onClick={() => props.onOpenBranch("feat/bare")}>open-branch</button>
       <button onClick={() => props.onOpenBranch("feat/missing")}>open-missing-branch</button>
@@ -148,6 +150,7 @@ async function selectProject() {
 
 describe("App (cockpit target resolution — I1/I2)", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(api.listProjects).mockResolvedValue([project]);
     vi.mocked(api.getBranches).mockResolvedValue([bareBranch]);
   });
@@ -207,5 +210,50 @@ describe("App (cockpit target resolution — I1/I2)", () => {
     // The not-found state still offers a way back to the project.
     await userEvent.click(screen.getByRole("button", { name: /back to features/i }));
     expect(await screen.findByTestId("project-view")).toBeInTheDocument();
+  });
+});
+
+describe("App (default project auto-select)", () => {
+  const projA: ProjectSummary = { ...project, name: "a", lastCommitTs: 100 };
+  const projB: ProjectSummary = { ...project, name: "b", lastCommitTs: 300 };
+  const projC: ProjectSummary = { ...project, name: "c", lastCommitTs: 200 };
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(api.getBranches).mockResolvedValue([]);
+    vi.mocked(api.getWorktrees).mockResolvedValue([]);
+  });
+
+  it("auto-selects the project with the most recent activity when nothing was previously opened", async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([projA, projB, projC]);
+    renderApp();
+    expect(await screen.findByTestId("selected-project")).toHaveTextContent("b");
+  });
+
+  it("auto-selects the last-opened project (from localStorage) over the most-recent-activity one", async () => {
+    localStorage.setItem("kablan.lastProject", "a");
+    vi.mocked(api.listProjects).mockResolvedValue([projA, projB, projC]);
+    renderApp();
+    expect(await screen.findByTestId("selected-project")).toHaveTextContent("a");
+  });
+
+  it("falls back to most-recent-activity when the stored last-opened project no longer exists", async () => {
+    localStorage.setItem("kablan.lastProject", "gone");
+    vi.mocked(api.listProjects).mockResolvedValue([projA, projB, projC]);
+    renderApp();
+    expect(await screen.findByTestId("selected-project")).toHaveTextContent("b");
+  });
+
+  it("persists the selection to localStorage when a project is selected", async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([project]);
+    renderApp();
+    await selectProject();
+    await waitFor(() => expect(localStorage.getItem("kablan.lastProject")).toBe("proj"));
+  });
+
+  it("does not auto-select anything when there are no projects", async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([]);
+    renderApp();
+    expect(await screen.findByTestId("selected-project")).toHaveTextContent("");
   });
 });
