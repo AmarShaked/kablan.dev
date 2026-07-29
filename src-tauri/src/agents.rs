@@ -75,9 +75,13 @@ pub fn next_status(prev: AgentStatus, ev: &ParsedEvent) -> AgentStatus {
             if ev.is_error { AgentStatus::Failed } else { AgentStatus::AwaitingInput }
         }
         EventKind::PostTurnSummary if ev.needs_action => AgentStatus::AwaitingInput,
-        // `init` fires once at startup before any user message — the agent is ready/idle, NOT
-        // working. Only actual turn output (assistant text / tool results) means "working".
-        EventKind::Init => AgentStatus::Idle,
+        // `init` fires at startup (and on a `--resume` reconnect) — normally the agent is
+        // ready/idle, NOT working. Only actual turn output (assistant / tool results) means
+        // "working". Guard the resume case: if a turn was already in progress, an init frame
+        // shouldn't flicker it back to Idle.
+        EventKind::Init => {
+            if matches!(prev, AgentStatus::Working) { AgentStatus::Working } else { AgentStatus::Idle }
+        }
         EventKind::Assistant | EventKind::ToolResult => AgentStatus::Working,
         EventKind::Other | EventKind::PostTurnSummary => prev,
     }

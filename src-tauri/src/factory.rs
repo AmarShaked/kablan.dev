@@ -280,20 +280,10 @@ pub fn feature_of<'a>(file: &'a FactoryFile, project: &str, branch: &str) -> Opt
 /// True iff `a` and `b` contain exactly the same elements (same length, same multiset) —
 /// order-independent. Used to validate a reorder request without allowing it to sneak in
 /// additions, removals, or duplicates.
-fn is_permutation(a: &[String], b: &[String]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut a_sorted = a.to_vec();
-    let mut b_sorted = b.to_vec();
-    a_sorted.sort();
-    b_sorted.sort();
-    a_sorted == b_sorted
-}
-
-/// Reorder feature `fid`'s branches to exactly `branches`, which must be a permutation of its
-/// current branch list (same members, any order — no additions, removals, or duplicates).
-/// Persists a drag-and-drop reorder within a feature folder in the sidebar.
+/// Reorder feature `fid`'s branches. `branches` is the desired order of a SUBSET of its current
+/// branches (unknown ids / duplicates are rejected); any current branches not mentioned are kept
+/// in their existing relative order at the end. Persists a drag-and-drop reorder within a feature
+/// folder in the sidebar (tolerant of the sidebar's 10-row cap and filtered ghost branches).
 pub fn reorder_feature_branches(
     file: &mut FactoryFile,
     project: &str,
@@ -302,10 +292,27 @@ pub fn reorder_feature_branches(
 ) -> Result<(), String> {
     let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
     let feat = pf.features.iter_mut().find(|f| f.id == fid).ok_or("Unknown feature")?;
-    if !is_permutation(&feat.branches, &branches) {
-        return Err("branches must be a permutation of the feature's current branches".to_string());
+    // Tolerant reorder: `branches` is the desired order of the SUBSET the caller can see (the
+    // sidebar caps visible rows at 10 and filters out ghost/deleted branches), not necessarily
+    // the whole stored set. Accept any subset of the feature's current branches (reject unknown
+    // ids / duplicates), reorder those, and keep the remaining stored branches in their existing
+    // relative order at the end — so a partial reorder never drops membership or errors.
+    let mut seen = std::collections::HashSet::new();
+    for b in &branches {
+        if !feat.branches.contains(b) {
+            return Err(format!("unknown branch in reorder: {b}"));
+        }
+        if !seen.insert(b.clone()) {
+            return Err(format!("duplicate branch in reorder: {b}"));
+        }
     }
-    feat.branches = branches;
+    let mut new_order = branches;
+    for b in &feat.branches {
+        if !seen.contains(b) {
+            new_order.push(b.clone());
+        }
+    }
+    feat.branches = new_order;
     Ok(())
 }
 
@@ -315,11 +322,25 @@ pub fn reorder_feature_branches(
 pub fn reorder_features(file: &mut FactoryFile, project: &str, order: Vec<String>) -> Result<(), String> {
     let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
     let current_ids: Vec<String> = pf.features.iter().map(|f| f.id.clone()).collect();
-    if !is_permutation(&current_ids, &order) {
-        return Err("order must match the project's current set of feature ids".to_string());
+    // Tolerant reorder (same rationale as reorder_feature_branches — the sidebar caps visible
+    // folders at 10): accept any subset of the current feature ids, reorder those, and append the
+    // rest in their existing order.
+    let mut seen = std::collections::HashSet::new();
+    for id in &order {
+        if !current_ids.contains(id) {
+            return Err(format!("unknown feature id in reorder: {id}"));
+        }
+        if !seen.insert(id.clone()) {
+            return Err(format!("duplicate feature id in reorder: {id}"));
+        }
     }
+    let full_order: Vec<String> = order
+        .iter()
+        .cloned()
+        .chain(current_ids.iter().filter(|id| !seen.contains(*id)).cloned())
+        .collect();
     let mut by_id: BTreeMap<String, Feature> = pf.features.drain(..).map(|f| (f.id.clone(), f)).collect();
-    pf.features = order.iter().filter_map(|id| by_id.remove(id)).collect();
+    pf.features = full_order.iter().filter_map(|id| by_id.remove(id)).collect();
     Ok(())
 }
 
@@ -645,31 +666,59 @@ mod tests {
     }
 
     #[test]
-    fn reorder_feature_branches_rejects_non_permutation() {
+    fn reorder_feature_branches_rejects_unknown_and_dupes() {
         let mut file = FactoryFile::default();
         let feat = create_feature(&mut file, "p", "Audit").unwrap();
         file_branch(&mut file, "p", &feat.id, "feat/a").unwrap();
         file_branch(&mut file, "p", &feat.id, "feat/b").unwrap();
 
-        // missing a branch
-        assert!(reorder_feature_branches(&mut file, "p", &feat.id, vec!["feat/a".to_string()]).is_err());
-        // extra/unknown branch
+        // unknown branch id
         assert!(reorder_feature_branches(
             &mut file,
             "p",
             &feat.id,
-            vec!["feat/a".to_string(), "feat/b".to_string(), "feat/x".to_string()],
+            vec!["feat/a".to_string(), "feat/x".to_string()],
         )
         .is_err());
-        // unknown feature
+        // duplicate branch id
+        assert!(reorder_feature_branches(
+            &mut file,
+            "p",
+            &feat.id,
+            vec!["feat/a".to_string(), "feat/a".to_string()],
+        )
+        .is_err());
+        // unknown feature / project
         assert!(reorder_feature_branches(&mut file, "p", "nope", vec![]).is_err());
-        // unknown project
         assert!(reorder_feature_branches(&mut file, "nope-project", &feat.id, vec![]).is_err());
 
         // order is left untouched by the failed attempts
         assert_eq!(
             file.projects["p"].features[0].branches,
             vec!["feat/a".to_string(), "feat/b".to_string()]
+        );
+    }
+
+    #[test]
+    fn reorder_feature_branches_subset_keeps_rest() {
+        // A partial reorder (only the visible/present subset) must not drop membership: reorder
+        // the mentioned branches, keep the rest in their existing order at the end. Guards I1/I2
+        // — the sidebar sends only the ≤10 visible rows, and ghost (deleted) branches are filtered.
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "p", "Audit").unwrap();
+        for b in ["feat/a", "feat/b", "feat/c", "ghost"] {
+            file_branch(&mut file, "p", &feat.id, b).unwrap();
+        }
+        reorder_feature_branches(
+            &mut file,
+            "p",
+            &feat.id,
+            vec!["feat/c".to_string(), "feat/a".to_string(), "feat/b".to_string()],
+        )
+        .unwrap();
+        assert_eq!(
+            file.projects["p"].features[0].branches,
+            vec!["feat/c".to_string(), "feat/a".to_string(), "feat/b".to_string(), "ghost".to_string()]
         );
     }
 
@@ -687,21 +736,33 @@ mod tests {
     }
 
     #[test]
-    fn reorder_features_rejects_mismatched_set() {
+    fn reorder_features_rejects_unknown_and_dupes() {
         let mut file = FactoryFile::default();
         let f1 = create_feature(&mut file, "p", "Alpha").unwrap();
         let f2 = create_feature(&mut file, "p", "Beta").unwrap();
 
-        // missing f2
-        assert!(reorder_features(&mut file, "p", vec![f1.id.clone()]).is_err());
         // unknown extra id
         assert!(reorder_features(&mut file, "p", vec![f1.id.clone(), f2.id.clone(), "nope".to_string()]).is_err());
+        // duplicate id
+        assert!(reorder_features(&mut file, "p", vec![f1.id.clone(), f1.id.clone()]).is_err());
         // unknown project
         assert!(reorder_features(&mut file, "nope-project", vec![]).is_err());
 
         // order is left untouched by the failed attempts
         let ids: Vec<String> = file.projects["p"].features.iter().map(|f| f.id.clone()).collect();
-        assert_eq!(ids, vec![f1.id, f2.id]);
+        assert_eq!(ids, vec![f1.id.clone(), f2.id.clone()]);
+    }
+
+    #[test]
+    fn reorder_features_subset_keeps_rest() {
+        // Only a subset visible/reordered (cap) → the unmentioned feature stays, appended in order.
+        let mut file = FactoryFile::default();
+        let f1 = create_feature(&mut file, "p", "Alpha").unwrap();
+        let f2 = create_feature(&mut file, "p", "Beta").unwrap();
+        let f3 = create_feature(&mut file, "p", "Gamma").unwrap();
+        reorder_features(&mut file, "p", vec![f3.id.clone(), f1.id.clone()]).unwrap();
+        let ids: Vec<String> = file.projects["p"].features.iter().map(|f| f.id.clone()).collect();
+        assert_eq!(ids, vec![f3.id, f1.id, f2.id]);
     }
 
     #[test]
