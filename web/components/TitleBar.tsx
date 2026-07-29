@@ -28,7 +28,7 @@ export function TitleBar({ isTauri, projectLabel, onOpenSearch }: TitleBarProps)
     <div
       data-testid="titlebar"
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 items-center bg-sidebar px-2 text-sidebar-foreground"
+      className="flex h-[46px] shrink-0 items-center bg-sidebar px-2 pt-1 text-sidebar-foreground"
     >
       <div data-testid="titlebar-lights-spacer" className={isTauri ? "w-[72px] shrink-0" : "w-0 shrink-0"} />
       <div className="flex flex-1 justify-center">
