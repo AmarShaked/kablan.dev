@@ -88,11 +88,13 @@ export function buildBranchEntities({
   });
 
   const byName = new Map(all.map((e) => [e.name, e]));
+  // A feature's rows render in the STORED `feature.branches` order, not re-sorted by
+  // activity — so a manual drag-and-drop reorder (persisted via reorderFeatureBranches)
+  // sticks instead of being clobbered on the next render. The unfiled "Branches" list below
+  // has no manual order to preserve, so it stays activity-sorted.
   const featureGroups: FeatureGroup[] = factory.features.map((feature) => ({
     feature,
-    branches: sortByTsDesc(
-      feature.branches.map((name) => byName.get(name)).filter((e): e is BranchEntity => !!e),
-    ),
+    branches: feature.branches.map((name) => byName.get(name)).filter((e): e is BranchEntity => !!e),
   }));
   const unfiled = sortByTsDesc(all.filter((e) => !e.featureId));
 

@@ -277,6 +277,52 @@ pub fn feature_of<'a>(file: &'a FactoryFile, project: &str, branch: &str) -> Opt
         .find(|f| f.branches.iter().any(|b| b == branch))
 }
 
+/// True iff `a` and `b` contain exactly the same elements (same length, same multiset) —
+/// order-independent. Used to validate a reorder request without allowing it to sneak in
+/// additions, removals, or duplicates.
+fn is_permutation(a: &[String], b: &[String]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut a_sorted = a.to_vec();
+    let mut b_sorted = b.to_vec();
+    a_sorted.sort();
+    b_sorted.sort();
+    a_sorted == b_sorted
+}
+
+/// Reorder feature `fid`'s branches to exactly `branches`, which must be a permutation of its
+/// current branch list (same members, any order — no additions, removals, or duplicates).
+/// Persists a drag-and-drop reorder within a feature folder in the sidebar.
+pub fn reorder_feature_branches(
+    file: &mut FactoryFile,
+    project: &str,
+    fid: &str,
+    branches: Vec<String>,
+) -> Result<(), String> {
+    let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
+    let feat = pf.features.iter_mut().find(|f| f.id == fid).ok_or("Unknown feature")?;
+    if !is_permutation(&feat.branches, &branches) {
+        return Err("branches must be a permutation of the feature's current branches".to_string());
+    }
+    feat.branches = branches;
+    Ok(())
+}
+
+/// Reorder the project's features to exactly `order`, which must contain exactly the current
+/// set of feature ids (any order — no additions, removals, or duplicates). Persists a
+/// drag-and-drop reorder of the feature folders in the sidebar.
+pub fn reorder_features(file: &mut FactoryFile, project: &str, order: Vec<String>) -> Result<(), String> {
+    let pf = file.projects.get_mut(project).ok_or("Unknown project")?;
+    let current_ids: Vec<String> = pf.features.iter().map(|f| f.id.clone()).collect();
+    if !is_permutation(&current_ids, &order) {
+        return Err("order must match the project's current set of feature ids".to_string());
+    }
+    let mut by_id: BTreeMap<String, Feature> = pf.features.drain(..).map(|f| (f.id.clone(), f)).collect();
+    pf.features = order.iter().filter_map(|id| by_id.remove(id)).collect();
+    Ok(())
+}
+
 /// Build the global inbox: branches whose agent needs attention (AwaitingInput
 /// or Failed). Deterministic order: projects (BTreeMap order), branches
 /// (BTreeMap order — `branch_state` is a BTreeMap too).
@@ -571,6 +617,91 @@ mod tests {
         assert_eq!(inbox[0].branch, "b1");
         assert_eq!(inbox[0].feature_name.as_deref(), Some("Audit"));
         assert_eq!(inbox[0].status, "awaitingInput");
+    }
+
+    #[test]
+    fn reorder_feature_branches_valid() {
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "p", "Audit").unwrap();
+        file_branch(&mut file, "p", &feat.id, "feat/a").unwrap();
+        file_branch(&mut file, "p", &feat.id, "feat/b").unwrap();
+        file_branch(&mut file, "p", &feat.id, "feat/c").unwrap();
+        assert_eq!(
+            file.projects["p"].features[0].branches,
+            vec!["feat/a".to_string(), "feat/b".to_string(), "feat/c".to_string()]
+        );
+
+        reorder_feature_branches(
+            &mut file,
+            "p",
+            &feat.id,
+            vec!["feat/c".to_string(), "feat/a".to_string(), "feat/b".to_string()],
+        )
+        .unwrap();
+        assert_eq!(
+            file.projects["p"].features[0].branches,
+            vec!["feat/c".to_string(), "feat/a".to_string(), "feat/b".to_string()]
+        );
+    }
+
+    #[test]
+    fn reorder_feature_branches_rejects_non_permutation() {
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "p", "Audit").unwrap();
+        file_branch(&mut file, "p", &feat.id, "feat/a").unwrap();
+        file_branch(&mut file, "p", &feat.id, "feat/b").unwrap();
+
+        // missing a branch
+        assert!(reorder_feature_branches(&mut file, "p", &feat.id, vec!["feat/a".to_string()]).is_err());
+        // extra/unknown branch
+        assert!(reorder_feature_branches(
+            &mut file,
+            "p",
+            &feat.id,
+            vec!["feat/a".to_string(), "feat/b".to_string(), "feat/x".to_string()],
+        )
+        .is_err());
+        // unknown feature
+        assert!(reorder_feature_branches(&mut file, "p", "nope", vec![]).is_err());
+        // unknown project
+        assert!(reorder_feature_branches(&mut file, "nope-project", &feat.id, vec![]).is_err());
+
+        // order is left untouched by the failed attempts
+        assert_eq!(
+            file.projects["p"].features[0].branches,
+            vec!["feat/a".to_string(), "feat/b".to_string()]
+        );
+    }
+
+    #[test]
+    fn reorder_features_valid() {
+        let mut file = FactoryFile::default();
+        let f1 = create_feature(&mut file, "p", "Alpha").unwrap();
+        let f2 = create_feature(&mut file, "p", "Beta").unwrap();
+        let f3 = create_feature(&mut file, "p", "Gamma").unwrap();
+
+        reorder_features(&mut file, "p", vec![f3.id.clone(), f1.id.clone(), f2.id.clone()]).unwrap();
+
+        let ids: Vec<String> = file.projects["p"].features.iter().map(|f| f.id.clone()).collect();
+        assert_eq!(ids, vec![f3.id, f1.id, f2.id]);
+    }
+
+    #[test]
+    fn reorder_features_rejects_mismatched_set() {
+        let mut file = FactoryFile::default();
+        let f1 = create_feature(&mut file, "p", "Alpha").unwrap();
+        let f2 = create_feature(&mut file, "p", "Beta").unwrap();
+
+        // missing f2
+        assert!(reorder_features(&mut file, "p", vec![f1.id.clone()]).is_err());
+        // unknown extra id
+        assert!(reorder_features(&mut file, "p", vec![f1.id.clone(), f2.id.clone(), "nope".to_string()]).is_err());
+        // unknown project
+        assert!(reorder_features(&mut file, "nope-project", vec![]).is_err());
+
+        // order is left untouched by the failed attempts
+        let ids: Vec<String> = file.projects["p"].features.iter().map(|f| f.id.clone()).collect();
+        assert_eq!(ids, vec![f1.id, f2.id]);
     }
 
     #[test]

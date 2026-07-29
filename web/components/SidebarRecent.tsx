@@ -6,9 +6,45 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AGENT_DOT_COLORS } from "./AgentDot.tsx";
 import { type BranchEntity, type FeatureGroup } from "../lib/projectEntities.ts";
 import { type AgentStatus } from "../api.ts";
+import {
+  reorderIds,
+  dropSide,
+  setBranchDragData,
+  getBranchDragData,
+  setFeatureDragData,
+  getFeatureDragData,
+} from "../lib/dnd.ts";
 
 const MAX_ROWS = 10;
 const SKELETON_ROWS = 4;
+
+/**
+ * Drag-and-drop design (native HTML5 `draggable`/`onDragStart`/`onDragOver`/`onDrop` — no
+ * library): dragging a branch row onto a Feature folder (header or body) files it there;
+ * dragging a filed branch onto the Branches group unfiles it; dropping a branch onto a sibling
+ * *within the same feature* reorders (an insertion line shows above/below the hovered half of
+ * the row); dragging a Feature folder's header onto another reorders the folders. The unfiled
+ * Branches list has no manual order (it stays activity-sorted), so its rows are never a reorder
+ * target — only a file/unfile one.
+ *
+ * `dragging` (what's being carried) and `dropTarget` (where it would land right now) are local
+ * component state, used ONLY to drive the ring/insertion-line affordances during `dragover` —
+ * per the DOM drag-and-drop spec, `dataTransfer.getData` reliably returns data only on `drop`
+ * (browsers withhold it during `dragover` for cross-origin-drag security reasons), so the
+ * *actual* file/unfile/reorder decision on `drop` always re-reads the dragged payload fresh out
+ * of `event.dataTransfer` (see `dnd.ts`) rather than trusting this state. Every reorder/insertion
+ * indicator is a plain background/border toggle with no transition, so there's nothing for
+ * `prefers-reduced-motion` to need to suppress.
+ */
+type Dragging =
+  | { kind: "branch"; branch: string; sourceFeatureId?: string }
+  | { kind: "feature"; featureId: string };
+
+type DropTarget =
+  | { kind: "file"; featureId: string } // ring on a whole feature folder — filing target
+  | { kind: "unfile" } // ring on the Branches group — unfile target
+  | { kind: "branch"; featureId: string; index: number } // insertion line within a feature
+  | { kind: "feature"; index: number }; // insertion line among feature folders
 
 /** Local relative-time label — mirrors OverviewTab's relTime but adds the two special cases
  * projectEntities produces: ts===0 (no activity to show) and ts===MAX_SAFE_INTEGER (an agent
@@ -184,18 +220,38 @@ function BranchRow({
   onOpenBranch,
   onFileBranch,
   onUnfileBranch,
+  onDragStart,
+  onDragEnd,
+  onRowDragOver,
+  onRowDrop,
+  dropBefore,
+  dropAfter,
 }: {
   entity: BranchEntity;
   features: { id: string; name: string }[];
   onOpenBranch: (name: string) => void;
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
+  /** Native HTML5 drag-and-drop wiring (see the module doc comment at the top of this file for
+   * the overall design) — all four are always provided by the parent, fully bound to this row's
+   * identity/position, so `BranchRow` itself stays presentational. */
+  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
+  onRowDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onRowDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  /** Insertion-line affordance: true when a drop right now would land immediately
+   * before/after this row (within the same feature — see `DropTarget`). No transition is
+   * applied to these — they snap on/off instantly, so there's nothing for
+   * `prefers-reduced-motion` to need to suppress. */
+  dropBefore?: boolean;
+  dropAfter?: boolean;
 }) {
   const time = relativeLabel(entity.ts);
   return (
     <div
       role="button"
       tabIndex={0}
+      draggable
       onClick={() => onOpenBranch(entity.name)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -203,7 +259,15 @@ function BranchRow({
           onOpenBranch(entity.name);
         }
       }}
-      className="group flex w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onRowDragOver}
+      onDrop={onRowDrop}
+      className={cn(
+        "group flex w-full min-w-0 cursor-grab items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent active:cursor-grabbing",
+        dropBefore && "border-t-2 border-primary",
+        dropAfter && "border-b-2 border-primary",
+      )}
     >
       <BranchDot hasWorktree={entity.hasWorktree} status={entity.agentStatus} />
       {entity.serverRunning && (
@@ -233,6 +297,12 @@ export interface SidebarRecentProps {
   onOpenBranch: (name: string) => void;
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
+  /** Persists a drag-and-drop reorder of one feature's branches — `branches` is the feature's
+   * full new order (a permutation of its current branches; see `reorderIds` in `dnd.ts`). */
+  onReorderFeatureBranches: (featureId: string, branches: string[]) => void;
+  /** Persists a drag-and-drop reorder of the Feature folders themselves — `order` is the
+   * project's full new feature-id order. */
+  onReorderFeatures: (order: string[]) => void;
   onNewFeature: () => void;
   /** Fetches all remotes (git fetch --all --prune) for the active project — surfaced as a
    * small action in the Branches group header. Omitted entirely when there's nothing to fetch
@@ -255,6 +325,8 @@ export function SidebarRecent({
   onOpenBranch,
   onFileBranch,
   onUnfileBranch,
+  onReorderFeatureBranches,
+  onReorderFeatures,
   onNewFeature,
   onFetch,
   featuresLoading = false,
@@ -262,8 +334,14 @@ export function SidebarRecent({
 }: SidebarRecentProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fetching, setFetching] = useState(false);
+  const [dragging, setDragging] = useState<Dragging | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
   const features = featureGroups.map((g) => g.feature);
+  // Reordering only ever targets the rendered (capped-at-MAX_ROWS) subset — a feature/branch
+  // past the cap can't be dragged into view to begin with, matching the existing "first 10"
+  // display cap elsewhere in this component.
+  const visibleFeatureGroups = featureGroups.slice(0, MAX_ROWS);
 
   const toggleExpanded = (featureId: string) => {
     setExpanded((prev) => {
@@ -284,114 +362,305 @@ export function SidebarRecent({
     }
   };
 
+  const clearDrag = () => {
+    setDragging(null);
+    setDropTarget(null);
+  };
+
+  // --- Branch rows (both a feature's member rows and the unfiled Branches rows share this) ---
+
+  const handleBranchDragStart = (e: React.DragEvent<HTMLDivElement>, entity: BranchEntity) => {
+    setBranchDragData(e.dataTransfer, { branch: entity.name, sourceFeatureId: entity.featureId });
+    setDragging({ kind: "branch", branch: entity.name, sourceFeatureId: entity.featureId });
+  };
+
+  /** `listFeatureId` is the feature a row belongs to, or `undefined` for an unfiled (Branches
+   * group) row — which has no manual order, so it only ever shows the "unfile" ring, never an
+   * insertion line. */
+  const handleBranchRowDragOver = (
+    e: React.DragEvent<HTMLDivElement>,
+    listFeatureId: string | undefined,
+    index: number,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragging || dragging.kind !== "branch") return;
+    if (listFeatureId === undefined) {
+      if (dragging.sourceFeatureId) setDropTarget({ kind: "unfile" });
+      return;
+    }
+    if (dragging.sourceFeatureId === listFeatureId) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side = dropSide(rect, e.clientY);
+      setDropTarget({ kind: "branch", featureId: listFeatureId, index: side === "before" ? index : index + 1 });
+    } else {
+      setDropTarget({ kind: "file", featureId: listFeatureId });
+    }
+  };
+
+  const handleBranchRowDrop = (
+    e: React.DragEvent<HTMLDivElement>,
+    listFeatureId: string | undefined,
+    index: number,
+    group: FeatureGroup | undefined,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = getBranchDragData(e.dataTransfer);
+    clearDrag();
+    if (!payload) return;
+    if (listFeatureId === undefined) {
+      if (payload.sourceFeatureId) onUnfileBranch(payload.sourceFeatureId, payload.branch);
+      return;
+    }
+    if (payload.sourceFeatureId === listFeatureId && group) {
+      const ids = group.branches.map((b) => b.name);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side = dropSide(rect, e.clientY);
+      const dropIndex = side === "before" ? index : index + 1;
+      onReorderFeatureBranches(listFeatureId, reorderIds(ids, payload.branch, dropIndex));
+    } else if (payload.sourceFeatureId !== listFeatureId) {
+      onFileBranch(listFeatureId, payload.branch);
+    }
+  };
+
+  // --- Feature folders: filing fallback (drop anywhere in the folder) + header-to-header reorder ---
+
+  const handleFeatureContainerDragOver = (e: React.DragEvent<HTMLDivElement>, featureId: string) => {
+    if (dragging?.kind === "branch" && dragging.sourceFeatureId !== featureId) {
+      e.preventDefault();
+      setDropTarget({ kind: "file", featureId });
+    }
+  };
+
+  const handleFeatureContainerDrop = (e: React.DragEvent<HTMLDivElement>, featureId: string) => {
+    const payload = getBranchDragData(e.dataTransfer);
+    clearDrag();
+    if (payload && payload.sourceFeatureId !== featureId) {
+      e.preventDefault();
+      onFileBranch(featureId, payload.branch);
+    }
+  };
+
+  const handleFeatureHeaderDragStart = (e: React.DragEvent<HTMLButtonElement>, featureId: string) => {
+    setFeatureDragData(e.dataTransfer, featureId);
+    setDragging({ kind: "feature", featureId });
+  };
+
+  const handleFeatureHeaderDragOver = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
+    // Only intercepts a feature-folder drag — a branch dropped on a header falls through
+    // (un-stopped) to the folder's own container fallback (file it into this feature).
+    if (dragging?.kind !== "feature") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = dropSide(rect, e.clientY);
+    setDropTarget({ kind: "feature", index: side === "before" ? index : index + 1 });
+  };
+
+  const handleFeatureHeaderDrop = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
+    const payload = getFeatureDragData(e.dataTransfer);
+    if (!payload) return; // let a branch payload's drop bubble to the folder's own handler
+    e.preventDefault();
+    e.stopPropagation();
+    const ids = visibleFeatureGroups.map((g) => g.feature.id);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = dropSide(rect, e.clientY);
+    const dropIndex = side === "before" ? index : index + 1;
+    clearDrag();
+    onReorderFeatures(reorderIds(ids, payload.featureId, dropIndex));
+  };
+
+  const handleFeatureSectionDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (dragging?.kind === "feature") {
+      e.preventDefault();
+      setDropTarget({ kind: "feature", index: visibleFeatureGroups.length });
+    }
+  };
+
+  const handleFeatureSectionDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const payload = getFeatureDragData(e.dataTransfer);
+    clearDrag();
+    if (payload) {
+      e.preventDefault();
+      const ids = visibleFeatureGroups.map((g) => g.feature.id);
+      onReorderFeatures(reorderIds(ids, payload.featureId, visibleFeatureGroups.length));
+    }
+  };
+
+  // --- Branches group (unfiled): drop anywhere in it to unfile ---
+
+  const handleUnfileSectionDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (dragging?.kind === "branch" && dragging.sourceFeatureId) {
+      e.preventDefault();
+      setDropTarget({ kind: "unfile" });
+    }
+  };
+
+  const handleUnfileSectionDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const payload = getBranchDragData(e.dataTransfer);
+    clearDrag();
+    if (payload?.sourceFeatureId) {
+      e.preventDefault();
+      onUnfileBranch(payload.sourceFeatureId, payload.branch);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scroll">
-        <GroupLabel
-          icon={Boxes}
-          color="text-primary"
-          count={featureGroups.length}
-          action={
-            <button
-              type="button"
-              onClick={onNewFeature}
-              aria-label="New feature"
-              title="New feature"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <Plus className="size-3.5" />
-            </button>
-          }
-        >
-          Features
-        </GroupLabel>
-        {featuresLoading && featureGroups.length === 0 ? (
-          <SkeletonGroup group="features" />
-        ) : featureGroups.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No features.</p>
-        ) : (
-          featureGroups.slice(0, MAX_ROWS).map(({ feature, branches }) => {
-            const isExpanded = expanded.has(feature.id);
-            return (
-              <div key={feature.id}>
-                <button
-                  type="button"
-                  onClick={() => toggleExpanded(feature.id)}
-                  aria-label={isExpanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
-                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{feature.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {branches.length} branch{branches.length === 1 ? "" : "es"}
-                  </span>
-                </button>
-                {isExpanded && (
-                  <div className="ml-4 flex flex-col border-l border-border pl-2">
-                    {branches.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-muted-foreground">No branches yet.</p>
-                    ) : (
-                      branches.map((entity) => (
-                        <BranchRow
-                          key={entity.name}
-                          entity={entity}
-                          features={features}
-                          onOpenBranch={onOpenBranch}
-                          onFileBranch={onFileBranch}
-                          onUnfileBranch={onUnfileBranch}
-                        />
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-
-        <GroupLabel
-          icon={GitBranch}
-          color="text-sky-400"
-          count={unfiled.length}
-          action={
-            onFetch && (
+        <div onDragOver={handleFeatureSectionDragOver} onDrop={handleFeatureSectionDrop}>
+          <GroupLabel
+            icon={Boxes}
+            color="text-primary"
+            count={featureGroups.length}
+            action={
               <button
                 type="button"
-                onClick={handleFetch}
-                disabled={fetching}
-                aria-label="Fetch remote"
-                title="Fetch all remotes (git fetch --all --prune)"
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
+                onClick={onNewFeature}
+                aria-label="New feature"
+                title="New feature"
+                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <RefreshCw className={cn("size-3.5", fetching && "animate-spin")} />
+                <Plus className="size-3.5" />
               </button>
-            )
-          }
+            }
+          >
+            Features
+          </GroupLabel>
+          {featuresLoading && featureGroups.length === 0 ? (
+            <SkeletonGroup group="features" />
+          ) : featureGroups.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No features.</p>
+          ) : (
+            visibleFeatureGroups.map(({ feature, branches }, featureIdx) => {
+              const isExpanded = expanded.has(feature.id);
+              const isFileTarget = dropTarget?.kind === "file" && dropTarget.featureId === feature.id;
+              const folderDropBefore = dropTarget?.kind === "feature" && dropTarget.index === featureIdx;
+              const folderDropAfter =
+                featureIdx === visibleFeatureGroups.length - 1 &&
+                dropTarget?.kind === "feature" &&
+                dropTarget.index === visibleFeatureGroups.length;
+              return (
+                <div
+                  key={feature.id}
+                  onDragOver={(e) => handleFeatureContainerDragOver(e, feature.id)}
+                  onDrop={(e) => handleFeatureContainerDrop(e, feature.id)}
+                  className={cn(
+                    "rounded-md",
+                    isFileTarget && "ring-2 ring-primary",
+                    folderDropBefore && "border-t-2 border-primary",
+                    folderDropAfter && "border-b-2 border-primary",
+                  )}
+                >
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(e) => handleFeatureHeaderDragStart(e, feature.id)}
+                    onDragEnd={clearDrag}
+                    onDragOver={(e) => handleFeatureHeaderDragOver(e, featureIdx)}
+                    onDrop={(e) => handleFeatureHeaderDrop(e, featureIdx)}
+                    onClick={() => toggleExpanded(feature.id)}
+                    aria-label={isExpanded ? `Collapse ${feature.name}` : `Expand ${feature.name}`}
+                    className="flex w-full cursor-grab items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent active:cursor-grabbing"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{feature.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {branches.length} branch{branches.length === 1 ? "" : "es"}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="ml-4 flex flex-col border-l border-border pl-2">
+                      {branches.length === 0 ? (
+                        <p className="px-2 py-1 text-xs text-muted-foreground">No branches yet.</p>
+                      ) : (
+                        branches.map((entity, idx) => {
+                          const isLastRow = idx === branches.length - 1;
+                          return (
+                            <BranchRow
+                              key={entity.name}
+                              entity={entity}
+                              features={features}
+                              onOpenBranch={onOpenBranch}
+                              onFileBranch={onFileBranch}
+                              onUnfileBranch={onUnfileBranch}
+                              onDragStart={(e) => handleBranchDragStart(e, entity)}
+                              onDragEnd={clearDrag}
+                              onRowDragOver={(e) => handleBranchRowDragOver(e, feature.id, idx)}
+                              onRowDrop={(e) => handleBranchRowDrop(e, feature.id, idx, { feature, branches })}
+                              dropBefore={dropTarget?.kind === "branch" && dropTarget.featureId === feature.id && dropTarget.index === idx}
+                              dropAfter={
+                                isLastRow &&
+                                dropTarget?.kind === "branch" &&
+                                dropTarget.featureId === feature.id &&
+                                dropTarget.index === branches.length
+                              }
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div
+          onDragOver={handleUnfileSectionDragOver}
+          onDrop={handleUnfileSectionDrop}
+          className={cn("rounded-md", dropTarget?.kind === "unfile" && "ring-2 ring-primary")}
         >
-          Branches
-        </GroupLabel>
-        {branchesLoading && unfiled.length === 0 ? (
-          <SkeletonGroup group="branches" />
-        ) : unfiled.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No branches.</p>
-        ) : (
-          unfiled
-            .slice(0, MAX_ROWS)
-            .map((entity) => (
-              <BranchRow
-                key={entity.name}
-                entity={entity}
-                features={features}
-                onOpenBranch={onOpenBranch}
-                onFileBranch={onFileBranch}
-                onUnfileBranch={onUnfileBranch}
-              />
-            ))
-        )}
+          <GroupLabel
+            icon={GitBranch}
+            color="text-sky-400"
+            count={unfiled.length}
+            action={
+              onFetch && (
+                <button
+                  type="button"
+                  onClick={handleFetch}
+                  disabled={fetching}
+                  aria-label="Fetch remote"
+                  title="Fetch all remotes (git fetch --all --prune)"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
+                >
+                  <RefreshCw className={cn("size-3.5", fetching && "animate-spin")} />
+                </button>
+              )
+            }
+          >
+            Branches
+          </GroupLabel>
+          {branchesLoading && unfiled.length === 0 ? (
+            <SkeletonGroup group="branches" />
+          ) : unfiled.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No branches.</p>
+          ) : (
+            unfiled
+              .slice(0, MAX_ROWS)
+              .map((entity) => (
+                <BranchRow
+                  key={entity.name}
+                  entity={entity}
+                  features={features}
+                  onOpenBranch={onOpenBranch}
+                  onFileBranch={onFileBranch}
+                  onUnfileBranch={onUnfileBranch}
+                  onDragStart={(e) => handleBranchDragStart(e, entity)}
+                  onDragEnd={clearDrag}
+                  onRowDragOver={(e) => handleBranchRowDragOver(e, undefined, 0)}
+                  onRowDrop={(e) => handleBranchRowDrop(e, undefined, 0, undefined)}
+                />
+              ))
+          )}
+        </div>
       </div>
     </div>
   );

@@ -70,6 +70,26 @@ export function ProjectMenu({
     }
   };
 
+  const reorderFeatureBranches = async (featureId: string, branches: string[]) => {
+    if (!selected) return;
+    try {
+      await api.factory.reorderFeatureBranches(selected, featureId, branches);
+      await invalidateFactory();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
+  const reorderFeatures = async (order: string[]) => {
+    if (!selected) return;
+    try {
+      await api.factory.reorderFeatures(selected, order);
+      await invalidateFactory();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="border-b border-border p-2">
@@ -88,6 +108,8 @@ export function ProjectMenu({
           onOpenBranch={onOpenBranch}
           onFileBranch={fileBranch}
           onUnfileBranch={unfileBranch}
+          onReorderFeatureBranches={reorderFeatureBranches}
+          onReorderFeatures={reorderFeatures}
           onNewFeature={() => setNewFeatureOpen(true)}
           onFetch={onFetch}
           featuresLoading={featuresLoading}

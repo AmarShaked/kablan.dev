@@ -1,8 +1,49 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { SidebarRecent } from "./SidebarRecent.tsx";
 import type { BranchEntity, FeatureGroup } from "../lib/projectEntities.ts";
+
+/** Minimal stand-in for the browser's `DataTransfer`, matching what `fireEvent.dragStart` /
+ * `dragOver` / `drop` accept — jsdom has no native drag-and-drop implementation, so tests
+ * supply this fake object themselves rather than relying on a real drag gesture. */
+function fakeDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    setData: (format: string, data: string) => store.set(format, data),
+    getData: (format: string) => store.get(format) ?? "",
+  } as unknown as DataTransfer;
+}
+
+/** A row's DOMRect for deterministic dropSide("before" | "after") math in tests — jsdom's real
+ * getBoundingClientRect always reports zeros (no layout engine), so top/bottom-half hover tests
+ * mock it explicitly. */
+const ROW_RECT: DOMRect = {
+  top: 100,
+  height: 20,
+  bottom: 120,
+  left: 0,
+  right: 100,
+  width: 100,
+  x: 0,
+  y: 100,
+  toJSON: () => ({}),
+};
+
+/**
+ * Fires a "dragover"/"drop" with a real `clientY` — jsdom has no `DragEvent` global, so
+ * `@testing-library`'s `fireEvent.dragOver`/`.drop` fall back to a plain `Event`, which
+ * (per `@testing-library/dom`'s `createEvent`) only special-cases `dataTransfer`/`clipboardData`
+ * onto the event object; any other init property (like `clientY`) is silently dropped. Building
+ * a `MouseEvent` ourselves (jsdom supports that one fully, `clientY` included) and manually
+ * attaching `dataTransfer` sidesteps the gap — this is the standard workaround for testing
+ * position-aware HTML5 drag-and-drop under jsdom.
+ */
+function fireDragAt(type: "dragover" | "drop", node: Element, dataTransfer: DataTransfer, clientY: number) {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY });
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+  fireEvent(node, event);
+}
 
 function branchEntity(overrides: Partial<BranchEntity> = {}): BranchEntity {
   return {
@@ -23,6 +64,8 @@ function renderComponent(overrides: Partial<Parameters<typeof SidebarRecent>[0]>
     onOpenBranch: vi.fn(),
     onFileBranch: vi.fn(),
     onUnfileBranch: vi.fn(),
+    onReorderFeatureBranches: vi.fn(),
+    onReorderFeatures: vi.fn(),
     onNewFeature: vi.fn(),
     ...overrides,
   };
@@ -168,6 +211,184 @@ describe("SidebarRecent", () => {
       await userEvent.click(screen.getByLabelText(/remove feat\/one from its feature/i));
       await userEvent.click(screen.getByText("Remove from feature"));
       expect(props.onUnfileBranch).toHaveBeenCalledWith("f1", "feat/one");
+    });
+  });
+
+  describe("drag and drop", () => {
+    it("dragging an unfiled branch onto a Feature folder files it there", () => {
+      const featureGroups: FeatureGroup[] = [
+        { feature: { id: "f1", name: "Feature One", branches: [] }, branches: [] },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [branchEntity({ name: "main" })] });
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("main"), { dataTransfer: transfer });
+      const header = screen.getByRole("button", { name: /expand feature one/i });
+      fireEvent.dragOver(header, { dataTransfer: transfer });
+      fireEvent.drop(header, { dataTransfer: transfer });
+
+      expect(props.onFileBranch).toHaveBeenCalledWith("f1", "main");
+      expect(props.onReorderFeatureBranches).not.toHaveBeenCalled();
+    });
+
+    it("dragging a filed branch onto the Branches group unfiles it", async () => {
+      const featureGroups: FeatureGroup[] = [
+        {
+          feature: { id: "f1", name: "Feature One", branches: ["feat/one"] },
+          branches: [branchEntity({ name: "feat/one", featureId: "f1" })],
+        },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+      await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("feat/one"), { dataTransfer: transfer });
+      const branchesLabel = screen.getByText("Branches");
+      fireEvent.dragOver(branchesLabel, { dataTransfer: transfer });
+      fireEvent.drop(branchesLabel, { dataTransfer: transfer });
+
+      expect(props.onUnfileBranch).toHaveBeenCalledWith("f1", "feat/one");
+    });
+
+    it("dragging an unfiled branch onto the Branches group is a no-op (nothing to unfile)", () => {
+      const props = renderComponent({ unfiled: [branchEntity({ name: "main" })] });
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("main"), { dataTransfer: transfer });
+      const branchesLabel = screen.getByText("Branches");
+      fireEvent.dragOver(branchesLabel, { dataTransfer: transfer });
+      fireEvent.drop(branchesLabel, { dataTransfer: transfer });
+      expect(props.onUnfileBranch).not.toHaveBeenCalled();
+    });
+
+    it("dropping a branch on the top half of a sibling row within the same feature reorders before it", async () => {
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(ROW_RECT);
+      const featureGroups: FeatureGroup[] = [
+        {
+          feature: { id: "f1", name: "Feature One", branches: ["feat/a", "feat/b", "feat/c"] },
+          branches: [
+            branchEntity({ name: "feat/a", featureId: "f1" }),
+            branchEntity({ name: "feat/b", featureId: "f1" }),
+            branchEntity({ name: "feat/c", featureId: "f1" }),
+          ],
+        },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+      await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("feat/a"), { dataTransfer: transfer });
+      // top half of the row (rect top=100, height=20) => insert BEFORE feat/c
+      fireDragAt("dragover", screen.getByText("feat/c"), transfer, 105);
+      fireDragAt("drop", screen.getByText("feat/c"), transfer, 105);
+
+      expect(props.onReorderFeatureBranches).toHaveBeenCalledWith("f1", ["feat/b", "feat/a", "feat/c"]);
+      expect(props.onFileBranch).not.toHaveBeenCalled();
+    });
+
+    it("dropping a branch on the bottom half of a sibling row inserts after it", async () => {
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(ROW_RECT);
+      const featureGroups: FeatureGroup[] = [
+        {
+          feature: { id: "f1", name: "Feature One", branches: ["feat/a", "feat/b", "feat/c"] },
+          branches: [
+            branchEntity({ name: "feat/a", featureId: "f1" }),
+            branchEntity({ name: "feat/b", featureId: "f1" }),
+            branchEntity({ name: "feat/c", featureId: "f1" }),
+          ],
+        },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+      await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("feat/a"), { dataTransfer: transfer });
+      // bottom half of the row => insert AFTER feat/c
+      fireDragAt("dragover", screen.getByText("feat/c"), transfer, 115);
+      fireDragAt("drop", screen.getByText("feat/c"), transfer, 115);
+
+      expect(props.onReorderFeatureBranches).toHaveBeenCalledWith("f1", ["feat/b", "feat/c", "feat/a"]);
+    });
+
+    it("dragging a branch from one feature onto a different feature files it there (not a reorder)", async () => {
+      const featureGroups: FeatureGroup[] = [
+        {
+          feature: { id: "f1", name: "Feature One", branches: ["feat/a"] },
+          branches: [branchEntity({ name: "feat/a", featureId: "f1" })],
+        },
+        { feature: { id: "f2", name: "Feature Two", branches: [] }, branches: [] },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+      await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("feat/a"), { dataTransfer: transfer });
+      const f2Header = screen.getByRole("button", { name: /expand feature two/i });
+      fireEvent.dragOver(f2Header, { dataTransfer: transfer });
+      fireEvent.drop(f2Header, { dataTransfer: transfer });
+
+      expect(props.onFileBranch).toHaveBeenCalledWith("f2", "feat/a");
+      expect(props.onReorderFeatureBranches).not.toHaveBeenCalled();
+    });
+
+    it("dropping a branch back onto its own feature's header is a no-op", async () => {
+      const featureGroups: FeatureGroup[] = [
+        {
+          feature: { id: "f1", name: "Feature One", branches: ["feat/a"] },
+          branches: [branchEntity({ name: "feat/a", featureId: "f1" })],
+        },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+      await userEvent.click(screen.getByRole("button", { name: /expand feature one/i }));
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByText("feat/a"), { dataTransfer: transfer });
+      // the header now reads "Collapse Feature One" (already expanded above)
+      const header = screen.getByRole("button", { name: /collapse feature one/i });
+      fireEvent.dragOver(header, { dataTransfer: transfer });
+      fireEvent.drop(header, { dataTransfer: transfer });
+
+      expect(props.onFileBranch).not.toHaveBeenCalled();
+      expect(props.onReorderFeatureBranches).not.toHaveBeenCalled();
+    });
+
+    it("dragging a Feature folder header onto another reorders the features", () => {
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(ROW_RECT);
+      const featureGroups: FeatureGroup[] = [
+        { feature: { id: "f1", name: "Alpha", branches: [] }, branches: [] },
+        { feature: { id: "f2", name: "Beta", branches: [] }, branches: [] },
+        { feature: { id: "f3", name: "Gamma", branches: [] }, branches: [] },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByRole("button", { name: /expand alpha/i }), { dataTransfer: transfer });
+      const gammaHeader = screen.getByRole("button", { name: /expand gamma/i });
+      // top half => insert BEFORE gamma
+      fireDragAt("dragover", gammaHeader, transfer, 105);
+      fireDragAt("drop", gammaHeader, transfer, 105);
+
+      expect(props.onReorderFeatures).toHaveBeenCalledWith(["f2", "f1", "f3"]);
+      expect(props.onFileBranch).not.toHaveBeenCalled();
+    });
+
+    it("dragging a branch does not fire onReorderFeatures, and dragging a feature does not fire onFileBranch/onUnfileBranch", () => {
+      // A feature-folder drag and a branch drag use different DataTransfer MIME types, so
+      // dropping one kind of payload never triggers the other kind's callback.
+      const featureGroups: FeatureGroup[] = [
+        { feature: { id: "f1", name: "Alpha", branches: [] }, branches: [] },
+        { feature: { id: "f2", name: "Beta", branches: [] }, branches: [] },
+      ];
+      const props = renderComponent({ featureGroups, unfiled: [] });
+
+      const transfer = fakeDataTransfer();
+      fireEvent.dragStart(screen.getByRole("button", { name: /expand alpha/i }), { dataTransfer: transfer });
+      const betaHeader = screen.getByRole("button", { name: /expand beta/i });
+      fireEvent.dragOver(betaHeader, { dataTransfer: transfer });
+      fireEvent.drop(betaHeader, { dataTransfer: transfer });
+
+      expect(props.onFileBranch).not.toHaveBeenCalled();
+      expect(props.onUnfileBranch).not.toHaveBeenCalled();
+      expect(props.onReorderFeatures).toHaveBeenCalled();
     });
   });
 

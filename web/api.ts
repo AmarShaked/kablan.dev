@@ -305,6 +305,20 @@ export const api = {
         `/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(fid)}/unfile`,
         { method: "POST", body: JSON.stringify({ branch }) },
       ),
+    // Drag-and-drop reordering — persists the sidebar's manual order. `reorderFeatureBranches`
+    // takes the feature's full new branch order (a permutation of its current branches);
+    // `reorderFeatures` takes the project's full new feature-id order (a permutation of the
+    // current set). Both reject a request that isn't an exact permutation.
+    reorderFeatureBranches: (name: string, fid: string, branches: string[]) =>
+      req<{ ok: boolean }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/features/${encodeURIComponent(fid)}/reorder`,
+        { method: "POST", body: JSON.stringify({ branches }) },
+      ),
+    reorderFeatures: (name: string, order: string[]) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/features/reorder`, {
+        method: "POST",
+        body: JSON.stringify({ order }),
+      }),
 
     // Branch-keyed agent calls — branch always travels in the body/query (never the path),
     // since branch names contain `/`. See `branchKey` (`../lib/agentKey.ts`) for the matching

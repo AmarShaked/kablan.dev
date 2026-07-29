@@ -88,6 +88,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/features/:fid", delete(delete_feature_route))
         .route("/api/projects/:name/factory/features/:fid/file", post(post_file_branch))
         .route("/api/projects/:name/factory/features/:fid/unfile", post(post_unfile_branch))
+        .route("/api/projects/:name/factory/features/:fid/reorder", post(post_reorder_feature_branches))
+        .route("/api/projects/:name/factory/features/reorder", post(post_reorder_features))
         .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
         .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
@@ -330,6 +332,49 @@ async fn post_unfile_branch(Path((name, fid)): Path<(String, String)>, body: Byt
         let path = factory_store_path();
         let mut file = factory::load_file(&path);
         factory::unfile_branch(&mut file, &key, &fid, &branch)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Parses a JSON array of strings from `body[field]`, tolerating a missing/wrong-typed field
+/// as an empty list (the store-layer permutation check then reports the real error).
+fn string_array(b: &Value, field: &str) -> Vec<String> {
+    b.get(field)
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+async fn post_reorder_feature_branches(Path((name, fid)): Path<(String, String)>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branches = string_array(&b, "branches");
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::reorder_feature_branches(&mut file, &key, &fid, branches)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn post_reorder_features(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let order = string_array(&b, "order");
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::reorder_features(&mut file, &key, order)?;
         factory::save_file(&path, &file)?;
         Ok::<_, String>(())
     })

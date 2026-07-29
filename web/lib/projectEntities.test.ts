@@ -156,9 +156,35 @@ describe("buildBranchEntities", () => {
       isServerRunning: noServer,
     });
     expect(featureGroups.map((g) => g.feature.id)).toEqual(["f1", "f2"]);
-    expect(featureGroups[0].branches.map((e) => e.name)).toEqual(["feat/b", "feat/a"]); // ts desc
+    // A feature's rows render in the STORED `feature.branches` order (not re-sorted by
+    // activity) — so a manual drag-and-drop reorder sticks instead of being clobbered by ts.
+    expect(featureGroups[0].branches.map((e) => e.name)).toEqual(["feat/a", "feat/b"]);
     expect(featureGroups[1].branches.map((e) => e.name)).toEqual(["feat/c"]);
     expect(unfiled.map((e) => e.name)).toEqual(["main"]);
+  });
+
+  it("keeps a feature's branches in stored order even when activity order differs", () => {
+    const features: Feature[] = [{ id: "f1", name: "Feature One", branches: ["feat/z", "feat/a"] }];
+    const { featureGroups } = buildBranchEntities({
+      branches: [branch({ name: "feat/z", lastCommitTs: 1 }), branch({ name: "feat/a", lastCommitTs: 999 })],
+      worktrees: [],
+      factory: factory({ features }),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+    });
+    // feat/a has the more recent activity but stays SECOND — stored order wins.
+    expect(featureGroups[0].branches.map((e) => e.name)).toEqual(["feat/z", "feat/a"]);
+  });
+
+  it("the unfiled Branches list stays activity-sorted (no manual reorder there)", () => {
+    const { unfiled } = buildBranchEntities({
+      branches: [branch({ name: "old", lastCommitTs: 1 }), branch({ name: "new", lastCommitTs: 999 })],
+      worktrees: [],
+      factory: factory(),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+    });
+    expect(unfiled.map((e) => e.name)).toEqual(["new", "old"]);
   });
 
   it("sets featureId on branch entities filed into a feature, leaving it undefined for unfiled ones", () => {
