@@ -29,7 +29,7 @@ import { ProjectMenu } from "./components/ProjectMenu.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { Cockpit } from "./components/Cockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
-import { ActivityView } from "./components/ActivityView.tsx";
+import { HomeView } from "./components/HomeView.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { buildBranchEntities } from "./lib/projectEntities.ts";
 import { branchKey } from "./lib/agentKey.ts";
@@ -46,7 +46,7 @@ const LAST_PROJECT_KEY = "kablan.lastProject";
 // the unified branch Cockpit, "inbox" renders InboxView, "settings" renders SettingsPage. Every
 // branch — filed into a feature or not — opens the same cockpit; there's no separate
 // task-force/worktree/bare-branch target kind anymore (see `cockpitBranch` below).
-type View = "project" | "settings" | "cockpit" | "inbox" | "activity";
+type View = "project" | "settings" | "cockpit" | "inbox" | "home";
 type Theme = "light" | "dark";
 
 function useTheme(): [Theme, () => void] {
@@ -327,7 +327,7 @@ function AppContent() {
   }, []);
 
   const railActive =
-    view === "inbox" ? "inbox" : view === "activity" ? "activity" : view === "settings" ? "settings" : null;
+    view === "inbox" ? "inbox" : view === "home" ? "home" : view === "settings" ? "settings" : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -338,7 +338,7 @@ function AppContent() {
           inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
           active={railActive}
           onInbox={() => isTauri && setView("inbox")}
-          onActivity={() => setView("activity")}
+          onHome={() => setView("home")}
           onSettings={() => setView("settings")}
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -405,8 +405,8 @@ function AppContent() {
             />
           ) : view === "inbox" && isTauri ? (
             <InboxView onOpen={openInboxEntry} />
-          ) : view === "activity" ? (
-            <ActivityView
+          ) : view === "home" ? (
+            <HomeView
               statuses={activityStatuses}
               servers={servers}
               logs={logs}

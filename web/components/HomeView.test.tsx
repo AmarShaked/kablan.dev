@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import { ActivityView } from "./ActivityView.tsx";
+import { HomeView } from "./HomeView.tsx";
 import type { AgentStatus, RunningServer, LogLine } from "../api.ts";
 
 const statuses: Record<string, AgentStatus> = {
@@ -35,7 +35,7 @@ const servers: Record<string, RunningServer> = {
   }),
 };
 
-function renderView(overrides: Partial<Parameters<typeof ActivityView>[0]> = {}) {
+function renderView(overrides: Partial<Parameters<typeof HomeView>[0]> = {}) {
   const props = {
     statuses,
     servers,
@@ -44,14 +44,14 @@ function renderView(overrides: Partial<Parameters<typeof ActivityView>[0]> = {})
     onOpenProject: vi.fn(),
     ...overrides,
   };
-  render(<ActivityView {...props} />);
+  render(<HomeView {...props} />);
   return props;
 }
 
-describe("ActivityView", () => {
+describe("HomeView", () => {
   it("renders a header", () => {
     renderView();
-    expect(screen.getByText(/activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/home/i)).toBeInTheDocument();
   });
 
   it("shows only working/awaitingInput agents, with counts", () => {

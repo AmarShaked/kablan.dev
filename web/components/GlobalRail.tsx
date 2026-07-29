@@ -1,13 +1,13 @@
-import { Inbox, Activity, Settings, Sun, Moon, User } from "lucide-react";
+import { Home, Inbox, Settings, Sun, Moon, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type GlobalRailActive = "inbox" | "activity" | "settings" | null;
+export type GlobalRailActive = "home" | "inbox" | "settings" | null;
 
 export interface GlobalRailProps {
   inboxCount: number;
   active: GlobalRailActive;
+  onHome: () => void;
   onInbox: () => void;
-  onActivity: () => void;
   onSettings: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -50,15 +50,16 @@ function RailButton({
 
 /**
  * The narrow, always-dark global rail (Slack-style) — the app's outermost navigation column.
- * A Kablan logo tile at top; Inbox (with an unread badge) and Settings below it; a Theme toggle
- * and a user-avatar placeholder pinned to the bottom (behind a divider). Fixed width, no scroll —
- * project-scoped browsing lives one column over, in `ProjectMenu`.
+ * A Kablan logo tile at top; Home (the cross-project live board), Inbox (with an unread badge),
+ * and Settings below it; a Theme toggle and a user-avatar placeholder pinned to the bottom
+ * (behind a divider). Fixed width, no scroll — project-scoped browsing lives one column over,
+ * in `ProjectMenu`.
  */
 export function GlobalRail({
   inboxCount,
   active,
+  onHome,
   onInbox,
-  onActivity,
   onSettings,
   theme,
   onToggleTheme,
@@ -72,8 +73,8 @@ export function GlobalRail({
         K
       </div>
 
+      <RailButton icon={Home} label="Home" active={active === "home"} onClick={onHome} />
       <RailButton icon={Inbox} label="Inbox" active={active === "inbox"} onClick={onInbox} badge={inboxCount} />
-      <RailButton icon={Activity} label="Activity" active={active === "activity"} onClick={onActivity} />
       <RailButton icon={Settings} label="Settings" active={active === "settings"} onClick={onSettings} />
 
       <div className="flex-1" />

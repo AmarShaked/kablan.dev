@@ -3,7 +3,7 @@ import { AgentDot } from "./AgentDot.tsx";
 import { parseBranchKey } from "../lib/agentKey.ts";
 import { findServerUrl } from "../lib/serverUrl.ts";
 
-export interface ActivityViewProps {
+export interface HomeViewProps {
   /** Every agent key's current status, across all projects — `useAgentStream().snapshotStatuses()`
    * re-scanned by the caller on its `version` counter so this stays live. */
   statuses: Record<string, AgentStatus>;
@@ -25,13 +25,13 @@ function basename(cwd: string): string {
 }
 
 /**
- * Cross-project "what's live right now" board — the Activity rail item's destination. Two
+ * Cross-project "what's live right now" board — the Home rail item's destination. Two
  * sections: agents currently working/awaiting input, and dev servers currently running, each
  * across every project (not just the selected one). Clicking a row jumps straight to that
  * branch's cockpit (agents) or at least selects the project (servers — branch resolution from a
  * cwd cross-project is a v1 best-effort left to the caller).
  */
-export function ActivityView({ statuses, servers, logs, onOpenBranch, onOpenProject }: ActivityViewProps) {
+export function HomeView({ statuses, servers, logs, onOpenBranch, onOpenProject }: HomeViewProps) {
   const agentRows = Object.entries(statuses)
     .map(([key, status]) => ({ key, status, parsed: parseBranchKey(key) }))
     .filter(
@@ -44,7 +44,7 @@ export function ActivityView({ statuses, servers, logs, onOpenBranch, onOpenProj
   return (
     <>
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-        <h1 className="text-lg font-semibold">Activity</h1>
+        <h1 className="text-lg font-semibold">Home</h1>
         <span className="text-sm text-muted-foreground">— what's live right now</span>
       </div>
 

@@ -7,9 +7,9 @@ function renderRail(overrides: Partial<Parameters<typeof GlobalRail>[0]> = {}) {
   const props = {
     inboxCount: 0,
     active: null,
+    onHome: vi.fn(),
     onInbox: vi.fn(),
     onSettings: vi.fn(),
-    onActivity: vi.fn(),
     theme: "dark" as const,
     onToggleTheme: vi.fn(),
     ...overrides,
@@ -19,33 +19,33 @@ function renderRail(overrides: Partial<Parameters<typeof GlobalRail>[0]> = {}) {
 }
 
 describe("GlobalRail", () => {
-  it("renders Inbox, Activity and Settings items with no badge when inboxCount is 0", () => {
+  it("renders Home, Inbox and Settings items with no badge when inboxCount is 0", () => {
     renderRail();
+    expect(screen.getByLabelText("Home")).toBeInTheDocument();
     expect(screen.getByLabelText("Inbox")).toBeInTheDocument();
-    expect(screen.getByLabelText("Activity")).toBeInTheDocument();
     expect(screen.getByLabelText("Settings")).toBeInTheDocument();
     expect(screen.queryByText(/^\d+$/)).not.toBeInTheDocument();
   });
 
-  it("places Activity between Inbox and Settings", () => {
+  it("places Home first, before Inbox and Settings", () => {
     renderRail();
     const labels = screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    const homeIdx = labels.indexOf("Home");
     const inboxIdx = labels.indexOf("Inbox");
-    const activityIdx = labels.indexOf("Activity");
     const settingsIdx = labels.indexOf("Settings");
-    expect(inboxIdx).toBeLessThan(activityIdx);
-    expect(activityIdx).toBeLessThan(settingsIdx);
+    expect(homeIdx).toBeLessThan(inboxIdx);
+    expect(inboxIdx).toBeLessThan(settingsIdx);
   });
 
-  it("fires onActivity when Activity is clicked", async () => {
+  it("fires onHome when Home is clicked", async () => {
     const props = renderRail();
-    await userEvent.click(screen.getByLabelText("Activity"));
-    expect(props.onActivity).toHaveBeenCalled();
+    await userEvent.click(screen.getByLabelText("Home"));
+    expect(props.onHome).toHaveBeenCalled();
   });
 
-  it("marks Activity current when active is 'activity'", () => {
-    renderRail({ active: "activity" });
-    expect(screen.getByLabelText("Activity")).toHaveAttribute("aria-current", "page");
+  it("marks Home current when active is 'home'", () => {
+    renderRail({ active: "home" });
+    expect(screen.getByLabelText("Home")).toHaveAttribute("aria-current", "page");
     expect(screen.getByLabelText("Inbox")).not.toHaveAttribute("aria-current");
   });
 
