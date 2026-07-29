@@ -10,13 +10,14 @@ import {
   Cloud,
   ExternalLink,
 } from "lucide-react";
-import { api, type RunningServer, type ProjectSummary } from "../api.ts";
+import { api, type RunningServer, type ProjectSummary, type LogLine } from "../api.ts";
 import { useCommits, useGitlabOverview, useDiff } from "../queries.ts";
 import type { Entry } from "../lib/entries.ts";
 import { GitlabSection } from "./GitlabSection.tsx";
 import { OpenMenu } from "./OpenMenu.tsx";
 import { EnvTab } from "./EnvTab.tsx";
 import { LinearLink } from "./LinearLink.tsx";
+import { LogsTab } from "./LogsTab.tsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -166,6 +167,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
  * Guards gracefully when `entry.cwd` is null (a bare branch with no worktree yet): renders the
  * branch meta + commit history, but disables the dev-server and Env cards with a hint instead
  * of the usual controls.
+ *
+ * `logs` (I3): the project's dev-server output, captured by `App`'s WS "log"-frame handler and
+ * threaded down through `Cockpit` — rendered here via the pre-existing `LogsTab` (orphaned by
+ * the `ItemDrawer`/`OverviewTab` removal, now given a home again) so the crash toast's "Open the
+ * cockpit's Logs card for details" has somewhere to actually point.
  */
 export function WorktreeDetails({
   project,
@@ -177,6 +183,7 @@ export function WorktreeDetails({
   onStopServer,
   onRefreshServer,
   linearWorkspace = "",
+  logs = [],
 }: {
   project: string;
   entry: Entry;
@@ -187,6 +194,7 @@ export function WorktreeDetails({
   onStopServer: () => void;
   onRefreshServer?: () => void;
   linearWorkspace?: string;
+  logs?: LogLine[];
 }) {
   const hasWorktree = !!entry.cwd;
   const running = server?.status === "running" || server?.status === "starting";
@@ -319,6 +327,16 @@ export function WorktreeDetails({
           <p className="text-xs text-muted-foreground">Start a session for this branch to run a dev server.</p>
         )}
       </Card>
+
+      {/* Logs — the dev server's stdout/stderr, live-streamed via App's WS "log" frames plus
+          whatever `api.getLogs` already had on record. Only one dev server runs per project at a
+          time (see `server/processes.ts`), so `logs` (project-scoped) and `server` (this entry's
+          cwd, already filtered by the caller) describe the same process here. */}
+      {hasWorktree && (
+        <Card title="Logs">
+          <LogsTab project={envProject} server={server} logs={logs} />
+        </Card>
+      )}
 
       {/* Recent commits */}
       <Card title="Recent commits">

@@ -16,12 +16,18 @@ function FeaturesBrowser({
   project,
   onOpenTaskForce,
   expandFeatureId,
+  expandNonce,
 }: {
   project: string;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
   /** When set (e.g. from the sidebar's SidebarRecent/CommandPalette routing into a feature),
    * that feature's row is force-expanded — including on first mount, not just on change. */
   expandFeatureId?: string | null;
+  /** Bumped by the caller on every "open feature" request, even re-selecting the same
+   * `expandFeatureId` (e.g. the sidebar/palette after the user manually collapsed it). Without
+   * this the effect below only depended on `expandFeatureId`, so re-picking the same id was a
+   * no-op (React bails out on an unchanged primitive) and the feature stayed collapsed. */
+  expandNonce?: number;
 }) {
   const { data } = useFactory(project);
   const features = data?.features ?? [];
@@ -32,8 +38,9 @@ function FeaturesBrowser({
 
   useEffect(() => {
     if (!expandFeatureId) return;
-    setOpen((prev) => (prev.has(expandFeatureId) ? prev : new Set(prev).add(expandFeatureId)));
-  }, [expandFeatureId]);
+    setOpen((prev) => new Set(prev).add(expandFeatureId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandFeatureId, expandNonce]);
 
   const toggleExpanded = (featureId: string) => {
     setOpen((prev) => {
@@ -154,11 +161,15 @@ export function ProjectView({
   project,
   onOpenTaskForce,
   expandFeatureId = null,
+  expandNonce,
 }: {
   project: ProjectSummary;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
   /** Feature id to force-expand in the Features browser (sidebar/palette "open feature"). */
   expandFeatureId?: string | null;
+  /** See `FeaturesBrowser`'s doc comment — bump on every "open feature" request so re-selecting
+   * the same feature re-expands it even after a manual collapse. */
+  expandNonce?: number;
 }) {
   return (
     <>
@@ -174,6 +185,7 @@ export function ProjectView({
           project={project.name}
           onOpenTaskForce={onOpenTaskForce}
           expandFeatureId={expandFeatureId}
+          expandNonce={expandNonce}
         />
       </div>
     </>

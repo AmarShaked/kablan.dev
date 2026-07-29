@@ -111,4 +111,21 @@ describe("WorktreeDetails", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start server/i })).not.toBeInTheDocument();
   });
+
+  it("renders a Logs card with the given log lines (I3: logs were orphaned by the redesign)", () => {
+    renderDetails({
+      logs: [
+        { ts: 0, stream: "stdout", text: "server listening on :3000" },
+        { ts: 1, stream: "stderr", text: "warn: something" },
+      ],
+    });
+    expect(screen.getByText("Logs")).toBeInTheDocument();
+    expect(screen.getByText("server listening on :3000")).toBeInTheDocument();
+    expect(screen.getByText("warn: something")).toBeInTheDocument();
+  });
+
+  it("doesn't render a Logs card for a cwd-less (bare-branch) entry", () => {
+    renderDetails({ entry: { ...entry, cwd: null }, logs: [{ ts: 0, stream: "stdout", text: "stale" }] });
+    expect(screen.queryByText("Logs")).not.toBeInTheDocument();
+  });
 });

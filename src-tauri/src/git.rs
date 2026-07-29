@@ -299,12 +299,42 @@ pub fn list_worktrees(dir: &str) -> Vec<Worktree> {
 /// `worktree_root/slug(project)/slug(branch)`; parent dirs are created first.
 /// The `--` separator keeps a flag-shaped `branch` from being parsed as a git
 /// flag, matching `factory::create_task_force`'s convention.
+///
+/// `branch` may be a remote-only branch (no local ref yet — see
+/// `Branch::remote_only`), which `git worktree add` resolves the same way
+/// `git checkout` does: if it matches exactly one `refs/remotes/<remote>/branch`,
+/// it DWIMs a new local branch tracking it. That's the desired behavior and is
+/// left to git itself. But if the short name matches more than one remote
+/// (e.g. both `origin/foo` and `upstream/foo` exist and neither is checked out
+/// locally), git's DWIM refuses and fails with an opaque "invalid reference"
+/// error that doesn't explain why — surfaced verbatim it would just look like
+/// a broken branch name. Detect that ambiguity up front so the error the UI
+/// toasts actually says what's wrong, rather than creating nothing and giving
+/// no clue, or (in principle, on some git versions/configs) resolving to
+/// whichever remote happens to sort first.
 pub fn add_worktree_for_branch(
     repo_dir: &Path,
     worktree_root: &Path,
     project: &str,
     branch: &str,
 ) -> Result<Worktree, String> {
+    let repo = repo_dir.to_string_lossy().to_string();
+
+    let has_local_branch =
+        git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok();
+    if !has_local_branch {
+        let remotes_out = git(&repo, &["for-each-ref", "--format=%(refname:short)", &format!("refs/remotes/*/{branch}")])
+            .unwrap_or_default();
+        let remotes: Vec<&str> = remotes_out.lines().filter(|l| !l.is_empty()).collect();
+        if remotes.len() > 1 {
+            return Err(format!(
+                "'{branch}' exists on multiple remotes ({}) and has no local branch yet — check one out explicitly first, e.g. `git checkout -b {branch} {}`",
+                remotes.join(", "),
+                remotes[0],
+            ));
+        }
+    }
+
     let path = worktree_root
         .join(crate::factory::slugify(project))
         .join(crate::factory::slugify(branch));
@@ -312,17 +342,13 @@ pub fn add_worktree_for_branch(
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let wt = path.to_string_lossy().to_string();
-    git(
-        &repo_dir.to_string_lossy(),
-        &["worktree", "add", "--", &wt, branch],
-    )
-    .map_err(|e| format!("git worktree add failed: {e}"))?;
+    git(&repo, &["worktree", "add", "--", &wt, branch]).map_err(|e| format!("git worktree add failed: {e}"))?;
 
     // `git worktree list` reports canonicalized paths (e.g. macOS resolves
     // /var -> /private/var), so compare canonical forms rather than the raw
     // strings, falling back to a raw compare if canonicalization fails.
     let canonical_path = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-    let found = list_worktrees(&repo_dir.to_string_lossy())
+    let found = list_worktrees(&repo)
         .into_iter()
         .find(|w| {
             let wp = Path::new(&w.path);
@@ -521,5 +547,74 @@ mod tests {
         let wt_root = tmp();
         let r = add_worktree_for_branch(&repo, &wt_root, "acme/app", "--detach");
         assert!(r.is_err(), "flag-shaped branch should fail, not be parsed as a git flag");
+    }
+
+    /// Clones `origin` into a fresh dir so the clone has a `refs/remotes/origin/*`
+    /// but no local branches of its own beyond the default one checked out.
+    fn clone_repo(origin: &std::path::Path) -> std::path::PathBuf {
+        let dir = tmp();
+        // `tmp()` already created `dir`; `git clone` needs to create it itself.
+        std::fs::remove_dir_all(&dir).unwrap();
+        git(
+            &env::current_dir().unwrap().to_string_lossy(),
+            &["clone", "-q", &origin.to_string_lossy(), &dir.to_string_lossy()],
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn add_worktree_for_branch_remote_only_single_remote_dwims_a_tracking_branch() {
+        // A branch that exists only on `origin` (never checked out locally) should
+        // resolve the same way `git checkout <branch>` does: DWIM a local branch
+        // tracking the sole matching remote, not error and not track the wrong ref.
+        let origin = init_repo();
+        git(&origin.to_string_lossy(), &["checkout", "-qb", "feature-remote"]).unwrap();
+        git(&origin.to_string_lossy(), &["checkout", "-q", "main"]).unwrap();
+
+        let repo = clone_repo(&origin);
+        let wt_root = tmp();
+
+        let wt = add_worktree_for_branch(&repo, &wt_root, "acme/app", "feature-remote")
+            .expect("single-remote DWIM should succeed, not error");
+
+        assert_eq!(wt.branch.as_deref(), Some("feature-remote"));
+        assert!(Path::new(&wt.path).exists());
+        let upstream = git(&wt.path, &["rev-parse", "--abbrev-ref", "feature-remote@{upstream}"]).unwrap();
+        assert_eq!(upstream, "origin/feature-remote");
+    }
+
+    #[test]
+    fn add_worktree_for_branch_ambiguous_across_remotes_errors_clearly() {
+        // Two remotes both have a same-named branch, and neither is checked out
+        // locally: git's own DWIM would fail with an opaque "invalid reference"
+        // message. `add_worktree_for_branch` should instead fail with a message
+        // that actually explains the ambiguity, and must not silently create a
+        // worktree tracking whichever remote it happened to pick.
+        let origin = init_repo();
+        git(&origin.to_string_lossy(), &["checkout", "-qb", "feature-shared"]).unwrap();
+        git(&origin.to_string_lossy(), &["checkout", "-q", "main"]).unwrap();
+
+        let other_remote = init_repo();
+        git(&other_remote.to_string_lossy(), &["checkout", "-qb", "feature-shared"]).unwrap();
+        git(&other_remote.to_string_lossy(), &["checkout", "-q", "main"]).unwrap();
+
+        let repo = clone_repo(&origin);
+        let d = repo.to_string_lossy().to_string();
+        git(&d, &["remote", "add", "upstream", &other_remote.to_string_lossy()]).unwrap();
+        git(&d, &["fetch", "-q", "upstream"]).unwrap();
+
+        let wt_root = tmp();
+        let r = add_worktree_for_branch(&repo, &wt_root, "acme/app", "feature-shared");
+
+        let err = r.expect_err("ambiguous remote-only branch should error, not DWIM to one silently");
+        assert!(
+            err.contains("multiple remotes") && err.contains("origin/feature-shared") && err.contains("upstream/feature-shared"),
+            "error should name the ambiguity and the candidate remotes, got: {err}"
+        );
+        assert!(
+            list_worktrees(&d).iter().all(|w| w.branch.as_deref() != Some("feature-shared")),
+            "no worktree should have been created for the ambiguous branch"
+        );
     }
 }

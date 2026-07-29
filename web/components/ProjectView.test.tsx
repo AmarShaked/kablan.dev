@@ -91,6 +91,29 @@ describe("ProjectView", () => {
     expect(screen.getByText("TF One")).toBeInTheDocument();
   });
 
+  it("re-expands a feature re-selected via expandNonce even after it was manually collapsed", async () => {
+    const qc = new QueryClient();
+    const tree = (nonce: number) => (
+      <QueryClientProvider client={qc}>
+        <AgentStreamProvider>
+          <ProjectView project={project} onOpenTaskForce={vi.fn()} expandFeatureId="f1" expandNonce={nonce} />
+        </AgentStreamProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(1));
+    expect(screen.getByText("TF One")).toBeInTheDocument();
+
+    // User manually collapses the feature.
+    await userEvent.click(screen.getByRole("button", { name: /collapse feature one/i }));
+    expect(screen.queryByText("TF One")).not.toBeInTheDocument();
+
+    // Re-selecting the *same* feature from the sidebar/palette bumps the nonce — without it,
+    // `expandFeatureId` is unchanged so the expand effect wouldn't re-fire and the feature would
+    // stay collapsed.
+    rerender(tree(2));
+    expect(screen.getByText("TF One")).toBeInTheDocument();
+  });
+
   it("opens the create-feature dialog when New feature is clicked", async () => {
     renderView();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

@@ -85,10 +85,14 @@ export function Cockpit({
   project,
   target,
   onStarted,
+  logs = [],
 }: {
   project: string;
   target: CockpitTarget;
   onStarted?: (worktree: Worktree) => void;
+  /** Dev-server output for this project (App owns the WS "log"-frame capture and history
+   * backfill; see `App.tsx`'s `logs` state) — rendered in `WorktreeDetails`' Logs card (I3). */
+  logs?: LogLine[];
 }) {
   const [localTarget, setLocalTarget] = useState<CockpitTarget | null>(null);
   useEffect(() => setLocalTarget(null), [target]);
@@ -265,6 +269,7 @@ export function Cockpit({
             onStopServer={stopServer}
             onRefreshServer={refreshServer}
             linearWorkspace={linearWorkspace}
+            logs={logs}
           />
         </div>
       </div>

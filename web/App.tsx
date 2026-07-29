@@ -8,6 +8,8 @@ import {
   type RunningServer,
   type InboxEntry,
   type NotificationSettings,
+  type Worktree,
+  type LogLine,
 } from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
 import { useAgentNotifications } from "./hooks/useAgentNotifications.tsx";
@@ -42,7 +44,7 @@ type Theme = "light" | "dark";
 
 /** Which cockpit target to show, addressed by stable ids/paths/names rather than the resolved
  * objects themselves — the objects are looked up from the live queries on every render (see
- * `resolvedTarget` below) so the cockpit always reflects the latest feature/worktree/branch
+ * `resolvedCockpit` below) so the cockpit always reflects the latest feature/worktree/branch
  * data without App having to keep its own copy in sync. */
 type CockpitTargetRef =
   | { kind: "taskForce"; featureId: string; taskForceId: string }
@@ -89,11 +91,18 @@ function AppContent() {
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
   // ⌘K palette + "force this feature open" (sidebar/palette "open feature" routing into the
-  // Features-only ProjectView home).
+  // Features-only ProjectView home). `expandNonce` bumps on every "open feature" request (even
+  // re-selecting the same feature after the user manually collapsed it) — see
+  // `ProjectView`/`FeaturesBrowser`'s doc comment for why `expandFeatureId` alone isn't enough.
   const [commandOpen, setCommandOpen] = useState(false);
   const [expandFeatureId, setExpandFeatureId] = useState<string | null>(null);
+  const [expandNonce, setExpandNonce] = useState(0);
 
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
+  // Dev-server output, per project name — fed by the WS "log" frames below and seeded from
+  // `api.getLogs` on project select, mirroring the pre-redesign App (see git history). Threaded
+  // into the cockpit's Dev server area via `Cockpit`/`WorktreeDetails`'s `LogsTab` (I3).
+  const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [tauriUpdate, setTauriUpdate] = useState<TauriUpdate | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -123,6 +132,18 @@ function AppContent() {
     () => queryClient.invalidateQueries({ queryKey: qk.projects }),
     [queryClient],
   );
+
+  // Seeds `logs[name]` with whatever the dev-server process has already emitted (e.g. a server
+  // that was started before this project was selected) — the WS "log" handler below only
+  // appends going forward, it can't backfill history for a session it wasn't open for.
+  const loadLogsFor = useCallback(async (name: string) => {
+    try {
+      const existing = await api.getLogs(name);
+      setLogs((prev) => ({ ...prev, [name]: existing }));
+    } catch {
+      /* no server yet */
+    }
+  }, []);
 
   useEffect(() => {
     api.getConfig().then((c) => {
@@ -157,10 +178,17 @@ function AppContent() {
           // (e.g. "command not found", a dev server that errored out).
           if (s && (s.status === "error" || (s.status === "exited" && !!s.exitCode))) {
             toast.error(
-              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Dev server card for details.`,
+              `${msg.projectName}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Logs card for details.`,
               { duration: 8000 },
             );
           }
+        } else if (msg.type === "log") {
+          const { projectName, line } = msg as { projectName: string; line: LogLine };
+          setLogs((prev) => {
+            const arr = prev[projectName] ? [...prev[projectName], line] : [line];
+            if (arr.length > 3000) arr.splice(0, arr.length - 3000);
+            return { ...prev, [projectName]: arr };
+          });
         } else if (msg.type?.startsWith("agent-")) {
           ingest(msg);
         }
@@ -182,6 +210,7 @@ function AppContent() {
     setView("project");
     setCockpitTarget(null);
     setExpandFeatureId(null);
+    loadLogsFor(name);
   };
 
   const openTaskForce = useCallback((featureId: string, taskForceId: string) => {
@@ -211,6 +240,7 @@ function AppContent() {
   const openInboxEntry = (entry: InboxEntry) => {
     setSelected(entry.project);
     openTaskForce(entry.featureId, entry.taskForceId);
+    loadLogsFor(entry.project);
   };
 
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
@@ -243,6 +273,9 @@ function AppContent() {
 
   const openFeatureHome = useCallback((featureId: string) => {
     setExpandFeatureId(featureId);
+    // Bump unconditionally, even when re-selecting the same feature id — see the `expandNonce`
+    // state's doc comment (M2: a manually-collapsed feature must re-expand on re-selection).
+    setExpandNonce((n) => n + 1);
     setCockpitTarget(null);
     setView("project");
   }, []);
@@ -250,23 +283,46 @@ function AppContent() {
   // Resolve the current cockpit target's live objects (feature/task-force, worktree, or branch)
   // from the same queries the ProjectMenu's lists use, rather than fetching separately or caching
   // a stale copy on App's own state.
-  const resolvedTarget: CockpitTarget | null = useMemo(() => {
-    if (!cockpitTarget) return null;
+  //
+  // A discriminated result rather than a plain `CockpitTarget | null` (I2): every unresolved
+  // target used to collapse to the same `null`, so the cockpit showed "Loading…" forever both
+  // while the backing query was still in flight AND once it had settled and genuinely didn't
+  // contain the id/path anymore (worktree removed, task force deleted, branch renamed elsewhere).
+  // Distinguishing "pending" from "notFound" lets the UI tell those apart.
+  type ResolvedCockpit =
+    | { status: "pending" }
+    | { status: "notFound" }
+    | { status: "ready"; target: CockpitTarget };
+  const resolvedCockpit: ResolvedCockpit = useMemo(() => {
+    if (!cockpitTarget) return { status: "pending" };
     if (cockpitTarget.kind === "taskForce") {
+      if (factoryQuery.isPending) return { status: "pending" };
       const feature = factoryQuery.data?.features.find((f) => f.id === cockpitTarget.featureId);
       const taskForce = feature?.taskForces.find((t) => t.id === cockpitTarget.taskForceId);
-      if (!feature || !taskForce) return null;
-      return { kind: "taskForce", feature, taskForce };
+      if (!feature || !taskForce) return { status: "notFound" };
+      return { status: "ready", target: { kind: "taskForce", feature, taskForce } };
     }
     if (cockpitTarget.kind === "worktree") {
+      if (worktreesQuery.isPending) return { status: "pending" };
       const worktree = worktreesQuery.data?.find((w) => w.path === cockpitTarget.worktreePath);
-      if (!worktree) return null;
-      return { kind: "worktree", worktree };
+      if (!worktree) return { status: "notFound" };
+      return { status: "ready", target: { kind: "worktree", worktree } };
     }
+    if (branchesQuery.isPending) return { status: "pending" };
     const branch = branchesQuery.data?.find((b) => b.name === cockpitTarget.branch);
-    if (!branch) return null;
-    return { kind: "branch", branch };
-  }, [cockpitTarget, factoryQuery.data, worktreesQuery.data, branchesQuery.data]);
+    if (!branch) return { status: "notFound" };
+    return { status: "ready", target: { kind: "branch", branch } };
+  }, [
+    cockpitTarget,
+    factoryQuery.data,
+    factoryQuery.isPending,
+    worktreesQuery.data,
+    worktreesQuery.isPending,
+    branchesQuery.data,
+    branchesQuery.isPending,
+  ]);
+  const cockpitTargetLabel =
+    cockpitTarget?.kind === "taskForce" ? "task force" : cockpitTarget?.kind === "worktree" ? "worktree" : "branch";
 
   const workingTaskForceIds = useMemo(() => {
     const set = new Set<string>();
@@ -457,16 +513,46 @@ function AppContent() {
                 Back
               </button>
             </div>
-            {resolvedTarget ? (
+            {resolvedCockpit.status === "ready" ? (
               <Cockpit
                 key={cockpitTargetRefKey(cockpitTarget!)}
                 project={selectedProject.name}
-                target={resolvedTarget}
-                onStarted={(wt) => setCockpitTarget({ kind: "worktree", worktreePath: wt.path })}
+                target={resolvedCockpit.target}
+                logs={logs[selectedProject.name] ?? []}
+                onStarted={(wt: Worktree) => {
+                  // I1: "Start a session" created the worktree, but nothing had invalidated
+                  // `qk.worktrees` — the cache still didn't contain it, so switching the target
+                  // to `{kind:"worktree", path}` remounted `Cockpit` (new key) into a
+                  // `resolvedCockpit` that could never find it, i.e. permanent "Loading…"/
+                  // "notFound". `api.createWorktree`'s response is already the confirmed,
+                  // canonical entry (the backend looks it up via `list_worktrees` before
+                  // returning — see `git::add_worktree_for_branch`), so seed the cache with it
+                  // directly rather than invalidating: an invalidate-triggered background
+                  // refetch racing this seed could otherwise clobber it with a stale response
+                  // (e.g. a slow/cached list on the server side) before the seed ever renders.
+                  queryClient.setQueryData<Worktree[]>(qk.worktrees(selectedProject.name), (prev) => {
+                    const list = prev ?? [];
+                    return list.some((w) => w.path === wt.path) ? list : [...list, wt];
+                  });
+                  setCockpitTarget({ kind: "worktree", worktreePath: wt.path });
+                }}
               />
-            ) : (
+            ) : resolvedCockpit.status === "pending" ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                 Loading…
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                <div>This {cockpitTargetLabel} no longer exists.</div>
+                {/* Distinct accessible name from the header's "Back to project" button above
+                    (same view, but this one is the empty state's own explicit call-to-action). */}
+                <button
+                  type="button"
+                  onClick={() => setView("project")}
+                  className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-accent"
+                >
+                  Back to features
+                </button>
               </div>
             )}
           </div>
@@ -475,6 +561,7 @@ function AppContent() {
             project={selectedProject}
             onOpenTaskForce={openTaskForce}
             expandFeatureId={expandFeatureId}
+            expandNonce={expandNonce}
           />
         )}
       </div>
