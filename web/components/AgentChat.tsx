@@ -14,16 +14,18 @@ import { parseChoices } from "../lib/parseChoices.ts";
 type TimelineItem = { kind: "you"; text: string } | { kind: "agent"; event: unknown };
 
 const STATUS_LABEL: Record<string, string> = {
-  idle: "Idle",
+  idle: "Ready",
   working: "Working",
   awaitingInput: "Awaiting input",
   done: "Done",
   failed: "Failed",
 };
 
-/** True while the agent process is actually alive and able to receive a message. */
+/** True while the agent process is alive and able to receive a message — including `idle`
+ * (freshly started, no turn yet) so the composer stays enabled and the Stop button shows.
+ * Only `working` drives the "thinking…" row. */
 function isRunningStatus(status: AgentStatus | undefined): boolean {
-  return status === "working" || status === "awaitingInput";
+  return status === "idle" || status === "working" || status === "awaitingInput";
 }
 
 /** Maps one raw stream-json event to a transcript row: assistant text -> a bubble, assistant
@@ -321,7 +323,11 @@ export function AgentChat({
       <div ref={transcriptRef} className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
         {timeline.length === 0 && status !== "working" ? (
           <p className="text-sm text-muted-foreground">
-            {canChat ? "No activity yet. Start the agent to begin." : "Start a session to chat with an agent here."}
+            {!canChat
+              ? "Start a session to chat with an agent here."
+              : running
+                ? "Ready — send your first message to begin."
+                : "Start the agent to begin."}
           </p>
         ) : (
           timeline.map((item, i) =>

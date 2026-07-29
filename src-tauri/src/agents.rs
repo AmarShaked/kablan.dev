@@ -75,7 +75,10 @@ pub fn next_status(prev: AgentStatus, ev: &ParsedEvent) -> AgentStatus {
             if ev.is_error { AgentStatus::Failed } else { AgentStatus::AwaitingInput }
         }
         EventKind::PostTurnSummary if ev.needs_action => AgentStatus::AwaitingInput,
-        EventKind::Init | EventKind::Assistant | EventKind::ToolResult => AgentStatus::Working,
+        // `init` fires once at startup before any user message — the agent is ready/idle, NOT
+        // working. Only actual turn output (assistant text / tool results) means "working".
+        EventKind::Init => AgentStatus::Idle,
+        EventKind::Assistant | EventKind::ToolResult => AgentStatus::Working,
         EventKind::Other | EventKind::PostTurnSummary => prev,
     }
 }
@@ -145,7 +148,10 @@ impl Agents {
     pub fn start(self: &Arc<Self>, key: &str, cwd: &str, argv: Vec<String>, _resume: Option<&str>) -> AgentView {
         self.stop(key); // one agent per task force
         let generation = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
-        let view = AgentView { key: key.into(), status: AgentStatus::Working, session_id: None, pid: None, started_at: now_ms(), exit_code: None };
+        // A freshly-spawned agent is idle/ready, waiting for the user's first message — not
+        // "working". It flips to Working when a message is sent (see `send`) or real turn output
+        // arrives. This prevents the cockpit showing "thinking…" the instant you Start.
+        let view = AgentView { key: key.into(), status: AgentStatus::Idle, session_id: None, pid: None, started_at: now_ms(), exit_code: None };
         self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation });
 
         let mut cmd = Command::new(&argv[0]);
@@ -323,8 +329,8 @@ mod tests {
         let res_ok = parse_event(r#"{"type":"result","is_error":false,"result":"ok"}"#).unwrap();
         let res_err = parse_event(r#"{"type":"result","is_error":true}"#).unwrap();
         let mut s = AgentStatus::Idle;
-        s = next_status(s, &init); assert!(matches!(s, AgentStatus::Working));
-        s = next_status(s, &asst); assert!(matches!(s, AgentStatus::Working));
+        s = next_status(s, &init); assert!(matches!(s, AgentStatus::Idle)); // init = ready, not working
+        s = next_status(s, &asst); assert!(matches!(s, AgentStatus::Working)); // real turn output
         s = next_status(s, &res_ok); assert!(matches!(s, AgentStatus::AwaitingInput));
         s = next_status(s, &res_err); assert!(matches!(s, AgentStatus::Failed));
     }

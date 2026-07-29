@@ -42,6 +42,12 @@ const workingStatus = {
   agent: { key: "proj::wt:/wt/one", status: "working", sessionId: null, pid: 1, startedAt: 0, exitCode: null },
 };
 
+const idleStatus = {
+  type: "agent-status",
+  key: "proj::wt:/wt/one",
+  agent: { key: "proj::wt:/wt/one", status: "idle", sessionId: null, pid: 1, startedAt: 0, exitCode: null },
+};
+
 describe("AgentChat", () => {
   it("sends the composer text via onMessage and optimistically shows a You bubble", async () => {
     const { onMessage } = renderChat([workingStatus]);
@@ -62,6 +68,15 @@ describe("AgentChat", () => {
   it("does not show a thinking indicator when the agent isn't working", () => {
     renderChat([]);
     expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+  });
+
+  // Regression: a freshly-started agent (status "idle") must NOT look busy before the user
+  // has sent anything — no "thinking…", but the composer is enabled and Stop is available.
+  it("a freshly started (idle) agent is quiet but chattable", () => {
+    renderChat([idleStatus]);
+    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/message the agent/i)).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
   });
 
   it("calls onStart when Start is clicked", async () => {
