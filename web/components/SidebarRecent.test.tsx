@@ -60,6 +60,16 @@ describe("SidebarRecent", () => {
     expect(screen.queryByLabelText("Dev server running")).not.toBeInTheDocument();
   });
 
+  it("shows a hollow 'Not started' dot for a branch with no working copy", () => {
+    renderComponent({ unfiled: [branchEntity({ name: "main", hasWorktree: false })] });
+    expect(screen.getByLabelText("Not started")).toBeInTheDocument();
+  });
+
+  it("shows a 'Working copy active' dot for a started branch", () => {
+    renderComponent({ unfiled: [branchEntity({ name: "main", hasWorktree: true })] });
+    expect(screen.getByLabelText("Working copy active")).toBeInTheDocument();
+  });
+
   it("expanding a feature folder shows its member branches, and clicking one opens it", async () => {
     const featureGroups: FeatureGroup[] = [
       {

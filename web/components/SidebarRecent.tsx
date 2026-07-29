@@ -3,8 +3,9 @@ import { ChevronDown, ChevronRight, RefreshCw, Boxes, GitBranch, MoreHorizontal,
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AgentDot } from "./AgentDot.tsx";
+import { AGENT_DOT_COLORS } from "./AgentDot.tsx";
 import { type BranchEntity, type FeatureGroup } from "../lib/projectEntities.ts";
+import { type AgentStatus } from "../api.ts";
 
 const MAX_ROWS = 10;
 const SKELETON_ROWS = 4;
@@ -155,6 +156,28 @@ function FileMenu({
 /** One branch row: agent dot + a small green dot when its dev server is running + the branch
  * name (mono, bold when it's the repo's current branch) + relative time + the file/unfile
  * affordance. */
+/** Leading dot: a FILLED dot means the branch has a working copy (started / active); a hollow
+ * ring means it's not started yet. Agent status (working/awaiting/…) colors the filled dot;
+ * a started-but-idle branch is a solid neutral dot. */
+function BranchDot({ hasWorktree, status }: { hasWorktree: boolean; status?: AgentStatus }) {
+  if (!hasWorktree) {
+    return (
+      <span
+        className="inline-block size-2 shrink-0 rounded-full border border-muted-foreground/40"
+        title="Not started"
+        aria-label="Not started"
+      />
+    );
+  }
+  return (
+    <span
+      className={cn("inline-block size-2 shrink-0 rounded-full", AGENT_DOT_COLORS[status ?? ""] ?? "bg-muted-foreground")}
+      title={status ? `Working copy · ${status}` : "Working copy active"}
+      aria-label="Working copy active"
+    />
+  );
+}
+
 function BranchRow({
   entity,
   features,
@@ -182,7 +205,7 @@ function BranchRow({
       }}
       className="group flex w-full min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
     >
-      <AgentDot status={entity.agentStatus} />
+      <BranchDot hasWorktree={entity.hasWorktree} status={entity.agentStatus} />
       {entity.serverRunning && (
         <span
           className="size-1.5 shrink-0 rounded-full bg-emerald-500"
