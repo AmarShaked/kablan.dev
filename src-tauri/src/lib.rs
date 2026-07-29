@@ -90,6 +90,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/features/:fid/unfile", post(post_unfile_branch))
         .route("/api/projects/:name/factory/features/:fid/reorder", post(post_reorder_feature_branches))
         .route("/api/projects/:name/factory/features/reorder", post(post_reorder_features))
+        .route("/api/projects/:name/factory/session", post(post_new_session))
         .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
         .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
@@ -441,6 +442,77 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     let branch = branch_from_body(&b)?;
     let view = start_branch_agent(&st, &name, &branch).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
+}
+
+/// Short, effectively-unique branch suffix for the "New session" flow — the
+/// low 32 bits of the current time in nanoseconds, formatted as hex. Mirrors
+/// the id-generation convention `factory::create_task_force` used to follow
+/// before the branch-centric rewrite (see `git.rs`'s `add_worktree_for_branch`
+/// doc comment): short, monotonic-ish, and collision-proof in practice for a
+/// single user clicking "New session" — a true collision would just surface
+/// as a "branch already exists" git error on the next click.
+fn generate_session_branch() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("session/{:x}", (nanos & 0xffff_ffff) as u32)
+}
+
+/// `POST .../factory/session` — the "New session" flow: unlike
+/// `factory/agent/start` (which starts an agent on a branch the user already
+/// picked), this lets the user pick only a BASE branch to branch off.
+/// Generates a fresh `session/<hex>` branch name, forges a worktree for it
+/// off `baseBranch`, starts its agent, and (if `message` is given) delivers
+/// it as the first message — all before the caller ever names a branch.
+async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let base_branch = match b.get("baseBranch").and_then(|v| v.as_str()).map(str::trim) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return Err(bad("baseBranch is required")),
+    };
+    let message = b
+        .get("message")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let cfg = config::load();
+    // Same soft (TOCTOU-able) cap as `start_branch_agent` — see its TODO.
+    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
+        return Err(bad("agent limit reached"));
+    }
+
+    let new_branch = generate_session_branch();
+    let name2 = name.clone();
+    let branch2 = new_branch.clone();
+    let cfg2 = cfg.clone();
+    let worktree_path = blocking(move || {
+        let wt_root = if cfg2.factory.worktree_root.trim().is_empty() {
+            config::config_dir().join("worktrees")
+        } else {
+            std::path::PathBuf::from(cfg2.factory.worktree_root.trim())
+        };
+        let wt = git::create_worktree_new_branch(std::path::Path::new(&dir), &wt_root, &name2, &branch2, &base_branch)?;
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(wt.path)
+    })
+    .await
+    .map_err(bad)?;
+
+    let key = branch_agent_key(&name, &new_branch);
+    let argv = agents::build_agent_argv(&cfg.factory, None);
+    let _ = st.agents.start(&key, &worktree_path, argv, None);
+    if let Some(text) = message {
+        st.agents.send(&key, &text);
+    }
+
+    Ok(Json(json!({ "branch": new_branch })))
 }
 
 async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {

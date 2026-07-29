@@ -42,6 +42,7 @@ function renderView(overrides: Partial<Parameters<typeof HomeView>[0]> = {}) {
     logs: {} as Record<string, LogLine[]>,
     onOpenBranch: vi.fn(),
     onOpenProject: vi.fn(),
+    onNewSession: vi.fn(),
     ...overrides,
   };
   render(<HomeView {...props} />);
@@ -101,6 +102,17 @@ describe("HomeView", () => {
     const serverRow = screen.getByTestId("server-row-proj-a");
     await userEvent.click(serverRow);
     expect(props.onOpenProject).toHaveBeenCalledWith("proj-a");
+  });
+
+  it("calls onNewSession when the New session button is clicked", async () => {
+    const props = renderView();
+    await userEvent.click(screen.getByRole("button", { name: /new session/i }));
+    expect(props.onNewSession).toHaveBeenCalled();
+  });
+
+  it("hides the New session button when onNewSession is not provided", () => {
+    renderView({ onNewSession: undefined });
+    expect(screen.queryByRole("button", { name: /new session/i })).not.toBeInTheDocument();
   });
 
   it("shows a clickable URL when the server's logs contain one", () => {

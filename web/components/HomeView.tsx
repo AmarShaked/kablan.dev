@@ -14,6 +14,9 @@ export interface HomeViewProps {
   logs: Record<string, LogLine[]>;
   onOpenBranch: (project: string, branch: string) => void;
   onOpenProject: (project: string) => void;
+  /** Opens the "New session" dialog (branch off a base branch without picking an existing one
+   * first) — omitted entirely (button hidden) when no project is selected yet. */
+  onNewSession?: () => void;
 }
 
 const ACTIVE_STATUSES = new Set<AgentStatus>(["working", "awaitingInput"]);
@@ -31,7 +34,7 @@ function basename(cwd: string): string {
  * branch's cockpit (agents) or at least selects the project (servers — branch resolution from a
  * cwd cross-project is a v1 best-effort left to the caller).
  */
-export function HomeView({ statuses, servers, logs, onOpenBranch, onOpenProject }: HomeViewProps) {
+export function HomeView({ statuses, servers, logs, onOpenBranch, onOpenProject, onNewSession }: HomeViewProps) {
   const agentRows = Object.entries(statuses)
     .map(([key, status]) => ({ key, status, parsed: parseBranchKey(key) }))
     .filter(
@@ -46,6 +49,15 @@ export function HomeView({ statuses, servers, logs, onOpenBranch, onOpenProject 
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold">Home</h1>
         <span className="text-sm text-muted-foreground">— what's live right now</span>
+        {onNewSession && (
+          <button
+            type="button"
+            onClick={onNewSession}
+            className="ml-auto rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            New session
+          </button>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto custom-scroll p-6">

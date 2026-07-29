@@ -377,6 +377,66 @@ pub fn add_worktree_for_branch(
     }))
 }
 
+/// Create a worktree for a brand-new branch forged off `base` (`git worktree
+/// add -b <new_branch> -- <path> <base>`, unlike `add_worktree_for_branch`
+/// which checks out an existing branch). Used by the "New session" flow,
+/// which lets the user pick only a base branch to branch off — Kablan
+/// generates the new branch name itself. Path is
+/// `worktree_root/slug(project)/slug(new_branch)`; parent dirs are created
+/// first. The `--` separator keeps a flag-shaped `new_branch`/`base` from
+/// being parsed as a git flag, matching `add_worktree_for_branch`'s
+/// convention.
+pub fn create_worktree_new_branch(
+    repo_dir: &Path,
+    worktree_root: &Path,
+    project: &str,
+    new_branch: &str,
+    base: &str,
+) -> Result<Worktree, String> {
+    let repo = repo_dir.to_string_lossy().to_string();
+
+    let path = worktree_root
+        .join(crate::factory::slugify(project))
+        .join(crate::factory::slugify(new_branch));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let wt = path.to_string_lossy().to_string();
+    git(&repo, &["worktree", "add", "-b", new_branch, "--", &wt, base])
+        .map_err(|e| format!("git worktree add failed: {e}"))?;
+
+    // See `add_worktree_for_branch`'s matching comment: compare canonical
+    // paths, since `git worktree list` reports macOS's resolved /private/var form.
+    let canonical_path = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+    let found = list_worktrees(&repo)
+        .into_iter()
+        .find(|w| {
+            let wp = Path::new(&w.path);
+            wp == path
+                || std::fs::canonicalize(wp)
+                    .map(|c| c == canonical_path)
+                    .unwrap_or(false)
+        });
+    Ok(found.unwrap_or_else(|| {
+        let (ts, author) = head_meta(&wt);
+        let dirty = git(&wt, &["status", "--porcelain"])
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        Worktree {
+            path: wt,
+            branch: Some(new_branch.to_string()),
+            head: None,
+            bare: false,
+            detached: false,
+            locked: false,
+            is_main: false,
+            last_commit_ts: ts,
+            author,
+            dirty,
+        }
+    }))
+}
+
 /// Return the existing worktree for `branch` if one is already checked out
 /// (scanning `list_worktrees`), else create one via `add_worktree_for_branch`.
 /// Used by the branch-centric agent-start flow so starting an agent twice on
@@ -546,6 +606,44 @@ mod tests {
 
         let expected = std::fs::canonicalize(&wt_root).unwrap().join("acme-app").join("feature-cool-thing");
         assert_eq!(std::fs::canonicalize(&wt.path).unwrap(), expected);
+    }
+
+    #[test]
+    fn create_worktree_new_branch_forges_branch_and_shows_in_list() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        let wt_root = tmp();
+
+        let wt = create_worktree_new_branch(&repo, &wt_root, "acme/app", "session/abc123", "main").unwrap();
+
+        assert!(Path::new(&wt.path).exists(), "worktree dir should exist");
+        assert_eq!(wt.branch.as_deref(), Some("session/abc123"));
+        assert!(!wt.is_main);
+
+        let all = list_worktrees(&d);
+        assert!(
+            all.iter().any(|w| w.path == wt.path && w.branch.as_deref() == Some("session/abc123")),
+            "list_worktrees should show the new worktree on the new branch"
+        );
+    }
+
+    #[test]
+    fn create_worktree_new_branch_uses_slugified_project_and_branch_path() {
+        let repo = init_repo();
+        let wt_root = tmp();
+
+        let wt = create_worktree_new_branch(&repo, &wt_root, "Acme App", "session/Abc_123", "main").unwrap();
+
+        let expected = std::fs::canonicalize(&wt_root).unwrap().join("acme-app").join("session-abc-123");
+        assert_eq!(std::fs::canonicalize(&wt.path).unwrap(), expected);
+    }
+
+    #[test]
+    fn create_worktree_new_branch_unknown_base_errors() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let r = create_worktree_new_branch(&repo, &wt_root, "acme/app", "session/abc123", "does-not-exist");
+        assert!(r.is_err());
     }
 
     #[test]

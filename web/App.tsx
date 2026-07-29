@@ -31,6 +31,7 @@ import { Cockpit } from "./components/Cockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
 import { HomeView } from "./components/HomeView.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
+import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { buildBranchEntities } from "./lib/projectEntities.ts";
 import { branchKey } from "./lib/agentKey.ts";
 import { pickDefaultProject } from "./lib/pickDefaultProject.ts";
@@ -81,6 +82,7 @@ function AppContent() {
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
   const [commandOpen, setCommandOpen] = useState(false);
+  const [newSessionOpen, setNewSessionOpen] = useState(false);
 
   // Dev servers keyed by working-copy `cwd` (globally unique) — multiple working copies of the
   // same project can run at once. Fed by the WS hello/status frames below.
@@ -219,6 +221,22 @@ function AppContent() {
     setCockpitBranch(branch);
     setView("cockpit");
   }, []);
+
+  // "New session" flow's completion: the backend already created the branch/worktree and
+  // started its agent (see `NewSessionDialog` → `api.factory.startSession`) — this just brings
+  // the newly-created branch's data in (factory/worktrees/branches all changed server-side) and
+  // opens straight into its cockpit, exactly like clicking an existing branch would.
+  const handleSessionStarted = useCallback(
+    (branch: string) => {
+      if (!selected) return;
+      queryClient.invalidateQueries({ queryKey: ["factory", selected] });
+      queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) });
+      queryClient.invalidateQueries({ queryKey: qk.branches(selected) });
+      setCockpitBranch(branch);
+      setView("cockpit");
+    },
+    [selected, queryClient],
+  );
 
   // Cross-project jump targets used by the Activity view — an agent row selects its project
   // then opens its branch cockpit; a server row selects the project. The cockpit seeds its own
@@ -363,6 +381,7 @@ function AppContent() {
           onFetch={fetchRemote}
           featuresLoading={factoryQuery.isLoading}
           branchesLoading={branchesQuery.isLoading}
+          onNewSession={selected ? () => setNewSessionOpen(true) : undefined}
         />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -419,6 +438,7 @@ function AppContent() {
               logs={logs}
               onOpenBranch={openBranchFromActivity}
               onOpenProject={openProjectFromActivity}
+              onNewSession={selected ? () => setNewSessionOpen(true) : undefined}
             />
           ) : !selectedProject ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -462,6 +482,16 @@ function AppContent() {
           setCommandOpen(false);
         }}
       />
+
+      {selectedProject && (
+        <NewSessionDialog
+          project={selectedProject.name}
+          open={newSessionOpen}
+          onOpenChange={setNewSessionOpen}
+          branches={branchesQuery.data ?? []}
+          onStarted={handleSessionStarted}
+        />
+      )}
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </div>

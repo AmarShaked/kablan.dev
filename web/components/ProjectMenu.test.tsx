@@ -62,6 +62,7 @@ function renderMenu(overrides: Partial<Parameters<typeof ProjectMenu>[0]> = {}) 
     unfiled: [branchEntity()],
     onOpenBranch: vi.fn(),
     onFetch: vi.fn().mockResolvedValue(undefined),
+    onNewSession: vi.fn(),
     ...overrides,
   };
   render(
@@ -86,6 +87,17 @@ describe("ProjectMenu", () => {
     expect(screen.getByText("Features")).toBeInTheDocument();
     expect(screen.getByText("Branches")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
+  });
+
+  it("calls onNewSession when the '+' button beside the project switcher is clicked", async () => {
+    const props = renderMenu();
+    await userEvent.click(screen.getByLabelText("New session"));
+    expect(props.onNewSession).toHaveBeenCalled();
+  });
+
+  it("hides the New session '+' button when onNewSession is not provided", () => {
+    renderMenu({ onNewSession: undefined });
+    expect(screen.queryByLabelText("New session")).not.toBeInTheDocument();
   });
 
   it("fires onFetch when the Fetch action is clicked", async () => {

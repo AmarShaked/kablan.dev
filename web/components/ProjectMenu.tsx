@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../api.ts";
@@ -24,6 +25,9 @@ export interface ProjectMenuProps {
    * `SidebarRecent` so it can show skeleton rows instead of a premature "No …" empty state. */
   featuresLoading?: boolean;
   branchesLoading?: boolean;
+  /** Opens the "New session" dialog for the selected project — surfaced as a "+" beside the
+   * project switcher. Omitted (button hidden) when no project is selected. */
+  onNewSession?: () => void;
 }
 
 /**
@@ -44,6 +48,7 @@ export function ProjectMenu({
   onFetch,
   featuresLoading,
   branchesLoading,
+  onNewSession,
 }: ProjectMenuProps) {
   const queryClient = useQueryClient();
   const [newFeatureOpen, setNewFeatureOpen] = useState(false);
@@ -92,14 +97,27 @@ export function ProjectMenu({
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border text-foreground">
-      <div className="border-b border-border p-2">
-        <ProjectSwitcher
-          projects={projects}
-          selected={selected}
-          onSelect={onSelectProject}
-          servers={servers}
-          onRescan={onRescan}
-        />
+      <div className="flex items-center gap-1.5 border-b border-border p-2">
+        <div className="min-w-0 flex-1">
+          <ProjectSwitcher
+            projects={projects}
+            selected={selected}
+            onSelect={onSelectProject}
+            servers={servers}
+            onRescan={onRescan}
+          />
+        </div>
+        {onNewSession && (
+          <button
+            type="button"
+            onClick={onNewSession}
+            aria-label="New session"
+            title="New session"
+            className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="size-4" />
+          </button>
+        )}
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <SidebarRecent

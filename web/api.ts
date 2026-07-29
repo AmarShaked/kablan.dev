@@ -320,6 +320,15 @@ export const api = {
         body: JSON.stringify({ order }),
       }),
 
+    // "New session" flow: the user picks only a base branch to branch off — Kablan generates
+    // the new branch name, worktree, and starts its agent server-side (see `lib.rs`'s
+    // `post_new_session`). `message`, if given, is delivered as the agent's first message.
+    startSession: (name: string, baseBranch: string, message?: string) =>
+      req<{ branch: string }>(`/api/projects/${encodeURIComponent(name)}/factory/session`, {
+        method: "POST",
+        body: JSON.stringify({ baseBranch, message }),
+      }),
+
     // Branch-keyed agent calls — branch always travels in the body/query (never the path),
     // since branch names contain `/`. See `branchKey` (`../lib/agentKey.ts`) for the matching
     // WS/agent-stream key.

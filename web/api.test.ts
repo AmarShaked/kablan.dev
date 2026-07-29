@@ -30,6 +30,11 @@ describe("factory types", () => {
     expectTypeOf<typeof api.factory.agentStop>().parameters.toEqualTypeOf<[string, string]>();
     expectTypeOf<typeof api.factory.getAgent>().parameters.toEqualTypeOf<[string, string]>();
   });
+
+  it("api.factory.startSession takes a project + base branch + optional first message, returning the new branch", () => {
+    expectTypeOf<typeof api.factory.startSession>().parameters.toEqualTypeOf<[string, string, string?]>();
+    expectTypeOf<ReturnType<typeof api.factory.startSession>>().toEqualTypeOf<Promise<{ branch: string }>>();
+  });
 });
 
 describe("inbox types", () => {
