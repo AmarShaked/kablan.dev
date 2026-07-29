@@ -34,7 +34,7 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+      className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
     >
       {children}
     </button>
@@ -182,7 +182,7 @@ export function SidebarRecent({
         aria-label="Find a feature, worktree, or branch"
         className="h-8 text-sm"
       />
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scroll">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scroll">
         <GroupLabel icon={Boxes} color="text-primary" count={features.length}>Features</GroupLabel>
         {featuresLoading && features.length === 0 ? (
           <SkeletonGroup group="features" />
@@ -225,7 +225,7 @@ export function SidebarRecent({
                           <AgentDot status={tf.status} />
                           <span className="min-w-0 flex-1 truncate">{tf.label}</span>
                           {tf.branch && (
-                            <span className="shrink-0 truncate font-mono text-xs text-muted-foreground">
+                            <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-xs text-muted-foreground">
                               {tf.branch}
                             </span>
                           )}
@@ -284,7 +284,7 @@ export function SidebarRecent({
                 )}
                 <span className="min-w-0 flex-1 truncate">{entity.label}</span>
                 {entity.branch && (
-                  <span className="shrink-0 truncate font-mono text-xs text-muted-foreground">
+                  <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-xs text-muted-foreground">
                     {entity.branch}
                   </span>
                 )}
