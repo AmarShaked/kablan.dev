@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Boxes, FolderTree, GitBranch, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,11 +63,32 @@ function SkeletonGroup({ group }: { group: "features" | "worktrees" | "branches"
   );
 }
 
-function GroupLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+/** Group header: a per-group accent icon + colored uppercase label + total count, so the three
+ * sections (Features / Worktrees / Branches) read at a glance. Accent colors reuse the app's
+ * palette — primary (features), violet (worktrees), sky (branches) — matching the row icons. */
+function GroupLabel({
+  icon: Icon,
+  color,
+  count,
+  action,
+  children,
+}: {
+  icon: LucideIcon;
+  color: string;
+  count?: number;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between px-2 pt-2 pb-1">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</span>
-      {action}
+    <div className="mt-1 flex items-center gap-1.5 px-2 pt-2 pb-1">
+      <Icon className={cn("size-3.5 shrink-0", color)} />
+      <span className={cn("text-xs font-semibold uppercase tracking-wide", color)}>{children}</span>
+      {typeof count === "number" && count > 0 && (
+        <span className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      )}
+      {action && <div className="ml-auto">{action}</div>}
     </div>
   );
 }
@@ -162,7 +183,7 @@ export function SidebarRecent({
         className="h-8 text-sm"
       />
       <div className="min-h-0 flex-1 overflow-y-auto custom-scroll">
-        <GroupLabel>Features</GroupLabel>
+        <GroupLabel icon={Boxes} color="text-primary" count={features.length}>Features</GroupLabel>
         {featuresLoading && features.length === 0 ? (
           <SkeletonGroup group="features" />
         ) : filteredFeatures.length === 0 ? (
@@ -219,6 +240,9 @@ export function SidebarRecent({
         )}
 
         <GroupLabel
+          icon={FolderTree}
+          color="text-violet-400"
+          count={worktrees.length}
           action={
             onFetch && (
               <button
@@ -253,7 +277,11 @@ export function SidebarRecent({
                     : onOpenWorktree(entity)
                 }
               >
-                {routesToTaskForce && <AgentDot status={entity.status} />}
+                {routesToTaskForce ? (
+                  <AgentDot status={entity.status} />
+                ) : (
+                  <FolderTree className="size-3.5 shrink-0 text-violet-400/80" />
+                )}
                 <span className="min-w-0 flex-1 truncate">{entity.label}</span>
                 {entity.branch && (
                   <span className="shrink-0 truncate font-mono text-xs text-muted-foreground">
@@ -266,7 +294,7 @@ export function SidebarRecent({
           })
         )}
 
-        <GroupLabel>Branches</GroupLabel>
+        <GroupLabel icon={GitBranch} color="text-sky-400" count={branches.length}>Branches</GroupLabel>
         {branchesLoading && branches.length === 0 ? (
           <SkeletonGroup group="branches" />
         ) : filteredBranches.length === 0 ? (
@@ -276,6 +304,7 @@ export function SidebarRecent({
             const time = relativeLabel(entity.ts);
             return (
               <Row key={entity.id} onClick={() => onOpenBranch(entity.label)}>
+                <GitBranch className="size-3.5 shrink-0 text-sky-400/80" />
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate font-mono text-xs",
