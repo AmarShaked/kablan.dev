@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useFactory } from "../queries.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
@@ -19,9 +19,13 @@ import type { LogLine, ProjectSummary, RunningServer } from "../api.ts";
 function FeaturesBrowser({
   project,
   onOpenTaskForce,
+  expandFeatureId,
 }: {
   project: string;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
+  /** When set (e.g. from the sidebar's SidebarRecent/CommandPalette routing into a feature),
+   * that feature's row is force-expanded — including on first mount, not just on change. */
+  expandFeatureId?: string | null;
 }) {
   const { data } = useFactory(project);
   const features = data?.features ?? [];
@@ -29,6 +33,11 @@ function FeaturesBrowser({
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [newFeatureOpen, setNewFeatureOpen] = useState(false);
   const [newTaskForceFeatureId, setNewTaskForceFeatureId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandFeatureId) return;
+    setOpen((prev) => (prev.has(expandFeatureId) ? prev : new Set(prev).add(expandFeatureId)));
+  }, [expandFeatureId]);
 
   const toggleExpanded = (featureId: string) => {
     setOpen((prev) => {
@@ -151,6 +160,9 @@ export function ProjectView({
   onCommandChange,
   linearWorkspace,
   onOpenTaskForce,
+  tab: tabProp,
+  onTabChange,
+  expandFeatureId = null,
 }: {
   project: ProjectSummary;
   server: RunningServer | null;
@@ -158,11 +170,25 @@ export function ProjectView({
   onCommandChange: () => void;
   linearWorkspace: string;
   onOpenTaskForce: (featureId: string, taskForceId: string) => void;
+  /** Optional controlled tab — falls back to internal state when absent so existing
+   * (uncontrolled) callers/tests are unaffected. Lets App drive the tab from sidebar/palette
+   * navigation (e.g. "open this branch" jumps to the Branches tab). */
+  tab?: "features" | "branches";
+  onTabChange?: (tab: "features" | "branches") => void;
+  /** Feature id to force-expand in the Features browser (sidebar/palette "open feature"). */
+  expandFeatureId?: string | null;
 }) {
   // The Features browser needs the desktop app's factory backend (useFactory is isTauri-gated);
   // in the browser-only reference server there's nothing to show there, so land on Branches &
   // worktrees instead — matching the pre-redesign default for that mode.
-  const [tab, setTab] = useState<"features" | "branches">(isTauri ? "features" : "branches");
+  const [internalTab, setInternalTab] = useState<"features" | "branches">(
+    isTauri ? "features" : "branches",
+  );
+  const tab = tabProp ?? internalTab;
+  const setTab = (next: "features" | "branches") => {
+    if (onTabChange) onTabChange(next);
+    else setInternalTab(next);
+  };
 
   return (
     <>
@@ -187,7 +213,11 @@ export function ProjectView({
           </TabsList>
         </div>
         <TabsContent value="features" className="mt-0 min-h-0 flex-1 overflow-y-auto custom-scroll">
-          <FeaturesBrowser project={project.name} onOpenTaskForce={onOpenTaskForce} />
+          <FeaturesBrowser
+            project={project.name}
+            onOpenTaskForce={onOpenTaskForce}
+            expandFeatureId={expandFeatureId}
+          />
         </TabsContent>
         <TabsContent value="branches" className="mt-0 min-h-0 flex-1 overflow-hidden">
           <OverviewTab

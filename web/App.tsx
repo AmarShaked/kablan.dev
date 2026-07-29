@@ -55,7 +55,10 @@ import { ProjectSwitcher } from "./components/ProjectSwitcher.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { TaskForceCockpit } from "./components/TaskForceCockpit.tsx";
 import { InboxView } from "./components/InboxView.tsx";
-import { useProjects, useFactory, useInbox, qk } from "./queries.ts";
+import { SidebarRecent } from "./components/SidebarRecent.tsx";
+import { CommandPalette } from "./components/CommandPalette.tsx";
+import { buildProjectEntities, type ProjectEntity } from "./lib/projectEntities.ts";
+import { useProjects, useFactory, useBranches, useWorktrees, useInbox, qk } from "./queries.ts";
 
 // "cockpit" renders TaskForceCockpit (Task 5, Plan 04); "inbox" renders InboxView (Task 5,
 // Plan 05) — the global cross-project attention list. "project" renders ProjectView, which
@@ -87,7 +90,7 @@ export function App() {
 function AppContent() {
   const [theme, toggleTheme] = useTheme();
   const queryClient = useQueryClient();
-  const { ingest, unreadForProject } = useAgentStream();
+  const { ingest, unreadForProject, unread, agentFor, version } = useAgentStream();
   const { data: projects = [] } = useProjects();
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("project");
@@ -95,6 +98,13 @@ function AppContent() {
   const [selectedTaskForceId, setSelectedTaskForceId] = useState<string | null>(null);
   const [linearWorkspace, setLinearWorkspace] = useState("");
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
+
+  // Agent Factory sidebar: recent Features/Worktrees/Branches lists + the ⌘K command palette,
+  // both scoped to the selected project. `projectTab`/`expandFeatureId` drive ProjectView so a
+  // sidebar/palette row can land on the right tab (and, for a feature, force it open).
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [projectTab, setProjectTab] = useState<"features" | "branches">("features");
+  const [expandFeatureId, setExpandFeatureId] = useState<string | null>(null);
 
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
   const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
@@ -252,6 +262,112 @@ function AppContent() {
   const selectedProject = projects.find((p) => p.name === selected) ?? null;
   const selectedServer = selected ? servers[selected] ?? null : null;
 
+  // Sidebar "recent 10" lists + ⌘K palette — branches/worktrees work even in the browser
+  // reference server (useBranches/useWorktrees aren't isTauri-gated); useFactory is, so
+  // features/taskForces are simply empty there (buildProjectEntities handles empty arrays fine).
+  const branchesQuery = useBranches(selected ?? "");
+  const worktreesQuery = useWorktrees(selected ?? "");
+
+  const workingTaskForceIds = useMemo(() => {
+    const set = new Set<string>();
+    if (!selected) return set;
+    for (const feature of factoryQuery.data?.features ?? []) {
+      for (const tf of feature.taskForces) {
+        if (agentFor(`${selected}::${tf.id}`).status === "working") set.add(tf.id);
+      }
+    }
+    return set;
+    // `version` bumps on every agent-stream ingest — agentFor itself is a stable callback that
+    // reads a live ref, so without this the working set would never refresh as statuses change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [factoryQuery.data, selected, agentFor, version]);
+
+  const projectEntities = useMemo(
+    () =>
+      buildProjectEntities({
+        features: factoryQuery.data?.features ?? [],
+        branches: branchesQuery.data ?? [],
+        worktrees: worktreesQuery.data ?? [],
+        workingTaskForceIds,
+      }),
+    [factoryQuery.data, branchesQuery.data, worktreesQuery.data, workingTaskForceIds],
+  );
+
+  const unreadForFeature = useCallback(
+    (featureId: string) => {
+      if (!selected) return 0;
+      const feature = factoryQuery.data?.features.find((f) => f.id === featureId);
+      if (!feature) return 0;
+      return feature.taskForces.reduce((sum, tf) => sum + unread(`${selected}::${tf.id}`), 0);
+    },
+    [factoryQuery.data, selected, unread],
+  );
+
+  const openFeature = useCallback((featureId: string) => {
+    setExpandFeatureId(featureId);
+    setProjectTab("features");
+    setView("project");
+  }, []);
+
+  const openBranch = useCallback((_name: string) => {
+    setProjectTab("branches");
+    setView("project");
+  }, []);
+
+  const openWorktreeEntity = useCallback(
+    (entity: ProjectEntity) => {
+      if (entity.taskForceId && entity.featureId) {
+        openTaskForce(entity.featureId, entity.taskForceId);
+      } else {
+        setProjectTab("branches");
+        setView("project");
+      }
+    },
+    // openTaskForce is redefined every render (it's not wrapped in useCallback), so it can't be
+    // listed as a dep without this effectively never memoizing — it only ever reads state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const viewAll = useCallback((kind: "features" | "branches" | "worktrees") => {
+    setProjectTab(kind === "features" ? "features" : "branches");
+    setView("project");
+  }, []);
+
+  const selectEntity = useCallback(
+    (entity: ProjectEntity) => {
+      switch (entity.kind) {
+        case "feature":
+          openFeature(entity.featureId ?? entity.id);
+          break;
+        case "taskForce":
+          if (entity.featureId && entity.taskForceId) openTaskForce(entity.featureId, entity.taskForceId);
+          break;
+        case "branch":
+          openBranch(entity.label);
+          break;
+        case "worktree":
+          openWorktreeEntity(entity);
+          break;
+      }
+      setCommandOpen(false);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [openFeature, openBranch, openWorktreeEntity],
+  );
+
+  // Global ⌘K / Ctrl+K toggles the command palette from anywhere in the app.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <SidebarProvider
       className="h-screen overflow-hidden"
@@ -276,7 +392,7 @@ function AppContent() {
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="custom-scroll">
+        <SidebarContent className="overflow-hidden">
           <SidebarGroup>
             <SidebarGroupLabel>Workspace</SidebarGroupLabel>
             <SidebarMenu>
@@ -323,6 +439,21 @@ function AppContent() {
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
+          {selected && (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <SidebarRecent
+                features={projectEntities.features}
+                worktrees={projectEntities.worktrees}
+                branches={projectEntities.branches}
+                unreadFor={unreadForFeature}
+                onOpenFeature={openFeature}
+                onOpenTaskForce={openTaskForce}
+                onOpenBranch={openBranch}
+                onOpenWorktree={openWorktreeEntity}
+                onViewAll={viewAll}
+              />
+            </div>
+          )}
         </SidebarContent>
 
         <SidebarFooter>
@@ -473,9 +604,24 @@ function AppContent() {
             onCommandChange={refreshProjects}
             linearWorkspace={linearWorkspace}
             onOpenTaskForce={openTaskForce}
+            tab={projectTab}
+            onTabChange={setProjectTab}
+            expandFeatureId={expandFeatureId}
           />
         )}
       </SidebarInset>
+
+      <CommandPalette
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        entities={{
+          features: projectEntities.features,
+          taskForces: projectEntities.taskForces,
+          branches: projectEntities.branches,
+          worktrees: projectEntities.worktrees,
+        }}
+        onSelect={selectEntity}
+      />
 
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </SidebarProvider>
