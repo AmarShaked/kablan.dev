@@ -257,4 +257,56 @@ describe("TaskForceCockpit", () => {
     rerender(<Wrapper mounted={false} seed={[helloEvent]} />);
     expect(screen.getByTestId("unread-probe")).toHaveTextContent("1");
   });
+
+  it("renders a right-aligned You bubble for a sent message, interleaved with agent events", async () => {
+    renderCockpit([workingStatus, helloEvent]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "please continue");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByText("please continue")).toBeInTheDocument();
+    // The prior agent bubble is still there too.
+    expect(screen.getByText("hello")).toBeInTheDocument();
+  });
+
+  it("shows a thinking indicator while the agent status is working", () => {
+    renderCockpit([workingStatus]);
+    expect(screen.getByText(/thinking/i)).toBeInTheDocument();
+  });
+
+  it("does not show a thinking indicator when the agent isn't working", () => {
+    renderCockpit([]);
+    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+  });
+
+  it("shows parsed choices as chips and sends the clicked chip via agentMessage", async () => {
+    const choiceEvent = {
+      type: "agent-event",
+      key: "proj::t1",
+      event: {
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "How should we proceed?\n1. Add tests\n2. Ship as-is" },
+          ],
+        },
+      },
+    };
+    renderCockpit([workingStatus, choiceEvent]);
+
+    expect(screen.getByText(/choose/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 options/i)).toBeInTheDocument();
+    const chip = screen.getByRole("button", { name: "Add tests" });
+    await userEvent.click(chip);
+
+    expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "t1", "Add tests");
+    expect(screen.getByText("You")).toBeInTheDocument();
+  });
+
+  it("doesn't show a Choose drawer when the last assistant message has no list", () => {
+    renderCockpit([workingStatus, helloEvent]);
+    expect(screen.queryByText(/choose ·/i)).not.toBeInTheDocument();
+  });
 });

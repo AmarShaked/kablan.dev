@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Play, Square, Send, RefreshCw } from "lucide-react";
+import { Play, Square, Send, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import {
   api,
   type TaskForce,
@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { isTauri } from "../lib/version.ts";
+import { parseChoices } from "../lib/parseChoices.ts";
+
+/** One entry in the cockpit's local timeline: either the user's own sent message (never
+ * echoed back by the stream — it goes straight to stdin) or a raw agent stream-json event. */
+type TimelineItem = { kind: "you"; text: string } | { kind: "agent"; event: unknown };
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "Idle",
@@ -131,6 +136,42 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
     default:
       return null;
   }
+}
+
+/** Extracts the text of the most recent `agent` timeline item that's an assistant text message,
+ * so the Choose drawer can offer its options as chips. Returns null when there's no such message
+ * yet (nothing to parse, or the agent's latest turn was tool-only). */
+function lastAssistantText(timeline: TimelineItem[]): string | null {
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    const item = timeline[i];
+    if (item.kind !== "agent") continue;
+    const ev = item.event as Record<string, any> | null;
+    if (!ev || typeof ev !== "object" || ev.type !== "assistant") continue;
+    const content = Array.isArray(ev.message?.content) ? ev.message.content : [];
+    const texts = content.filter((b: any) => b?.type === "text" && typeof b.text === "string");
+    if (texts.length) return texts.map((b: any) => b.text).join("\n");
+  }
+  return null;
+}
+
+/** Small animated "thinking…" row shown at the end of the transcript while the agent is
+ * working — a lightweight stand-in for the raw stream_event deltas we deliberately don't
+ * re-enable. Uses Tailwind's motion-safe: variant so it's inert under prefers-reduced-motion. */
+function ThinkingRow() {
+  return (
+    <div className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold">
+        CC
+      </span>
+      <span>Claude Code</span>
+      <span className="flex items-center gap-0.5">
+        <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-300ms]" />
+        <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-150ms]" />
+        <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce" />
+      </span>
+      <span>thinking…</span>
+    </div>
+  );
 }
 
 /** Branch/worktree summary card plus a minimal dev-server start/URL control, scoped to this
@@ -297,10 +338,31 @@ export function TaskForceCockpit({ project, taskForce }: { project: string; task
   const status = live.status ?? backfillStatus;
   const running = isRunningStatus(status);
 
+  // Local ordered timeline: interleaves the user's own sent messages (which never come back
+  // as stream events — they go straight to stdin) with agent events, in send/arrival order.
+  // Seeded from `events` on mount and grown as `events` grows (backfill resolving counts as
+  // growth too), tracking how many have already been folded in via `processedRef`.
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const processedRef = useRef(0);
+  useEffect(() => {
+    if (events.length <= processedRef.current) return;
+    const newItems: TimelineItem[] = events
+      .slice(processedRef.current)
+      .map((event) => ({ kind: "agent", event }));
+    processedRef.current = events.length;
+    setTimeline((prev) => [...prev, ...newItems]);
+  }, [events]);
+
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const choices = useMemo(() => {
+    const t = lastAssistantText(timeline);
+    return t ? parseChoices(t) : [];
+  }, [timeline]);
+
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
+  }, [timeline.length, status]);
 
   const start = async () => {
     setBusy(true);
@@ -322,18 +384,29 @@ export function TaskForceCockpit({ project, taskForce }: { project: string; task
       setBusy(false);
     }
   };
-  const send = async () => {
-    const t = text.trim();
-    if (!t) return;
+  // Shared send path for both the free-text composer and Choose-drawer chips: append the
+  // user's own "You" bubble to the timeline immediately (independent of whatever the agent
+  // does next), then forward it to the agent. Returns whether the send succeeded.
+  const sendText = async (value: string): Promise<boolean> => {
+    const t = value.trim();
+    if (!t) return false;
+    setTimeline((prev) => [...prev, { kind: "you", text: t }]);
     setBusy(true);
     try {
       await api.factory.agentMessage(project, taskForce.id, t);
-      setText("");
+      return true;
     } catch (err) {
       toast.error(String(err));
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+  const send = async () => {
+    if (await sendText(text)) setText("");
+  };
+  const sendChoice = async (label: string) => {
+    await sendText(label);
   };
 
   return (
@@ -363,12 +436,52 @@ export function TaskForceCockpit({ project, taskForce }: { project: string; task
           </div>
 
           <div ref={transcriptRef} className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
-            {events.length === 0 ? (
+            {timeline.length === 0 && status !== "working" ? (
               <p className="text-sm text-muted-foreground">No activity yet. Start the agent to begin.</p>
             ) : (
-              events.map((ev, i) => renderEvent(ev, i))
+              timeline.map((item, i) =>
+                item.kind === "you" ? (
+                  <div key={`you-${i}`} className="flex flex-col items-end gap-1">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
+                    <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
+                      {item.text}
+                    </div>
+                  </div>
+                ) : (
+                  renderEvent(item.event, i)
+                ),
+              )
             )}
+            {status === "working" && <ThinkingRow />}
           </div>
+
+          {choices.length > 0 && (
+            <div className="border-t border-border">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen((o) => !o)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {drawerOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                Choose · {choices.length} options
+              </button>
+              {drawerOpen && (
+                <div className="flex flex-wrap gap-2 px-3 pb-3">
+                  {choices.map((choice, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={!running || busy}
+                      onClick={() => sendChoice(choice.label)}
+                      className="rounded-full border border-border bg-accent/40 px-3 py-1.5 text-xs transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2 border-t border-border p-3">
             <Textarea
