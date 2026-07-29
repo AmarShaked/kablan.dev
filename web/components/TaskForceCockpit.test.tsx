@@ -20,6 +20,7 @@ vi.mock("../api.ts", async (importOriginal) => {
       getLogs: vi.fn().mockResolvedValue([]),
       startServer: vi.fn().mockResolvedValue(null),
       stopServer: vi.fn().mockResolvedValue({ stopped: true }),
+      getEnv: vi.fn().mockResolvedValue([]),
       factory: {
         ...actual.api.factory,
         agentStart: vi.fn().mockResolvedValue({}),
@@ -30,6 +31,17 @@ vi.mock("../api.ts", async (importOriginal) => {
     },
   };
 });
+
+// TaskForceCockpit now delegates to Cockpit, which pulls in WorktreeDetails' data hooks —
+// mocked here (as ProjectView.test.tsx does) so these stay unit tests of the chat/status
+// behavior, not integration tests of the branches/commits/gitlab/diff queries.
+vi.mock("../queries.ts", () => ({
+  useBranches: () => ({ data: [], isPending: false }),
+  useCommits: () => ({ data: { timestamps: [] }, isPending: false }),
+  useDiff: () => ({ data: { diff: "" }, isPending: false }),
+  useGitlabOverview: () => ({ data: undefined, isPending: false }),
+  useWorktrees: () => ({ data: [], isPending: false }),
+}));
 
 const taskForce: TaskForce = {
   id: "t1",
@@ -83,7 +95,8 @@ describe("TaskForceCockpit", () => {
   it("renders the assistant text and the agent status", () => {
     renderCockpit([workingStatus, helloEvent]);
     expect(screen.getByText("hello")).toBeInTheDocument();
-    expect(screen.getByText(/working/i)).toBeInTheDocument();
+    // Exact match — the details pane's "Working diff" card heading also matches /working/i.
+    expect(screen.getByText("Working")).toBeInTheDocument();
   });
 
   it("sends the composer text via agentMessage and clears the field", async () => {
@@ -156,7 +169,8 @@ describe("TaskForceCockpit", () => {
     ];
     expect(() => renderCockpit([workingStatus, ...malformedEvents])).not.toThrow();
     // Status still renders fine even though the malformed events contribute no bubbles.
-    expect(screen.getByText(/working/i)).toBeInTheDocument();
+    // Exact match — the details pane's "Working diff" card heading also matches /working/i.
+    expect(screen.getByText("Working")).toBeInTheDocument();
   });
 
   it("clears the composer draft when remounted (via key change) for a different task force", async () => {

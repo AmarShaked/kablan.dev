@@ -49,32 +49,17 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { LinearLink, extractLinearId } from "./LinearLink.tsx";
+import { LinearLink } from "./LinearLink.tsx";
+import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
+
+// `Entry` used to be defined in this file; it now lives in `../lib/entries.ts` (alongside the
+// branch/worktree -> Entry builders) so it can be reused outside the branches/worktrees list
+// (e.g. the worktree cockpit). Re-exported here so `ItemDrawer.tsx`'s `import type { Entry }
+// from "./OverviewTab.tsx"` keeps working unchanged.
+export type { Entry };
 
 type SortMode = "recent" | "name";
 type Kind = "worktree" | "branch";
-
-export interface Entry {
-  id: string;
-  kind: Kind;
-  name: string;
-  head: string | null;
-  current: boolean;
-  isMain: boolean;
-  locked: boolean;
-  upstream: string | null;
-  behind: number;
-  branchName: string | null; // actual branch to pull (null for detached)
-  author: string | null;
-  ts: number | null;
-  dateRel: string | null;
-  cwd: string | null; // worktree dir to run in
-  runBranch: string | null; // branch to check out + run (branch rows)
-  inWorktree: string | null; // branch already checked out in a worktree
-  remoteOnly: boolean; // branch exists only on a remote (not local yet)
-  dirty: boolean; // working tree has uncommitted changes
-  linearId: string | null;
-}
 
 type Row = { type: "group"; kind: Kind; label: string; count: number } | { type: "item"; entry: Entry };
 
@@ -93,21 +78,6 @@ const DATE_LABELS: Record<string, string> = {
   "30d": "Last 30 days",
   "90d": "Last 90 days",
 };
-
-function relTime(ts: number | null): string {
-  if (!ts) return "";
-  const diff = Date.now() / 1000 - ts;
-  const m = Math.floor(diff / 60);
-  if (m < 1) return "now";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo`;
-  return `${Math.floor(mo / 12)}y`;
-}
 
 const AVATAR_COLORS = [
   "bg-rose-500/20 text-rose-700 dark:text-rose-300",
@@ -392,51 +362,10 @@ export function OverviewTab({
     const branchByName = new Map(branches.map((b) => [b.name, b]));
     const wtEntries: Entry[] = worktrees
       .filter((w) => !w.bare)
-      .map((w) => {
-        const meta = w.branch ? branchByName.get(w.branch) : undefined;
-        return {
-          id: `wt:${w.path}`,
-          kind: "worktree" as const,
-          name: w.branch ?? (w.detached ? "detached HEAD" : "—"),
-          head: w.head,
-          current: !!w.branch && w.branch === currentBranch,
-          isMain: w.isMain,
-          locked: w.locked,
-          upstream: meta?.upstream ?? null,
-          behind: meta?.behind ?? 0,
-          branchName: w.branch,
-          author: w.author,
-          ts: w.lastCommitTs,
-          dateRel: relTime(w.lastCommitTs),
-          cwd: w.path,
-          runBranch: null,
-          inWorktree: null,
-          remoteOnly: false,
-          dirty: w.dirty,
-          linearId: extractLinearId(w.branch),
-        };
-      });
-    const brEntries: Entry[] = branches.map((b) => ({
-      id: `br:${b.name}`,
-      kind: "branch" as const,
-      name: b.name,
-      head: b.lastCommit,
-      current: b.current,
-      isMain: false,
-      locked: false,
-      upstream: b.upstream,
-      behind: b.behind,
-      branchName: b.name,
-      author: b.author,
-      ts: b.lastCommitTs,
-      dateRel: b.lastCommitDate ? relTime(b.lastCommitTs) : null,
-      cwd: worktreeByBranch.get(b.name) ?? null,
-      runBranch: b.name,
-      inWorktree: worktreeByBranch.get(b.name) ?? null,
-      remoteOnly: b.remoteOnly,
-      dirty: dirtyByBranch.get(b.name) ?? false,
-      linearId: extractLinearId(b.name),
-    }));
+      .map((w) => worktreeToEntry(w, w.branch ? branchByName.get(w.branch) : undefined, currentBranch));
+    const brEntries: Entry[] = branches.map((b) =>
+      branchToEntry(b, worktreeByBranch.get(b.name) ?? null, dirtyByBranch.get(b.name) ?? false),
+    );
     return [...wtEntries, ...brEntries];
   }, [worktrees, branches, currentBranch]);
 

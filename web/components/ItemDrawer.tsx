@@ -33,8 +33,10 @@ import { EnvTab } from "./EnvTab.tsx";
 import { LogsTab } from "./LogsTab.tsx";
 import type { Entry } from "./OverviewTab.tsx";
 
-/** Find the first localhost URL a dev server printed, so it can be opened. */
-function findServerUrl(logs: LogLine[]): string | null {
+/** Find the first localhost URL a dev server printed, so it can be opened.
+ * Exported for reuse by `WorktreeDetails` (the worktree cockpit's details panel), which needs
+ * the same computation but does its own log-fetching. */
+export function findServerUrl(logs: LogLine[]): string | null {
   const re = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+(?:\/\S*)?/;
   for (const l of logs) {
     const m = l.text.match(re);
@@ -57,7 +59,9 @@ function levelClass(c: number) {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function CommitHeatmap({ timestamps }: { timestamps: number[] }) {
+/** Exported for reuse by `WorktreeDetails` — same commit-activity heatmap, no drawer-specific
+ * dependencies (it just takes the raw timestamps). */
+export function CommitHeatmap({ timestamps }: { timestamps: number[] }) {
   const WEEKS = 26;
   const counts = new Map<string, number>();
   for (const ts of timestamps) {
@@ -136,7 +140,8 @@ function CommitHeatmap({ timestamps }: { timestamps: number[] }) {
   );
 }
 
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+/** Exported for reuse by `WorktreeDetails` — a plain label/value row. */
+export function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-1.5 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>

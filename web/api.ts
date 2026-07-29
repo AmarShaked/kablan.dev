@@ -218,6 +218,13 @@ export const api = {
   listProjects: () => req<ProjectSummary[]>("/api/projects"),
   getBranches: (name: string) => req<Branch[]>(`/api/projects/${encodeURIComponent(name)}/branches`),
   getWorktrees: (name: string) => req<Worktree[]>(`/api/projects/${encodeURIComponent(name)}/worktrees`),
+  /** Creates a worktree for an existing branch (`git worktree add`), so a plain branch can
+   * become an agent-drivable cockpit target ("Start a session"). */
+  createWorktree: (name: string, branch: string) =>
+    req<Worktree>(`/api/projects/${encodeURIComponent(name)}/worktrees`, {
+      method: "POST",
+      body: JSON.stringify({ branch }),
+    }),
   getCommits: (name: string, opts: { ref?: string; cwd?: string } = {}) => {
     const p = new URLSearchParams();
     if (opts.ref) p.set("ref", opts.ref);
@@ -313,6 +320,29 @@ export const api = {
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent/stop`, { method: "POST" }),
     getAgent: (name: string, tid: string) =>
       req<{ agent: AgentView | null; events: unknown[] }>(`/api/projects/${encodeURIComponent(name)}/factory/taskforces/${encodeURIComponent(tid)}/agent`),
+
+    // Worktree-keyed agent calls — same shapes as the task-force agent calls above, but for a
+    // plain worktree (no task force involved). See docs/superpowers/plans/2026-07-29-worktree-cockpit.md
+    // §"API contract" for the backend routes (built in parallel against this same contract).
+    worktreeAgentStart: (name: string, worktreePath: string) =>
+      req<AgentView>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/start`, {
+        method: "POST",
+        body: JSON.stringify({ worktreePath }),
+      }),
+    worktreeAgentMessage: (name: string, worktreePath: string, text: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/message`, {
+        method: "POST",
+        body: JSON.stringify({ worktreePath, text }),
+      }),
+    worktreeAgentStop: (name: string, worktreePath: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/worktree-agent/stop`, {
+        method: "POST",
+        body: JSON.stringify({ worktreePath }),
+      }),
+    getWorktreeAgent: (name: string, worktreePath: string) =>
+      req<{ agent: AgentView | null; events: unknown[] }>(
+        `/api/projects/${encodeURIComponent(name)}/worktree-agent?worktreePath=${encodeURIComponent(worktreePath)}`,
+      ),
   },
 
   getEnv: (name: string, cwd?: string) =>
