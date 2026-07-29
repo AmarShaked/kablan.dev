@@ -91,6 +91,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/taskforces/:tid/agent/start", post(post_agent_start))
         .route("/api/projects/:name/factory/taskforces/:tid/agent/message", post(post_agent_message))
         .route("/api/projects/:name/factory/taskforces/:tid/agent/stop", post(post_agent_stop))
+        .route("/api/projects/:name/worktrees", post(post_worktree))
+        .route("/api/projects/:name/worktree-agent/start", post(post_worktree_agent_start))
+        .route("/api/projects/:name/worktree-agent/message", post(post_worktree_agent_message))
+        .route("/api/projects/:name/worktree-agent/stop", post(post_worktree_agent_stop))
+        .route("/api/projects/:name/worktree-agent", get(get_worktree_agent))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
         .route("/api/servers", get(get_servers))
@@ -438,6 +443,119 @@ async fn get_agent(State(st): State<AppState>, Path((name, tid)): Path<(String, 
                 .map(|tf| tf.agent_session_id.is_none())
                 .unwrap_or(false);
             if needs_persist && factory::set_agent_session(&mut file, &name2, &tid2, &sid).is_ok() {
+                let _ = factory::save_file(&path, &file);
+            }
+        })
+        .await;
+    }
+
+    Ok(Json(json!({ "agent": agent, "events": events })))
+}
+
+// --- Ad-hoc worktree agents (any git worktree, not just task forces) ---
+
+/// WS/registry key for an agent running in an arbitrary worktree, as opposed
+/// to `{name}::{tid}` for task-force agents.
+fn worktree_agent_key(name: &str, worktree_path: &str) -> String {
+    format!("{name}::wt:{worktree_path}")
+}
+
+async fn post_worktree(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = match b.get("branch").and_then(|v| v.as_str()).map(str::trim) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return Err(bad("branch is required")),
+    };
+    let key = name.clone();
+    let wt = blocking(move || {
+        let cfg = config::load();
+        let wt_root = if cfg.factory.worktree_root.trim().is_empty() {
+            config::config_dir().join("worktrees")
+        } else {
+            std::path::PathBuf::from(cfg.factory.worktree_root.trim())
+        };
+        git::add_worktree_for_branch(std::path::Path::new(&dir), &wt_root, &key, &branch)
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(serde_json::to_value(wt).unwrap()))
+}
+
+async fn post_worktree_agent_start(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if worktree_path.is_empty() {
+        return Err(bad("worktreePath is required"));
+    }
+    let cfg = config::load();
+    // Same soft cap (and TOCTOU caveat) as `start_agent` for task forces.
+    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
+        return Err(bad("agent limit reached"));
+    }
+    let name2 = name.clone();
+    let wt2 = worktree_path.clone();
+    let sid = blocking(move || {
+        let file = factory::load_file(&factory_store_path());
+        factory::get_worktree_session(&file, &name2, &wt2)
+    })
+    .await;
+    let argv = agents::build_agent_argv(&cfg.factory, sid.as_deref());
+    let key = worktree_agent_key(&name, &worktree_path);
+    let view = st.agents.start(&key, &worktree_path, argv, sid.as_deref());
+    Ok(Json(serde_json::to_value(view).unwrap()))
+}
+
+async fn post_worktree_agent_message(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if worktree_path.is_empty() {
+        return Err(bad("worktreePath is required"));
+    }
+    if text.is_empty() {
+        return Err(bad("text is required"));
+    }
+    let key = worktree_agent_key(&name, &worktree_path);
+    let ok = st.agents.send(&key, &text);
+    Ok(Json(json!({ "ok": ok })))
+}
+
+async fn post_worktree_agent_stop(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let worktree_path = b.get("worktreePath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if worktree_path.is_empty() {
+        return Err(bad("worktreePath is required"));
+    }
+    let key = worktree_agent_key(&name, &worktree_path);
+    let ok = st.agents.stop(&key);
+    Ok(Json(json!({ "ok": ok })))
+}
+
+async fn get_worktree_agent(State(st): State<AppState>, Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let worktree_path = match q.get("worktreePath").filter(|s| !s.is_empty()) {
+        Some(s) => s.clone(),
+        None => return Err(bad("worktreePath is required")),
+    };
+    let key = worktree_agent_key(&name, &worktree_path);
+    let agent = st.agents.get(&key);
+    let events = st.agents.events(&key);
+
+    // Same lightweight reconcile as `get_agent`, keyed by worktree path
+    // instead of task-force id.
+    if let Some(sid) = agent.as_ref().and_then(|a| a.session_id.clone()) {
+        let name2 = name.clone();
+        let wt2 = worktree_path.clone();
+        blocking(move || {
+            let path = factory_store_path();
+            let mut file = factory::load_file(&path);
+            let needs_persist = factory::get_worktree_session(&file, &name2, &wt2).is_none();
+            if needs_persist {
+                factory::set_worktree_session(&mut file, &name2, &wt2, &sid);
                 let _ = factory::save_file(&path, &file);
             }
         })

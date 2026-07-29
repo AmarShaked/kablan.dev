@@ -37,6 +37,10 @@ pub struct Feature {
 pub struct ProjectFactory {
     #[serde(default)]
     pub features: Vec<Feature>,
+    /// Agent session id per worktree path, for agents run in arbitrary
+    /// (non-task-force) worktrees via the `/worktree-agent/*` routes.
+    #[serde(default)]
+    pub worktree_sessions: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -196,6 +200,19 @@ pub fn set_agent_session(file: &mut FactoryFile, project: &str, tf_id: &str, sid
         }
     }
     Err("Unknown task force".to_string())
+}
+
+/// Upsert the stored agent session id for an arbitrary worktree `path` under
+/// `project` (used to `--resume` after a relaunch). Creates the project's
+/// entry if this is its first recorded worktree/session.
+pub fn set_worktree_session(file: &mut FactoryFile, project: &str, path: &str, sid: &str) {
+    let pf = file.projects.entry(project.to_string()).or_default();
+    pf.worktree_sessions.insert(path.to_string(), sid.to_string());
+}
+
+/// Look up the stored agent session id for `path` under `project`, if any.
+pub fn get_worktree_session(file: &FactoryFile, project: &str, path: &str) -> Option<String> {
+    file.projects.get(project)?.worktree_sessions.get(path).cloned()
 }
 
 pub fn delete_task_force(
@@ -500,6 +517,48 @@ mod tests {
         assert_eq!(tf2.id, tf1.id);
         assert_eq!(tf2.branch, tf1.branch);
         assert!(Path::new(&tf2.worktree_path).exists(), "recreated worktree dir should exist");
+    }
+
+    #[test]
+    fn set_worktree_session_then_get_roundtrips_through_save_load() {
+        let path = tmp().join("factory.json");
+        let mut file = load_file(&path);
+        set_worktree_session(&mut file, "acme/app", "/wt/foo", "sess-1");
+        save_file(&path, &file).unwrap();
+
+        let reloaded = load_file(&path);
+        assert_eq!(
+            get_worktree_session(&reloaded, "acme/app", "/wt/foo").as_deref(),
+            Some("sess-1")
+        );
+    }
+
+    #[test]
+    fn set_worktree_session_upserts_existing_project() {
+        let mut file = FactoryFile::default();
+        create_feature(&mut file, "acme/app", "Audit").unwrap();
+        set_worktree_session(&mut file, "acme/app", "/wt/a", "s1");
+        set_worktree_session(&mut file, "acme/app", "/wt/a", "s2");
+        assert_eq!(get_worktree_session(&file, "acme/app", "/wt/a").as_deref(), Some("s2"));
+    }
+
+    #[test]
+    fn get_worktree_session_unknown_project_or_path_is_none() {
+        let mut file = FactoryFile::default();
+        assert!(get_worktree_session(&file, "nope", "/wt/x").is_none());
+        set_worktree_session(&mut file, "acme/app", "/wt/a", "s1");
+        assert!(get_worktree_session(&file, "acme/app", "/wt/unknown").is_none());
+    }
+
+    #[test]
+    fn old_factory_json_without_worktree_sessions_still_loads() {
+        // Simulates a file saved before this field existed.
+        let path = tmp().join("factory.json");
+        let old_json = r#"{"projects":{"acme/app":{"features":[]}}}"#;
+        std::fs::write(&path, old_json).unwrap();
+        let file = load_file(&path);
+        assert!(file.projects["acme/app"].worktree_sessions.is_empty());
+        assert!(get_worktree_session(&file, "acme/app", "/wt/x").is_none());
     }
 
     #[test]

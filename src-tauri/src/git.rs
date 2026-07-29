@@ -294,6 +294,63 @@ pub fn list_worktrees(dir: &str) -> Vec<Worktree> {
     result
 }
 
+/// Create a worktree for an existing branch (no `-b`, unlike task-force
+/// creation which forges a fresh branch). Path is
+/// `worktree_root/slug(project)/slug(branch)`; parent dirs are created first.
+/// The `--` separator keeps a flag-shaped `branch` from being parsed as a git
+/// flag, matching `factory::create_task_force`'s convention.
+pub fn add_worktree_for_branch(
+    repo_dir: &Path,
+    worktree_root: &Path,
+    project: &str,
+    branch: &str,
+) -> Result<Worktree, String> {
+    let path = worktree_root
+        .join(crate::factory::slugify(project))
+        .join(crate::factory::slugify(branch));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let wt = path.to_string_lossy().to_string();
+    git(
+        &repo_dir.to_string_lossy(),
+        &["worktree", "add", "--", &wt, branch],
+    )
+    .map_err(|e| format!("git worktree add failed: {e}"))?;
+
+    // `git worktree list` reports canonicalized paths (e.g. macOS resolves
+    // /var -> /private/var), so compare canonical forms rather than the raw
+    // strings, falling back to a raw compare if canonicalization fails.
+    let canonical_path = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+    let found = list_worktrees(&repo_dir.to_string_lossy())
+        .into_iter()
+        .find(|w| {
+            let wp = Path::new(&w.path);
+            wp == path
+                || std::fs::canonicalize(wp)
+                    .map(|c| c == canonical_path)
+                    .unwrap_or(false)
+        });
+    Ok(found.unwrap_or_else(|| {
+        let (ts, author) = head_meta(&wt);
+        let dirty = git(&wt, &["status", "--porcelain"])
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        Worktree {
+            path: wt,
+            branch: Some(branch.to_string()),
+            head: None,
+            bare: false,
+            detached: false,
+            locked: false,
+            is_main: false,
+            last_commit_ts: ts,
+            author,
+            dirty,
+        }
+    }))
+}
+
 pub fn checkout(dir: &str, branch: &str) -> Result<(), String> {
     git(dir, &["checkout", branch]).map(|_| ())
 }
@@ -388,5 +445,81 @@ fn parse_track(track: &str, key: &str) -> u32 {
         num.parse().unwrap_or(0)
     } else {
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    fn tmp() -> std::path::PathBuf {
+        let mut p = env::temp_dir();
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        p.push(format!("kablan-git-test-{n}"));
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn init_repo() -> std::path::PathBuf {
+        let dir = tmp();
+        let d = dir.to_string_lossy().to_string();
+        git(&d, &["init", "-b", "main"]).unwrap();
+        git(&d, &["config", "user.email", "t@t.co"]).unwrap();
+        git(&d, &["config", "user.name", "t"]).unwrap();
+        std::fs::write(dir.join("README.md"), "hi").unwrap();
+        git(&d, &["add", "."]).unwrap();
+        git(&d, &["commit", "-m", "init"]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn add_worktree_for_branch_creates_dir_and_shows_in_list() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        // an existing branch, no `-b`
+        git(&d, &["branch", "feature/existing"]).unwrap();
+        let wt_root = tmp();
+
+        let wt = add_worktree_for_branch(&repo, &wt_root, "acme/app", "feature/existing").unwrap();
+
+        assert!(Path::new(&wt.path).exists(), "worktree dir should exist");
+        assert_eq!(wt.branch.as_deref(), Some("feature/existing"));
+        assert!(!wt.is_main);
+
+        let all = list_worktrees(&d);
+        assert!(all.iter().any(|w| w.path == wt.path), "list_worktrees should include the new worktree");
+    }
+
+    #[test]
+    fn add_worktree_for_branch_uses_slugified_project_and_branch_path() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        // valid git ref, but needs slugifying: "/" and "_" collapse to "-".
+        git(&d, &["branch", "Feature/Cool_Thing"]).unwrap();
+        let wt_root = tmp();
+
+        let wt = add_worktree_for_branch(&repo, &wt_root, "Acme App", "Feature/Cool_Thing").unwrap();
+
+        let expected = std::fs::canonicalize(&wt_root).unwrap().join("acme-app").join("feature-cool-thing");
+        assert_eq!(std::fs::canonicalize(&wt.path).unwrap(), expected);
+    }
+
+    #[test]
+    fn add_worktree_for_branch_unknown_branch_errors() {
+        let repo = init_repo();
+        let wt_root = tmp();
+        let r = add_worktree_for_branch(&repo, &wt_root, "acme/app", "does-not-exist");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn add_worktree_for_branch_rejects_flag_shaped_branch() {
+        // `--` separator must stop a flag-shaped branch name from being
+        // parsed as a git flag (mirrors factory::create_task_force's test).
+        let repo = init_repo();
+        let wt_root = tmp();
+        let r = add_worktree_for_branch(&repo, &wt_root, "acme/app", "--detach");
+        assert!(r.is_err(), "flag-shaped branch should fail, not be parsed as a git flag");
     }
 }
