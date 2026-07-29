@@ -305,7 +305,7 @@ export function AgentChat({
         <AgentDot status={status} />
         <span className="text-sm text-muted-foreground">
           {title ? `${title} · ` : ""}
-          {STATUS_LABEL[status ?? "idle"] ?? "Idle"}
+          {status ? STATUS_LABEL[status] ?? "Idle" : "Not started"}
         </span>
         <div className="ml-auto flex gap-2">
           {running ? (
