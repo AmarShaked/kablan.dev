@@ -97,27 +97,14 @@ export function ProjectMenu({
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-border text-foreground">
-      <div className="flex items-center gap-1.5 border-b border-border p-2">
-        <div className="min-w-0 flex-1">
-          <ProjectSwitcher
-            projects={projects}
-            selected={selected}
-            onSelect={onSelectProject}
-            servers={servers}
-            onRescan={onRescan}
-          />
-        </div>
-        {onNewSession && (
-          <button
-            type="button"
-            onClick={onNewSession}
-            aria-label="New session"
-            title="New session"
-            className="shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <Plus className="size-4" />
-          </button>
-        )}
+      <div className="border-b border-border p-2">
+        <ProjectSwitcher
+          projects={projects}
+          selected={selected}
+          onSelect={onSelectProject}
+          servers={servers}
+          onRescan={onRescan}
+        />
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <SidebarRecent
@@ -134,6 +121,19 @@ export function ProjectMenu({
           branchesLoading={branchesLoading}
         />
       </div>
+
+      {onNewSession && (
+        <div className="border-t border-border p-2">
+          <button
+            type="button"
+            onClick={onNewSession}
+            aria-label="New session"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <Plus className="size-4" /> New session
+          </button>
+        </div>
+      )}
 
       {selected && (
         <CreateFeatureDialog
