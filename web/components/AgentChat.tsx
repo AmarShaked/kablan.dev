@@ -54,6 +54,36 @@ function toolSummary(name: string, input: unknown): string {
   }
 }
 
+/** Renders a small subset of inline markdown as React nodes: `**bold**` → semibold, and
+ * `` `code` `` → a mono chip. Everything else is plain text (JSX-escaped). Used so option labels
+ * like "**Metronome** — …" read as formatted text instead of printing literal asterisks. */
+function renderInline(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
+  let last = 0;
+  let k = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(
+        <strong key={k++} className="font-semibold text-foreground">
+          {m[1]}
+        </strong>,
+      );
+    } else {
+      nodes.push(
+        <code key={k++} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+          {m[2]}
+        </code>,
+      );
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 /** A single flattened transcript row, after unpacking each stream event into its display pieces.
  * The renderer coalesces consecutive `tool` prims into one collapsible group; everything else
  * renders inline. Tool *results* (the raw `user` events) never become prims — they're the bulk of
@@ -191,7 +221,7 @@ function renderPrims(prims: Prim[]): ReactNode[] {
             key={p.key}
             className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2 text-sm whitespace-pre-wrap"
           >
-            {p.text}
+            {renderInline(p.text)}
           </div>,
         );
         break;
@@ -449,7 +479,7 @@ export function AgentChat({
                   >
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1">{choice.label}</span>
+                  <span className="min-w-0 flex-1">{renderInline(choice.label)}</span>
                 </button>
               ))}
             </div>
