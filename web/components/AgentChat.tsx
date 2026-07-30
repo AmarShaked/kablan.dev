@@ -457,7 +457,7 @@ export function AgentChat({
       </div>
 
       {choices.length > 0 && !drawerOpen && (
-        <div className="border-t border-border p-3 pb-0">
+        <div className="border-t border-border p-3">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
