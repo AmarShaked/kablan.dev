@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Square, Send, ChevronDown, ChevronRight } from "lucide-react";
+import { Square, Send, ChevronDown, ChevronRight, X } from "lucide-react";
 import type { AgentStatus, AgentView } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
@@ -54,85 +54,170 @@ function toolSummary(name: string, input: unknown): string {
   }
 }
 
-/** Maps one raw stream-json event to a transcript row: assistant text -> a bubble, assistant
- * tool_use -> a compact one-line "⏺ Read file.ts" summary, user tool-result -> hidden (kept out
- * of the transcript to cut noise, Claude-Code-style), result -> a turn divider/summary, system
- * spawn_error/stderr -> an error line, everything else is noise and skipped. */
-function renderEvent(ev: unknown, idx: number): ReactNode {
-  if (!ev || typeof ev !== "object") return null;
-  const e = ev as Record<string, any>;
+/** A single flattened transcript row, after unpacking each stream event into its display pieces.
+ * The renderer coalesces consecutive `tool` prims into one collapsible group; everything else
+ * renders inline. Tool *results* (the raw `user` events) never become prims — they're the bulk of
+ * the noise, and the `tool` line already says what ran. */
+type Prim =
+  | { t: "you"; key: string; text: string }
+  | { t: "text"; key: string; text: string }
+  | { t: "tool"; key: string; label: string }
+  | { t: "result"; key: string; label: string }
+  | { t: "error"; key: string; text: string };
 
-  switch (e.type) {
-    case "assistant": {
-      const content = Array.isArray(e.message?.content) ? e.message.content : [];
-      const parts: ReactNode[] = [];
-      content.forEach((block: any, i: number) => {
-        if (block?.type === "text" && block.text) {
-          parts.push(
-            <div
-              key={`t-${i}`}
-              className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2 text-sm whitespace-pre-wrap"
-            >
-              {block.text}
-            </div>,
-          );
-        } else if (block?.type === "tool_use") {
-          parts.push(
-            <div
-              key={`u-${i}`}
-              className="flex max-w-full items-center gap-1.5 self-start px-1 font-mono text-xs text-muted-foreground"
-            >
-              <span className="shrink-0 text-primary">⏺</span>
-              <span className="truncate">{toolSummary(block.name, block.input)}</span>
-            </div>,
-          );
+/** Unpacks the ordered timeline into a flat list of display prims — one `you` bubble per sent
+ * message, and per agent event its assistant text bubbles + tool lines (a result → a divider, a
+ * spawn_error/stderr → an error line). Everything else (init/hook/stream_event, tool results) is
+ * dropped as noise. */
+function flattenTimeline(timeline: TimelineItem[]): Prim[] {
+  const out: Prim[] = [];
+  timeline.forEach((item, i) => {
+    if (item.kind === "you") {
+      out.push({ t: "you", key: `you-${i}`, text: item.text });
+      return;
+    }
+    const e = item.event as Record<string, any> | null;
+    if (!e || typeof e !== "object") return;
+    switch (e.type) {
+      case "assistant": {
+        const content = Array.isArray(e.message?.content) ? e.message.content : [];
+        content.forEach((block: any, b: number) => {
+          if (block?.type === "text" && block.text) {
+            out.push({ t: "text", key: `t-${i}-${b}`, text: block.text });
+          } else if (block?.type === "tool_use") {
+            out.push({ t: "tool", key: `u-${i}-${b}`, label: toolSummary(block.name, block.input) });
+          }
+        });
+        break;
+      }
+      case "result": {
+        const resultText =
+          e.result === undefined || e.result === null
+            ? ""
+            : typeof e.result === "string"
+              ? e.result
+              : JSON.stringify(e.result);
+        out.push({ t: "result", key: `r-${i}`, label: `${e.subtype ?? "turn"}${resultText ? ` · ${resultText}` : ""}` });
+        break;
+      }
+      case "system":
+        if (e.subtype === "spawn_error" || e.subtype === "stderr") {
+          out.push({ t: "error", key: `s-${i}`, text: e.message ?? e.text ?? "Agent error" });
         }
-      });
-      if (!parts.length) return null;
-      return (
-        <div key={idx} className="flex flex-col gap-1">
-          {parts}
-        </div>
-      );
+        break;
+      // "user" (tool results), "stream_event", other system subtypes → noise, skipped.
     }
-    case "user":
-      // Tool results are intentionally not rendered — full file contents / command output are the
-      // bulk of the noise, and the compact "⏺ tool" line above already says what ran.
-      return null;
-    case "result": {
-      const resultText =
-        e.result === undefined || e.result === null
-          ? ""
-          : typeof e.result === "string"
-            ? e.result
-            : JSON.stringify(e.result);
-      return (
-        <div key={idx} className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
-          <span>
-            {e.subtype ?? "turn"}
-            {resultText ? ` · ${resultText}` : ""}
-          </span>
-          <span className="h-px flex-1 bg-border" />
+  });
+  return out;
+}
+
+/** One compact "⏺ Read file.ts" tool line. */
+function ToolLine({ label }: { label: string }) {
+  return (
+    <div className="flex max-w-full items-center gap-1.5 font-mono text-xs text-muted-foreground">
+      <span className="shrink-0 text-primary">⏺</span>
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+/** A run of ≥2 consecutive tool calls, collapsed into one row ("N tool calls") that expands to
+ * reveal the individual `⏺` lines under a hairline rail. Always starts collapsed — the count is
+ * usually all you want; expand to inspect what the agent touched. */
+function ToolGroup({ tools }: { tools: Array<{ key: string; label: string }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex max-w-full flex-col self-start">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 self-start rounded px-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {open ? (
+          <ChevronDown className="size-3 shrink-0 opacity-70" />
+        ) : (
+          <ChevronRight className="size-3 shrink-0 opacity-70" />
+        )}
+        <span className="shrink-0 text-primary">⏺</span>
+        <span className="font-medium text-foreground">{tools.length} tool calls</span>
+      </button>
+      {open && (
+        <div className="mt-1 ml-[9px] flex flex-col gap-0.5 border-l border-border pl-3">
+          {tools.map((t) => (
+            <ToolLine key={t.key} label={t.label} />
+          ))}
         </div>
-      );
+      )}
+    </div>
+  );
+}
+
+/** Renders the flattened prims, coalescing runs of ≥2 consecutive tool calls into one
+ * collapsible `ToolGroup`; a lone tool call stays a plain inline line. */
+function renderPrims(prims: Prim[]): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let run: Array<{ key: string; label: string }> = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    const group = run;
+    run = [];
+    if (group.length === 1) {
+      nodes.push(<ToolLine key={group[0].key} label={group[0].label} />);
+    } else {
+      nodes.push(<ToolGroup key={`g-${group[0].key}`} tools={group} />);
     }
-    case "system":
-      if (e.subtype === "spawn_error" || e.subtype === "stderr") {
-        return (
+  };
+  for (const p of prims) {
+    if (p.t === "tool") {
+      run.push({ key: p.key, label: p.label });
+      continue;
+    }
+    flush();
+    switch (p.t) {
+      case "you":
+        nodes.push(
+          <div key={p.key} className="flex flex-col items-end gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
+            <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
+              {p.text}
+            </div>
+          </div>,
+        );
+        break;
+      case "text":
+        nodes.push(
           <div
-            key={idx}
+            key={p.key}
+            className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2 text-sm whitespace-pre-wrap"
+          >
+            {p.text}
+          </div>,
+        );
+        break;
+      case "result":
+        nodes.push(
+          <div key={p.key} className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            <span>{p.label}</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>,
+        );
+        break;
+      case "error":
+        nodes.push(
+          <div
+            key={p.key}
             className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-500"
           >
-            {e.message ?? e.text ?? "Agent error"}
-          </div>
+            {p.text}
+          </div>,
         );
-      }
-      return null; // init/hook/thinking_tokens/post_turn_summary — noise
-    case "stream_event":
-    default:
-      return null;
+        break;
+    }
   }
+  flush();
+  return nodes;
 }
 
 /** Extracts the text of the most recent `agent` timeline item that's an assistant text message,
@@ -262,6 +347,12 @@ export function AgentChat({
     const t = lastAssistantText(timeline);
     return t ? parseChoices(t) : [];
   }, [timeline]);
+  // Re-open the picker whenever a *new* set of options arrives, so a manual dismiss (✕) only
+  // hides the current set — the next question's options aren't suppressed by it.
+  const choicesSig = choices.map((c) => c.label).join(" ");
+  useEffect(() => {
+    if (choicesSig) setDrawerOpen(true);
+  }, [choicesSig]);
 
   useEffect(() => {
     const el = transcriptRef.current;
@@ -321,47 +412,48 @@ export function AgentChat({
               : "Send a message to begin — the agent starts on your first message."}
           </p>
         ) : (
-          timeline.map((item, i) =>
-            item.kind === "you" ? (
-              <div key={`you-${i}`} className="flex flex-col items-end gap-1">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
-                <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
-                  {item.text}
-                </div>
-              </div>
-            ) : (
-              renderEvent(item.event, i)
-            ),
-          )
+          renderPrims(flattenTimeline(timeline))
         )}
         {status === "working" && <ThinkingRow />}
       </div>
 
-      {choices.length > 0 && (
-        <div className="border-t border-border">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen((o) => !o)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {drawerOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Choose · {choices.length} options
-          </button>
-          {drawerOpen && (
-            <div className="flex flex-wrap gap-2 px-3 pb-3">
+      {choices.length > 0 && drawerOpen && (
+        <div className="border-t border-border p-3 pb-0">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Choose
+              <span className="ml-auto font-normal normal-case tracking-normal">
+                {choices.length} option{choices.length === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Dismiss options"
+                className="-mr-1 rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+            <div className="flex flex-col p-1.5">
               {choices.map((choice, i) => (
                 <button
                   key={i}
                   type="button"
                   disabled={!chatEnabled || busy}
                   onClick={() => sendChoice(choice.label)}
-                  className="rounded-full border border-border bg-accent/40 px-3 py-1.5 text-xs transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm transition-colors hover:border-border hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {choice.label}
+                  <span
+                    aria-hidden="true"
+                    className="flex size-5 shrink-0 items-center justify-center rounded-md bg-accent font-mono text-[11px] font-semibold text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">{choice.label}</span>
                 </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
       )}
 
