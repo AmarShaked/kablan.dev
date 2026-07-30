@@ -369,6 +369,10 @@ function AppContent() {
         />
 
         <div className="m-2 flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-background">
+        {/* The project sub-sidebar (switcher + Features/Branches + New session) is only meaningful
+            for project-scoped views. Settings and Inbox are global full-width pages, so it's hidden
+            there and the main section takes the full panel width. */}
+        {view !== "settings" && view !== "inbox" && (
         <ProjectMenu
           projects={projects}
           selected={selected}
@@ -383,6 +387,7 @@ function AppContent() {
           branchesLoading={branchesQuery.isLoading}
           onNewSession={selected ? () => setNewSessionOpen(true) : undefined}
         />
+        )}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {newVersion && !updateDismissed && (
