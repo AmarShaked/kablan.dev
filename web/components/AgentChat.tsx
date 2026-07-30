@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Square, Send, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Square, Send, ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentStatus, AgentView } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
@@ -84,6 +84,17 @@ function renderInline(text: string): ReactNode[] {
   return nodes;
 }
 
+/** Splits an option label into a bold title + a description, so the picker can render each choice
+ * as a title/description card (like the question dialog). Prefers a leading `**bold**` as the
+ * title; otherwise splits on the first em/en dash; otherwise the whole label is the title. */
+function splitChoice(label: string): { title: string; desc: string } {
+  const bold = /^\s*\*\*(.+?)\*\*\s*(?:[—–-]\s*)?(.*)$/.exec(label);
+  if (bold) return { title: bold[1].trim(), desc: bold[2].trim() };
+  const dash = /^(.+?)\s+[—–]\s+(.+)$/.exec(label);
+  if (dash) return { title: dash[1].trim(), desc: dash[2].trim() };
+  return { title: label.trim(), desc: "" };
+}
+
 /** A single flattened transcript row, after unpacking each stream event into its display pieces.
  * The renderer coalesces consecutive `tool` prims into one collapsible group; everything else
  * renders inline. Tool *results* (the raw `user` events) never become prims — they're the bulk of
@@ -121,13 +132,11 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
         break;
       }
       case "result": {
-        const resultText =
-          e.result === undefined || e.result === null
-            ? ""
-            : typeof e.result === "string"
-              ? e.result
-              : JSON.stringify(e.result);
-        out.push({ t: "result", key: `r-${i}`, label: `${e.subtype ?? "turn"}${resultText ? ` · ${resultText}` : ""}` });
+        // A turn-end marker only. Claude Code's `result.result` field repeats the ENTIRE final
+        // assistant text, which we already rendered as streamed `text` bubbles — so we show just
+        // the outcome (subtype) as a slim divider and deliberately drop `result` to avoid
+        // reprinting the whole message.
+        out.push({ t: "result", key: `r-${i}`, label: String(e.subtype ?? "done") });
         break;
       }
       case "system":
@@ -447,42 +456,64 @@ export function AgentChat({
         {status === "working" && <ThinkingRow />}
       </div>
 
+      {choices.length > 0 && !drawerOpen && (
+        <div className="border-t border-border p-3 pb-0">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Show options"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ChevronRight className="size-3.5" />
+            {choices.length} option{choices.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      )}
+
       {choices.length > 0 && drawerOpen && (
         <div className="border-t border-border p-3 pb-0">
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Choose
-              <span className="ml-auto font-normal normal-case tracking-normal">
-                {choices.length} option{choices.length === 1 ? "" : "s"}
-              </span>
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(false)}
-                aria-label="Dismiss options"
-                className="-mr-1 rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-            <div className="flex flex-col p-1.5">
-              {choices.map((choice, i) => (
+          <div className="mb-2 flex items-center gap-2 px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Choose
+            <span className="ml-auto font-normal normal-case tracking-normal">
+              {choices.length} option{choices.length === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="Hide options"
+              className="-mr-0.5 rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+          </div>
+          <div className="flex max-h-[40vh] flex-col gap-1.5 overflow-y-auto custom-scroll">
+            {choices.map((choice, i) => {
+              const { title, desc } = splitChoice(choice.label);
+              return (
                 <button
                   key={i}
                   type="button"
                   disabled={!chatEnabled || busy}
                   onClick={() => sendChoice(choice.label)}
-                  className="group flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm transition-colors hover:border-border hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-foreground">{renderInline(title)}</span>
+                    {desc && (
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                        {renderInline(desc)}
+                      </span>
+                    )}
+                  </span>
                   <span
                     aria-hidden="true"
-                    className="flex size-5 shrink-0 items-center justify-center rounded-md bg-accent font-mono text-[11px] font-semibold text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+                    className="mt-px flex size-5 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-[11px] font-medium text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
                   >
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1">{renderInline(choice.label)}</span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
