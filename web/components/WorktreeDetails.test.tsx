@@ -103,6 +103,31 @@ describe("WorktreeDetails", () => {
     expect(props.onStopServer).toHaveBeenCalled();
   });
 
+  it("calls onInstall when Install deps is clicked (not running)", async () => {
+    const onInstall = vi.fn();
+    renderDetails({ onInstall });
+    await userEvent.click(screen.getByRole("button", { name: /install deps/i }));
+    expect(onInstall).toHaveBeenCalled();
+  });
+
+  it("shows an install-in-progress state (and hides Start/Install) while an install command runs", () => {
+    const server: RunningServer = {
+      projectName: "proj",
+      cwd: "/wt/one",
+      command: "npm install",
+      branch: "feat/one",
+      pid: 1,
+      status: "running",
+      startedAt: 0,
+      exitCode: null,
+    };
+    renderDetails({ server, onInstall: vi.fn() });
+    expect(screen.getByText(/installing dependencies/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /stop install/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^install deps$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start server/i })).not.toBeInTheDocument();
+  });
+
   it("disables the dev-server/env controls and shows a hint for a cwd-less (bare-branch) entry", () => {
     renderDetails({ entry: { ...entry, cwd: null } });
     expect(screen.getByText(/start a session for this branch to run a dev server/i)).toBeInTheDocument();

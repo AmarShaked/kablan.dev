@@ -9,6 +9,7 @@ import {
   Check,
   Cloud,
   ExternalLink,
+  Package,
 } from "lucide-react";
 import { api, type RunningServer, type ProjectSummary, type LogLine } from "../api.ts";
 import { useCommits, useGitlabOverview, useDiff } from "../queries.ts";
@@ -181,6 +182,7 @@ export function WorktreeDetails({
   busy,
   onStartServer,
   onStopServer,
+  onInstall,
   onRefreshServer,
   linearWorkspace = "",
   logs = [],
@@ -192,12 +194,17 @@ export function WorktreeDetails({
   busy: boolean;
   onStartServer: () => void;
   onStopServer: () => void;
+  /** Run `npm install` in this worktree (fixes a stale/missing node_modules). */
+  onInstall?: () => void;
   onRefreshServer?: () => void;
   linearWorkspace?: string;
   logs?: LogLine[];
 }) {
   const hasWorktree = !!entry.cwd;
   const running = server?.status === "running" || server?.status === "starting";
+  // `installDeps` reuses the dev-server slot with an `npm install` command, so a running process
+  // whose command is an install is an install-in-progress — surfaced distinctly from a dev server.
+  const installing = running && (server?.command ?? "").includes("install");
 
   const commits = useCommits(project, entry.branchName ?? undefined, entry.cwd ?? undefined, true);
   const diff = useDiff(project, undefined, entry.cwd ?? undefined, hasWorktree);
@@ -294,8 +301,12 @@ export function WorktreeDetails({
       <Card title="Dev server">
         {hasWorktree ? (
           <>
-            <div className="flex gap-2">
-              {running ? (
+            <div className="flex flex-wrap gap-2">
+              {installing ? (
+                <Button size="sm" variant="destructive" disabled={busy} onClick={onStopServer}>
+                  <Square className="size-3.5" /> Stop install
+                </Button>
+              ) : running ? (
                 <Button size="sm" variant="destructive" disabled={busy} onClick={onStopServer}>
                   <Square className="size-3.5" /> Stop server
                 </Button>
@@ -304,12 +315,22 @@ export function WorktreeDetails({
                   <Play className="size-3.5" /> Start server
                 </Button>
               )}
+              {onInstall && !running && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={onInstall}>
+                  <Package className="size-3.5" /> Install deps
+                </Button>
+              )}
               {onRefreshServer && (
                 <Button size="sm" variant="outline" disabled={busy} onClick={onRefreshServer}>
                   <RefreshCw className="size-3.5" /> Refresh
                 </Button>
               )}
             </div>
+            {installing && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <RefreshCw className="size-3 animate-spin" /> Installing dependencies… (output in Logs)
+              </p>
+            )}
             {url && (
               <a
                 href={url}

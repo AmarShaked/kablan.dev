@@ -156,6 +156,21 @@ export function Cockpit({
       setServerBusy(false);
     }
   };
+  // Run `npm install` in this worktree — reuses the dev-server process plumbing (streams into the
+  // Logs card, tracked per cwd) with an explicit command instead of the resolved dev command. Used
+  // to fix up deps when a copied node_modules is stale (e.g. validating a teammate's branch).
+  const installDeps = async () => {
+    if (!cwd) return;
+    setServerBusy(true);
+    try {
+      const s = await api.startServer(project, { cwd, branch: entry.branchName, command: "npm install" });
+      setServer(s);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setServerBusy(false);
+    }
+  };
 
   const [starting, setStarting] = useState(false);
   const startWorking = async () => {
@@ -219,6 +234,7 @@ export function Cockpit({
             busy={serverBusy}
             onStartServer={startServer}
             onStopServer={stopServer}
+            onInstall={installDeps}
             onRefreshServer={refreshServer}
             linearWorkspace={linearWorkspace}
             logs={cwd ? logs[cwd] ?? [] : []}

@@ -419,6 +419,11 @@ async fn start_branch_agent(st: &AppState, name: &str, branch: &str) -> Result<a
         factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
         let session_id = factory::get_branch_state(&file, &name2, &branch2).and_then(|s| s.agent_session_id.clone());
         factory::save_file(&path, &file)?;
+        // Seed the worktree with node_modules/.env from the project's main working copy so it can
+        // build/run immediately (a fresh worktree has neither — both gitignored). Idempotent (see
+        // copy_session_extras): a no-op when the worktree already has them (branch reused). For a
+        // divergent branch whose deps differ, the details card's "Install deps" is the fix-up.
+        copy_session_extras(std::path::Path::new(&dir), std::path::Path::new(&wt.path), true, true);
         Ok::<_, String>((wt.path, session_id))
     })
     .await
@@ -472,19 +477,24 @@ fn copy_session_extras(src_root: &std::path::Path, worktree: &std::path::Path, n
 
     if node_modules {
         let src = src_root.join("node_modules");
-        if src.is_dir() {
+        let dst = worktree.join("node_modules");
+        // Skip if the worktree already has node_modules — both to avoid clobbering a copy the
+        // user manages and because `cp src dst` copies *into* an existing dst dir (wrong shape).
+        // This makes the copy idempotent, so it's safe on a reused worktree (`Start working`).
+        if src.is_dir() && !dst.exists() {
             let _ = std::process::Command::new("cp")
                 .args(DIR_FLAGS)
                 .arg("--")
                 .arg(&src)
-                .arg(worktree.join("node_modules"))
+                .arg(&dst)
                 .status();
         }
     }
     if env_file {
         let src = src_root.join(".env");
-        if src.is_file() {
-            let _ = std::fs::copy(&src, worktree.join(".env"));
+        let dst = worktree.join(".env");
+        if src.is_file() && !dst.exists() {
+            let _ = std::fs::copy(&src, &dst);
         }
     }
 }

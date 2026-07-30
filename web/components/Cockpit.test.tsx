@@ -135,6 +135,19 @@ describe("Cockpit", () => {
     expect(screen.getByText("/wt/one")).toBeInTheDocument();
   });
 
+  it("runs `npm install` in the worktree's cwd when Install deps is clicked", async () => {
+    branchesData = [{ ...bareBranch, name: "feat/one" }];
+    worktreesData = [filedWorktree];
+    factoryData = { features: [], branchState: {} };
+    renderCockpit("proj", "feat/one");
+
+    await userEvent.click(screen.getByRole("button", { name: /install deps/i }));
+    expect(api.startServer).toHaveBeenCalledWith(
+      "proj",
+      expect.objectContaining({ cwd: "/wt/one", command: "npm install" }),
+    );
+  });
+
   it("renders chat + details when only factory.branchState carries the worktree path (no live worktree yet)", () => {
     branchesData = [{ ...bareBranch, name: "feat/two" }];
     worktreesData = [];
