@@ -52,7 +52,7 @@ function renderCockpit(project: string, branch: string) {
   render(
     <QueryClientProvider client={qc}>
       <AgentStreamProvider>
-        <Cockpit project={project} branch={branch} />
+        <Cockpit project={project} branch={branch} onBack={() => {}} />
       </AgentStreamProvider>
     </QueryClientProvider>,
   );
@@ -101,13 +101,14 @@ const workingStatus = {
 };
 
 describe("Cockpit", () => {
-  it("shows the project/branch breadcrumb", () => {
+  it("shows the branch name in the header (no project prefix)", () => {
     branchesData = [bareBranch];
     worktreesData = [];
     factoryData = { features: [], branchState: {} };
     renderCockpit("proj", "feat/bare");
-    expect(screen.getByText("proj")).toBeInTheDocument();
     expect(screen.getByText("feat/bare")).toBeInTheDocument();
+    expect(screen.queryByText("proj")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back to project/i })).toBeInTheDocument();
   });
 
   it("shows 'Start working' for a branch with no working copy, and calls agentStart + invalidates on click", async () => {
@@ -154,7 +155,7 @@ describe("Cockpit", () => {
         <QueryClientProvider client={qc}>
           <AgentStreamProvider>
             <Seed messages={seed} />
-            <Cockpit project="proj" branch="feat/one" />
+            <Cockpit project="proj" branch="feat/one" onBack={() => {}} />
           </AgentStreamProvider>
         </QueryClientProvider>,
       );

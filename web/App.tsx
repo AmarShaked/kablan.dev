@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderGit2, X, Download, ArrowUpCircle, ChevronLeft } from "lucide-react";
+import { FolderGit2, X, Download, ArrowUpCircle } from "lucide-react";
 import {
   api,
   wsUrl,
@@ -447,23 +447,13 @@ function AppContent() {
             </div>
           ) : view === "cockpit" && cockpitBranch ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
-                <button
-                  type="button"
-                  onClick={() => setView("project")}
-                  aria-label="Back to project"
-                  className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <ChevronLeft className="size-3.5" />
-                  Back
-                </button>
-              </div>
               <Cockpit
                 key={`${selectedProject.name}::${cockpitBranch}`}
                 project={selectedProject.name}
                 branch={cockpitBranch}
                 logs={logs}
                 onSeedLogs={seedLogs}
+                onBack={() => setView("project")}
               />
             </div>
           ) : (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronRight, Play } from "lucide-react";
+import { ChevronLeft, Play } from "lucide-react";
 import { api, type RunningServer, type LogLine } from "../api.ts";
 import { useBranches, useWorktrees, useFactory, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
@@ -22,14 +22,33 @@ import { isTauri } from "../lib/version.ts";
  * creates the working copy server-side if missing, then starts the agent — and invalidates the
  * factory + worktrees queries so this re-resolves as live on the next render.
  */
+function CockpitHeader({ branch, onBack }: { branch: string; onBack: () => void }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Back to project"
+        className="flex shrink-0 items-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" />
+      </button>
+      <span className="min-w-0 truncate font-mono font-medium text-foreground">{branch}</span>
+    </div>
+  );
+}
+
 export function Cockpit({
   project,
   branch,
   logs = {},
   onSeedLogs,
+  onBack,
 }: {
   project: string;
   branch: string;
+  /** Back to the project view — rendered as the header's chevron. */
+  onBack: () => void;
   /** Live dev-server output keyed by working-copy `cwd` (App owns the WS "log"-frame capture; see
    * `App.tsx`'s `logs` state). This cockpit renders only its own branch's cwd slice. */
   logs?: Record<string, LogLine[]>;
@@ -162,13 +181,7 @@ export function Cockpit({
   if (!hasWorktree) {
     return (
       <>
-        <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
-          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
-            <span className="truncate">{project}</span>
-            <ChevronRight className="size-3 shrink-0" />
-            <span className="truncate font-mono font-medium text-foreground">{branch}</span>
-          </nav>
-        </div>
+        <CockpitHeader branch={branch} onBack={onBack} />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
           <p>No working copy yet for this branch.</p>
           <Button disabled={starting} onClick={startWorking}>
@@ -181,13 +194,7 @@ export function Cockpit({
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
-        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
-          <span className="truncate">{project}</span>
-          <ChevronRight className="size-3 shrink-0" />
-          <span className="truncate font-mono font-medium text-foreground">{branch}</span>
-        </nav>
-      </div>
+      <CockpitHeader branch={branch} onBack={onBack} />
 
       <div className="flex min-h-0 flex-1">
         {/* Left pane: agent chat */}
