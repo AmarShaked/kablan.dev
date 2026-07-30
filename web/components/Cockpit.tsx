@@ -198,7 +198,7 @@ export function Cockpit({
 
       <div className="flex min-h-0 flex-1">
         {/* Left pane: agent chat */}
-        <div className="flex min-w-0 flex-1 flex-col border-r border-border">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border">
           <AgentChat
             project={project}
             agentKey={agentKey}

@@ -28,10 +28,36 @@ function isRunningStatus(status: AgentStatus | undefined): boolean {
   return status === "idle" || status === "working" || status === "awaitingInput";
 }
 
+/** A terse one-line label for a tool call — the tool name plus its most telling argument (a file
+ * basename, a truncated command, a search pattern) so the transcript reads like Claude Code's
+ * compact tool lines rather than dumping full inputs. */
+function toolSummary(name: string, input: unknown): string {
+  const inp = (input && typeof input === "object" ? input : {}) as Record<string, any>;
+  const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+  const clip = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  switch (name) {
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "NotebookEdit":
+      return inp.file_path ? `${name} ${base(String(inp.file_path))}` : name;
+    case "Bash":
+      return inp.command ? `Bash ${clip(String(inp.command).replace(/\s+/g, " "))}` : "Bash";
+    case "Grep":
+      return inp.pattern ? `Grep ${clip(String(inp.pattern), 40)}` : "Grep";
+    case "Glob":
+      return inp.pattern ? `Glob ${clip(String(inp.pattern), 40)}` : "Glob";
+    case "Task":
+      return inp.description ? `Task ${clip(String(inp.description), 50)}` : "Task";
+    default:
+      return name;
+  }
+}
+
 /** Maps one raw stream-json event to a transcript row: assistant text -> a bubble, assistant
- * tool_use -> a compact "✎ name" line, user tool-result -> a compact bubble, result -> a turn
- * divider/summary, system spawn_error/stderr -> an error line, and everything else (stream_event,
- * other system subtypes) is noise and skipped. */
+ * tool_use -> a compact one-line "⏺ Read file.ts" summary, user tool-result -> hidden (kept out
+ * of the transcript to cut noise, Claude-Code-style), result -> a turn divider/summary, system
+ * spawn_error/stderr -> an error line, everything else is noise and skipped. */
 function renderEvent(ev: unknown, idx: number): ReactNode {
   if (!ev || typeof ev !== "object") return null;
   const e = ev as Record<string, any>;
@@ -52,8 +78,12 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
           );
         } else if (block?.type === "tool_use") {
           parts.push(
-            <div key={`u-${i}`} className="self-start px-1 font-mono text-xs text-muted-foreground">
-              ✎ {block.name}
+            <div
+              key={`u-${i}`}
+              className="flex max-w-full items-center gap-1.5 self-start px-1 font-mono text-xs text-muted-foreground"
+            >
+              <span className="shrink-0 text-primary">⏺</span>
+              <span className="truncate">{toolSummary(block.name, block.input)}</span>
             </div>,
           );
         }
@@ -65,24 +95,10 @@ function renderEvent(ev: unknown, idx: number): ReactNode {
         </div>
       );
     }
-    case "user": {
-      const content = Array.isArray(e.message?.content) ? e.message.content : [];
-      const results = content.filter((b: any) => b?.type === "tool_result");
-      if (!results.length) return null;
-      return (
-        <div key={idx} className="flex flex-col gap-1">
-          {results.map((r: any, i: number) => (
-            <div
-              key={i}
-              className="max-w-[85%] self-start truncate rounded-lg bg-muted px-3 py-1.5 font-mono text-xs text-muted-foreground"
-              title={typeof r.content === "string" ? r.content : JSON.stringify(r.content)}
-            >
-              {typeof r.content === "string" ? r.content : JSON.stringify(r.content)}
-            </div>
-          ))}
-        </div>
-      );
-    }
+    case "user":
+      // Tool results are intentionally not rendered — full file contents / command output are the
+      // bulk of the noise, and the compact "⏺ tool" line above already says what ran.
+      return null;
     case "result": {
       const resultText =
         e.result === undefined || e.result === null
@@ -296,8 +312,8 @@ export function AgentChat({
   const chatEnabled = canChat;
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      <div ref={transcriptRef} className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div ref={transcriptRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
         {timeline.length === 0 && status !== "working" ? (
           <p className="text-sm text-muted-foreground">
             {!canChat
