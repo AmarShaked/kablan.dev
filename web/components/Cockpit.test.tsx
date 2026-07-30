@@ -121,7 +121,25 @@ describe("Cockpit", () => {
     expect(screen.queryByPlaceholderText(/message the agent/i)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /start working/i }));
-    expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/bare");
+    expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/bare", {
+      copyNodeModules: true,
+      copyEnv: true,
+    });
+  });
+
+  it("passes copy opt-outs to agentStart when the Start-working checkboxes are unchecked", async () => {
+    branchesData = [bareBranch];
+    worktreesData = [];
+    factoryData = { features: [], branchState: {} };
+    renderCockpit("proj", "feat/bare");
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /copy node_modules/i }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /copy \.env/i }));
+    await userEvent.click(screen.getByRole("button", { name: /start working/i }));
+    expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/bare", {
+      copyNodeModules: false,
+      copyEnv: false,
+    });
   });
 
   it("renders chat + details once a live worktree exists for the branch", async () => {

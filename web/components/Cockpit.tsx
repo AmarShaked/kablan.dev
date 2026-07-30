@@ -173,10 +173,15 @@ export function Cockpit({
   };
 
   const [starting, setStarting] = useState(false);
+  // Whether to seed the new worktree with the project's node_modules/.env (see server-side
+  // copy_session_extras). Default on — the common case is "just run it" — but opt-out-able for a
+  // branch whose deps differ from main (copy would be stale; use "Install deps" instead).
+  const [copyNodeModules, setCopyNodeModules] = useState(true);
+  const [copyEnv, setCopyEnv] = useState(true);
   const startWorking = async () => {
     setStarting(true);
     try {
-      await api.factory.agentStart(project, branch);
+      await api.factory.agentStart(project, branch, { copyNodeModules, copyEnv });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["factory", project] }),
         queryClient.invalidateQueries({ queryKey: qk.worktrees(project) }),
@@ -197,8 +202,30 @@ export function Cockpit({
     return (
       <>
         <CockpitHeader branch={branch} onBack={onBack} />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-sm text-muted-foreground">
           <p>No working copy yet for this branch.</p>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={copyNodeModules}
+                onChange={(e) => setCopyNodeModules(e.target.checked)}
+                disabled={starting}
+              />
+              Copy <span className="font-mono">node_modules</span> from main
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={copyEnv}
+                onChange={(e) => setCopyEnv(e.target.checked)}
+                disabled={starting}
+              />
+              Copy <span className="font-mono">.env</span> from main
+            </label>
+          </div>
           <Button disabled={starting} onClick={startWorking}>
             <Play className="size-3.5" /> {starting ? "Starting…" : "Start working"}
           </Button>

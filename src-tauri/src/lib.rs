@@ -395,7 +395,13 @@ fn branch_agent_key(name: &str, branch: &str) -> String {
 /// branch's working copy exists (reusing it if the branch is already
 /// checked out elsewhere), persists it, resumes from any stored session id,
 /// enforces the concurrent-agent limit, and starts the process.
-async fn start_branch_agent(st: &AppState, name: &str, branch: &str) -> Result<agents::AgentView, ApiError> {
+async fn start_branch_agent(
+    st: &AppState,
+    name: &str,
+    branch: &str,
+    copy_node_modules: bool,
+    copy_env: bool,
+) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
     let cfg = config::load();
     // TODO: running_count() is a soft cap — it's checked-then-acted-on without
@@ -420,10 +426,16 @@ async fn start_branch_agent(st: &AppState, name: &str, branch: &str) -> Result<a
         let session_id = factory::get_branch_state(&file, &name2, &branch2).and_then(|s| s.agent_session_id.clone());
         factory::save_file(&path, &file)?;
         // Seed the worktree with node_modules/.env from the project's main working copy so it can
-        // build/run immediately (a fresh worktree has neither — both gitignored). Idempotent (see
-        // copy_session_extras): a no-op when the worktree already has them (branch reused). For a
-        // divergent branch whose deps differ, the details card's "Install deps" is the fix-up.
-        copy_session_extras(std::path::Path::new(&dir), std::path::Path::new(&wt.path), true, true);
+        // build/run immediately (a fresh worktree has neither — both gitignored). Gated by the
+        // caller's opt-out flags (defaults on in the UI). Idempotent (see copy_session_extras): a
+        // no-op when the worktree already has them (branch reused). For a divergent branch whose
+        // deps differ, the details card's "Install deps" is the fix-up.
+        copy_session_extras(
+            std::path::Path::new(&dir),
+            std::path::Path::new(&wt.path),
+            copy_node_modules,
+            copy_env,
+        );
         Ok::<_, String>((wt.path, session_id))
     })
     .await
@@ -445,7 +457,12 @@ fn branch_from_body(b: &Value) -> Result<String, ApiError> {
 async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
     let b = parse_body(&body);
     let branch = branch_from_body(&b)?;
-    let view = start_branch_agent(&st, &name, &branch).await?;
+    // Seed a freshly-created worktree with the project's dev assets. Default on (the common case is
+    // "just run it"); the "Start working" UI passes false to opt out per-branch. No-op on an
+    // already-seeded worktree (copy_session_extras is idempotent).
+    let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(true);
+    let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 

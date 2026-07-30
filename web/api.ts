@@ -341,10 +341,14 @@ export const api = {
     // Branch-keyed agent calls — branch always travels in the body/query (never the path),
     // since branch names contain `/`. See `branchKey` (`../lib/agentKey.ts`) for the matching
     // WS/agent-stream key.
-    agentStart: (name: string, branch: string) =>
+    agentStart: (
+      name: string,
+      branch: string,
+      opts: { copyNodeModules?: boolean; copyEnv?: boolean } = {},
+    ) =>
       req<AgentView>(`/api/projects/${encodeURIComponent(name)}/factory/agent/start`, {
         method: "POST",
-        body: JSON.stringify({ branch }),
+        body: JSON.stringify({ branch, ...opts }),
       }),
     agentMessage: (name: string, branch: string, text: string) =>
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/message`, {
