@@ -459,6 +459,36 @@ fn generate_session_branch() -> String {
     format!("session/{:x}", (nanos & 0xffff_ffff) as u32)
 }
 
+/// Seed a fresh worktree with the project's gitignored dev assets (node_modules / .env) copied
+/// from its main working copy, so a new session can build/run right away. On macOS uses
+/// copy-on-write (`cp -cR`) so cloning a large node_modules is near-instant on APFS; elsewhere a
+/// plain recursive copy. Best-effort: a missing source (or a failed copy) is silently skipped —
+/// it must never fail session creation.
+fn copy_session_extras(src_root: &std::path::Path, worktree: &std::path::Path, node_modules: bool, env_file: bool) {
+    #[cfg(target_os = "macos")]
+    const DIR_FLAGS: &[&str] = &["-cR"];
+    #[cfg(not(target_os = "macos"))]
+    const DIR_FLAGS: &[&str] = &["-R"];
+
+    if node_modules {
+        let src = src_root.join("node_modules");
+        if src.is_dir() {
+            let _ = std::process::Command::new("cp")
+                .args(DIR_FLAGS)
+                .arg("--")
+                .arg(&src)
+                .arg(worktree.join("node_modules"))
+                .status();
+        }
+    }
+    if env_file {
+        let src = src_root.join(".env");
+        if src.is_file() {
+            let _ = std::fs::copy(&src, worktree.join(".env"));
+        }
+    }
+}
+
 /// `POST .../factory/session` — the "New session" flow: unlike
 /// `factory/agent/start` (which starts an agent on a branch the user already
 /// picked), this lets the user pick only a BASE branch to branch off.
@@ -477,6 +507,10 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    // Optionally seed the fresh worktree with the project's gitignored dev assets so it can build/
+    // run immediately (a new worktree has neither, since both are gitignored).
+    let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(false);
+    let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(false);
 
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let cfg = config::load();
@@ -500,6 +534,14 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
         let mut file = factory::load_file(&path);
         factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
         factory::save_file(&path, &file)?;
+        // Copy the requested dev assets from the project's main working copy BEFORE the agent
+        // starts, so node_modules/.env are already in place. Best-effort (missing sources skip).
+        copy_session_extras(
+            std::path::Path::new(&dir),
+            std::path::Path::new(&wt.path),
+            copy_node_modules,
+            copy_env,
+        );
         Ok::<_, String>(wt.path)
     })
     .await

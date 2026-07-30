@@ -129,6 +129,8 @@ function BaseBranchPicker({
 export function NewSessionDialog({ project, open, onOpenChange, branches, onStarted }: NewSessionDialogProps) {
   const [baseBranch, setBaseBranch] = useState(() => defaultBase(branches));
   const [message, setMessage] = useState("");
+  const [copyNodeModules, setCopyNodeModules] = useState(true);
+  const [copyEnv, setCopyEnv] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // Re-seed the default whenever the dialog opens (or the branch list changes while it's open) —
@@ -138,7 +140,11 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
     setBaseBranch((prev) => (branches.some((b) => b.name === prev) ? prev : defaultBase(branches)));
   }, [open, branches]);
 
-  const reset = () => setMessage("");
+  const reset = () => {
+    setMessage("");
+    setCopyNodeModules(true);
+    setCopyEnv(true);
+  };
 
   const handleOpenChange = (next: boolean) => {
     if (!next) reset();
@@ -149,7 +155,11 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
     if (!baseBranch || busy) return;
     setBusy(true);
     try {
-      const { branch } = await api.factory.startSession(project, baseBranch, message.trim() || undefined);
+      const { branch } = await api.factory.startSession(project, baseBranch, {
+        message: message.trim() || undefined,
+        copyNodeModules,
+        copyEnv,
+      });
       onStarted(branch);
       reset();
       handleOpenChange(false);
@@ -182,6 +192,26 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
             placeholder="What should the agent do first? (optional)"
             rows={4}
           />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={copyNodeModules}
+              onChange={(e) => setCopyNodeModules(e.target.checked)}
+              className="size-4 accent-primary"
+            />
+            Copy <span className="font-mono text-xs">node_modules</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={copyEnv}
+              onChange={(e) => setCopyEnv(e.target.checked)}
+              className="size-4 accent-primary"
+            />
+            Copy <span className="font-mono text-xs">.env</span>
+          </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>

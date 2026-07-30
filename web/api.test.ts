@@ -31,8 +31,10 @@ describe("factory types", () => {
     expectTypeOf<typeof api.factory.getAgent>().parameters.toEqualTypeOf<[string, string]>();
   });
 
-  it("api.factory.startSession takes a project + base branch + optional first message, returning the new branch", () => {
-    expectTypeOf<typeof api.factory.startSession>().parameters.toEqualTypeOf<[string, string, string?]>();
+  it("api.factory.startSession takes a project + base branch + options (message + copy flags), returning the new branch", () => {
+    expectTypeOf<typeof api.factory.startSession>().parameters.toEqualTypeOf<
+      [string, string, { message?: string; copyNodeModules?: boolean; copyEnv?: boolean }?]
+    >();
     expectTypeOf<ReturnType<typeof api.factory.startSession>>().toEqualTypeOf<Promise<{ branch: string }>>();
   });
 });

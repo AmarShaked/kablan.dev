@@ -89,7 +89,7 @@ describe("ProjectMenu", () => {
     expect(screen.getByText("main")).toBeInTheDocument();
   });
 
-  it("calls onNewSession when the '+' button beside the project switcher is clicked", async () => {
+  it("calls onNewSession when the bottom 'New session' button is clicked", async () => {
     const props = renderMenu();
     await userEvent.click(screen.getByLabelText("New session"));
     expect(props.onNewSession).toHaveBeenCalled();

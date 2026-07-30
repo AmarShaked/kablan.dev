@@ -64,7 +64,11 @@ describe("NewSessionDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
-      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", undefined),
+      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
+        message: undefined,
+        copyNodeModules: true,
+        copyEnv: true,
+      }),
     );
   });
 
@@ -75,7 +79,11 @@ describe("NewSessionDialog", () => {
     await userEvent.type(screen.getByLabelText(/first message/i), "  do the thing  ");
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
-    expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", "do the thing");
+    expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
+      message: "do the thing",
+      copyNodeModules: true,
+      copyEnv: true,
+    });
     await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalledWith("session/abc123"));
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -87,7 +95,27 @@ describe("NewSessionDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
-      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", undefined),
+      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
+        message: undefined,
+        copyNodeModules: true,
+        copyEnv: true,
+      }),
+    );
+  });
+
+  it("passes copyNodeModules=false when that checkbox is unchecked (copy defaults on)", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/nm" });
+    renderDialog();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /node_modules/i }));
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    await vi.waitFor(() =>
+      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
+        message: undefined,
+        copyNodeModules: false,
+        copyEnv: true,
+      }),
     );
   });
 
