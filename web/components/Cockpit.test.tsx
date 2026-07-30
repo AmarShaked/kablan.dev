@@ -172,10 +172,15 @@ describe("Cockpit", () => {
       expect(screen.getByText("Working")).toBeInTheDocument();
     });
 
-    it("calls factory.agentStart with (project, branch) when Start is clicked", async () => {
-      renderWithSeed([]);
-      await userEvent.click(screen.getByRole("button", { name: /^start$/i }));
-      expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one");
+    it("auto-starts (factory.agentStart) then sends when the composer is used on a not-running agent", async () => {
+      renderWithSeed([]); // no agent running yet
+      const box = screen.getByPlaceholderText(/message the agent/i);
+      await userEvent.type(box, "kick off");
+      await userEvent.click(screen.getByRole("button", { name: /send/i }));
+      await vi.waitFor(() => {
+        expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one");
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off");
+      });
     });
 
     it("calls factory.agentStop with (project, branch) when Stop is clicked", async () => {

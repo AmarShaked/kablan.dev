@@ -99,22 +99,15 @@ describe("AgentChat", () => {
     expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
   });
 
-  it("calls onStart when Start is clicked", async () => {
-    const { onStart } = renderChat([]);
-    await userEvent.click(screen.getByRole("button", { name: /^start$/i }));
-    expect(onStart).toHaveBeenCalled();
-  });
-
   it("calls onStop when Stop is clicked", async () => {
     const { onStop } = renderChat([workingStatus]);
     await userEvent.click(screen.getByRole("button", { name: /^stop$/i }));
     expect(onStop).toHaveBeenCalled();
   });
 
-  it("disables the composer and Start button when canChat is false", () => {
+  it("disables the composer when canChat is false", () => {
     renderChat([], { canChat: false });
     expect(screen.getByPlaceholderText(/start a session to chat/i)).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
   });
 
   it("shows parsed choices as chips and sends the clicked chip via onMessage", async () => {

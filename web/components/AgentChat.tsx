@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Play, Square, Send, ChevronDown, ChevronRight } from "lucide-react";
+import { Square, Send, ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentStatus, AgentView } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
@@ -252,16 +252,6 @@ export function AgentChat({
     if (el) el.scrollTop = el.scrollHeight;
   }, [timeline.length, status]);
 
-  const start = async () => {
-    setBusy(true);
-    try {
-      await onStart();
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
   const stop = async () => {
     setBusy(true);
     try {
@@ -307,25 +297,6 @@ export function AgentChat({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-        <AgentDot status={status} />
-        <span className="text-sm text-muted-foreground">
-          {title ? `${title} · ` : ""}
-          {status ? STATUS_LABEL[status] ?? "Idle" : "Not started"}
-        </span>
-        <div className="ml-auto flex gap-2">
-          {running ? (
-            <Button size="sm" variant="destructive" disabled={busy || !canChat} onClick={stop}>
-              <Square className="size-3.5" /> Stop
-            </Button>
-          ) : (
-            <Button size="sm" disabled={busy || !canChat} onClick={start}>
-              <Play className="size-3.5" /> Start
-            </Button>
-          )}
-        </div>
-      </div>
-
       <div ref={transcriptRef} className="flex flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
         {timeline.length === 0 && status !== "working" ? (
           <p className="text-sm text-muted-foreground">
@@ -378,23 +349,43 @@ export function AgentChat({
         </div>
       )}
 
-      <div className="flex items-end gap-2 border-t border-border p-3">
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={!chatEnabled}
-          placeholder={!canChat ? "Start a session to chat" : "Message the agent…"}
-          className="min-h-[40px] flex-1 resize-none text-sm focus-visible:ring-0"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
-        <Button size="icon-lg" disabled={!chatEnabled || busy || !text.trim()} onClick={send} aria-label="Send">
-          <Send className="size-3.5" />
-        </Button>
+      <div className="border-t border-border p-3">
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={!chatEnabled}
+            placeholder={!canChat ? "Start a session to chat" : "Message the agent…"}
+            className="min-h-[40px] flex-1 resize-none text-sm focus-visible:ring-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+          <Button size="icon-lg" disabled={!chatEnabled || busy || !text.trim()} onClick={send} aria-label="Send">
+            <Send className="size-3.5" />
+          </Button>
+        </div>
+        {/* Agent status indicator under the input (Claude-Code-style footer); Stop when running. */}
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          {running && (
+            <button
+              type="button"
+              onClick={stop}
+              disabled={busy}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+            >
+              <Square className="size-3" /> Stop
+            </button>
+          )}
+          <span className="ml-auto flex items-center gap-1.5">
+            <AgentDot status={status} />
+            {title ? `${title} · ` : ""}
+            {status ? STATUS_LABEL[status] ?? "Idle" : "Not started"}
+          </span>
+        </div>
       </div>
     </div>
   );
