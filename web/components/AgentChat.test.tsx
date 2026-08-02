@@ -163,6 +163,40 @@ describe("AgentChat", () => {
     expect(screen.queryByAltText("pasted attachment")).not.toBeInTheDocument();
   });
 
+  const approvalFrame = {
+    type: "agent-approval",
+    key: "proj::wt:/wt/one",
+    approval: { id: "appr-1", toolName: "Bash", input: { command: "rm -rf build" }, createdAt: 1 },
+  };
+
+  it("renders an Approve/Deny card for a pending approval and resolves on click", async () => {
+    const onResolveApproval = vi.fn().mockResolvedValue(undefined);
+    renderChat([workingStatus, approvalFrame], { onResolveApproval });
+    // Tool name is shown prominently; both buttons render.
+    expect(await screen.findByText("Bash")).toBeInTheDocument();
+    const approve = screen.getByRole("button", { name: /^approve$/i });
+    const deny = screen.getByRole("button", { name: /^deny$/i });
+    expect(approve).toBeInTheDocument();
+    expect(deny).toBeInTheDocument();
+
+    await userEvent.click(approve);
+    expect(onResolveApproval).toHaveBeenCalledWith("appr-1", "allow");
+  });
+
+  it("Deny resolves the approval with a deny decision", async () => {
+    const onResolveApproval = vi.fn().mockResolvedValue(undefined);
+    renderChat([workingStatus, approvalFrame], { onResolveApproval });
+    await userEvent.click(await screen.findByRole("button", { name: /^deny$/i }));
+    expect(onResolveApproval).toHaveBeenCalledWith("appr-1", "deny");
+  });
+
+  it("Permission dropdown includes a Supervised option", () => {
+    renderChat([workingStatus]);
+    expect(
+      screen.getByRole("option", { name: "Supervised" }),
+    ).toBeInTheDocument();
+  });
+
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
     const onBackfill = vi.fn().mockResolvedValue({
       agent: { key: "proj::wt:/wt/one", status: "awaitingInput", sessionId: "s1", pid: 1, startedAt: 0, exitCode: null },

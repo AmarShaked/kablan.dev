@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { Square, Send, ChevronDown, ChevronRight, X } from "lucide-react";
-import type { AgentStatus, AgentView } from "../api.ts";
+import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
  * "Bypass" (bypassPermissions) lets tool calls auto-proceed instead of stalling on prompts. */
 const PERMISSION_OPTIONS: { value: string; label: string }[] = [
   { value: "acceptEdits", label: "Accept edits" },
+  { value: "supervised", label: "Supervised" },
   { value: "plan", label: "Plan" },
   { value: "bypassPermissions", label: "Bypass" },
 ];
@@ -322,6 +323,63 @@ function ThinkingRow() {
   );
 }
 
+/** An inline Approve/Deny gate for a supervised per-tool approval. Shows the tool name prominently,
+ * a compact one-line summary (via `toolSummary`), and a truncated raw-input preview. The two buttons
+ * disable themselves while a decision is in flight; the store removes the card once the
+ * `agent-approval-resolved` frame arrives (source of truth), so we don't remove it locally. */
+function ApprovalCard({
+  approval,
+  onResolve,
+}: {
+  approval: AgentApproval;
+  onResolve: (approvalId: string, decision: "allow" | "deny", reason?: string) => Promise<unknown> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const summary = toolSummary(approval.toolName, approval.input);
+  const raw = (() => {
+    try {
+      return JSON.stringify(approval.input, null, 2);
+    } catch {
+      return String(approval.input);
+    }
+  })();
+  const preview = raw.length > 400 ? `${raw.slice(0, 400)}…` : raw;
+
+  const decide = async (decision: "allow" | "deny") => {
+    setBusy(true);
+    try {
+      await onResolve(approval.id, decision);
+    } catch (err) {
+      toast.error(String(err));
+      setBusy(false); // keep the card actionable on failure; success removal comes from the store
+    }
+  };
+
+  return (
+    <div className="flex w-full max-w-[85%] flex-col gap-2 self-start rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+          !
+        </span>
+        <span className="text-sm font-semibold text-foreground">{approval.toolName}</span>
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">wants to run</span>
+      </div>
+      <div className="font-mono text-xs text-muted-foreground">{summary}</div>
+      <pre className="max-h-32 overflow-auto rounded bg-muted/60 px-2 py-1.5 font-mono text-[11px] leading-snug whitespace-pre-wrap text-muted-foreground">
+        {preview}
+      </pre>
+      <div className="flex items-center gap-2">
+        <Button size="sm" disabled={busy} onClick={() => decide("allow")}>
+          Approve
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => decide("deny")}>
+          Deny
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The cockpit's chat pane — drives a single branch's agent. The parent (`Cockpit`) owns the
  * actual API calls (so this component doesn't need to know about `api.factory.*` at all) and
@@ -345,6 +403,7 @@ export function AgentChat({
   onMessage,
   onStop,
   onBackfill,
+  onResolveApproval,
 }: {
   project: string;
   agentKey: string;
@@ -356,9 +415,12 @@ export function AgentChat({
   onStart: (opts?: { model?: string; permissionMode?: string }) => Promise<unknown>;
   onMessage: (text: string, images?: { mediaType: string; data: string }[]) => Promise<unknown>;
   onStop: () => Promise<unknown>;
-  onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[] }>;
+  onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[]; approvals?: AgentApproval[] }>;
+  /** Resolves a supervised per-tool approval (Approve/Deny card). Optional so tests and non-
+   * supervised callers can omit it — the cards only appear when there are pending approvals. */
+  onResolveApproval?: (approvalId: string, decision: "allow" | "deny", reason?: string) => Promise<unknown>;
 }) {
-  const { agentFor, setActiveKey } = useAgentStream();
+  const { agentFor, setActiveKey, seedApprovals } = useAgentStream();
   const live = agentFor(agentKey);
 
   // Viewing this pane clears its unread and suppresses further increments while it's active;
@@ -419,6 +481,8 @@ export function AgentChat({
         if (cancelled) return;
         setBackfill(res.events ?? []);
         setBackfillStatus(res.agent?.status);
+        // Re-populate outstanding gates that arrived before this cockpit was listening.
+        if (res.approvals && res.approvals.length > 0) seedApprovals(agentKey, res.approvals);
       })
       .catch(() => {});
     return () => {
@@ -449,7 +513,7 @@ export function AgentChat({
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [timeline.length, status]);
+  }, [timeline.length, status, live.approvals.length]);
 
   const stop = async () => {
     setBusy(true);
@@ -543,6 +607,10 @@ export function AgentChat({
         ) : (
           renderPrims(flattenTimeline(timeline))
         )}
+        {onResolveApproval &&
+          live.approvals.map((appr) => (
+            <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
+          ))}
         {status === "working" && <ThinkingRow />}
       </div>
 

@@ -33,6 +33,31 @@ describe("useAgentStream", () => {
     expect(result.current.agentFor("p::t1").events).toHaveLength(2);
   });
 
+  it("tracks pending approvals per key: adds on agent-approval, removes on resolved", () => {
+    const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
+    const appr = { id: "appr-1", toolName: "Bash", input: { command: "ls" }, createdAt: 1 };
+    act(() => result.current.ingest({ type: "agent-approval", key: "p::t1", approval: appr }));
+    expect(result.current.agentFor("p::t1").approvals).toEqual([appr]);
+    // Duplicate id → no double-add.
+    act(() => result.current.ingest({ type: "agent-approval", key: "p::t1", approval: appr }));
+    expect(result.current.agentFor("p::t1").approvals).toHaveLength(1);
+    // Resolution removes it.
+    act(() =>
+      result.current.ingest({ type: "agent-approval-resolved", key: "p::t1", approvalId: "appr-1", decision: "allow" }),
+    );
+    expect(result.current.agentFor("p::t1").approvals).toHaveLength(0);
+  });
+
+  it("seedApprovals merges backfilled approvals without duplicating ids", () => {
+    const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
+    const a1 = { id: "appr-1", toolName: "Bash", input: {}, createdAt: 1 };
+    const a2 = { id: "appr-2", toolName: "Edit", input: {}, createdAt: 2 };
+    act(() => result.current.ingest({ type: "agent-approval", key: "p::t1", approval: a1 }));
+    act(() => result.current.seedApprovals("p::t1", [a1, a2]));
+    const ids = result.current.agentFor("p::t1").approvals.map((a) => a.id);
+    expect(ids).toEqual(["appr-1", "appr-2"]);
+  });
+
   it("tracks unread, respects active key, and sums per project", () => {
     const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
     const ev = (key: string) => ({ type: "agent-event", key, event: { type: "assistant" } });

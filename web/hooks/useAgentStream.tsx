@@ -1,11 +1,16 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
-import type { AgentView, AgentStatus } from "../api.ts";
+import type { AgentView, AgentStatus, AgentApproval } from "../api.ts";
 
 const MAX = 5000;
-type AgentSlice = { status?: AgentStatus; view?: AgentView; events: unknown[] };
+type AgentSlice = { status?: AgentStatus; view?: AgentView; events: unknown[]; approvals: AgentApproval[] };
 type Ctx = {
   ingest: (msg: any) => void;
-  agentFor: (key: string) => { status: AgentStatus | undefined; view: AgentView | undefined; events: unknown[] };
+  agentFor: (
+    key: string,
+  ) => { status: AgentStatus | undefined; view: AgentView | undefined; events: unknown[]; approvals: AgentApproval[] };
+  /** Merges backfilled outstanding approvals (from `getAgent`) into a key's pending set, deduping
+   * by id — so a reopened/remounted cockpit re-shows gates that arrived before it was listening. */
+  seedApprovals: (key: string, approvals: AgentApproval[]) => void;
   unread: (key: string) => number;
   unreadForProject: (project: string) => number;
   markRead: (key: string) => void;
@@ -40,12 +45,30 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
   const activeKeyRef = useRef<string | null>(null);
 
   const ingest = useCallback((msg: any) => {
-    if (!msg || (msg.type !== "agent-status" && msg.type !== "agent-event")) return;
+    if (
+      !msg ||
+      (msg.type !== "agent-status" &&
+        msg.type !== "agent-event" &&
+        msg.type !== "agent-approval" &&
+        msg.type !== "agent-approval-resolved")
+    )
+      return;
     const key = msg.key as string;
     if (msg.type === "agent-event" && isNoiseEvent(msg.event)) return;
-    const slice = map.current.get(key) ?? { events: [] };
-    if (msg.type === "agent-status") { slice.view = msg.agent; slice.status = msg.agent?.status; }
-    else {
+    const slice = map.current.get(key) ?? { events: [], approvals: [] };
+    if (msg.type === "agent-status") {
+      slice.view = msg.agent;
+      slice.status = msg.agent?.status;
+    } else if (msg.type === "agent-approval") {
+      // A new pending gate for this key — append unless we already hold its id.
+      const appr = msg.approval as AgentApproval | undefined;
+      if (appr && !slice.approvals.some((a) => a.id === appr.id)) {
+        slice.approvals = [...slice.approvals, appr];
+      }
+    } else if (msg.type === "agent-approval-resolved") {
+      // The backend decided (or a client resolved it) — drop it from the pending set.
+      slice.approvals = slice.approvals.filter((a) => a.id !== msg.approvalId);
+    } else {
       slice.events = [...slice.events, msg.event];
       if (slice.events.length > MAX) slice.events.splice(0, slice.events.length - MAX);
       // Increment unread only if this is a non-noise agent-event and not the active key
@@ -59,7 +82,23 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
 
   const agentFor = useCallback((key: string) => {
     const s = map.current.get(key);
-    return { status: s?.status, view: s?.view, events: s?.events ?? [] };
+    return { status: s?.status, view: s?.view, events: s?.events ?? [], approvals: s?.approvals ?? [] };
+  }, []);
+
+  const seedApprovals = useCallback((key: string, approvals: AgentApproval[]) => {
+    if (!approvals || approvals.length === 0) return;
+    const slice = map.current.get(key) ?? { events: [], approvals: [] };
+    const seen = new Set(slice.approvals.map((a) => a.id));
+    const merged = [...slice.approvals];
+    for (const a of approvals) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        merged.push(a);
+      }
+    }
+    slice.approvals = merged;
+    map.current.set(key, slice);
+    force((n) => n + 1);
   }, []);
 
   const snapshotStatuses = useCallback((): Record<string, AgentStatus> => {
@@ -99,7 +138,7 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
 
   return (
     <AgentStreamCtx.Provider
-      value={{ ingest, agentFor, unread, unreadForProject, markRead, setActiveKey, version, snapshotStatuses }}
+      value={{ ingest, agentFor, seedApprovals, unread, unreadForProject, markRead, setActiveKey, version, snapshotStatuses }}
     >
       {children}
     </AgentStreamCtx.Provider>

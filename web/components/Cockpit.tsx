@@ -225,6 +225,8 @@ export function Cockpit({
     api.factory.agentMessage(project, branch, text, images);
   const stopAgent = () => api.factory.agentStop(project, branch);
   const backfillAgent = () => api.factory.getAgent(project, branch);
+  const resolveApproval = (approvalId: string, decision: "allow" | "deny", reason?: string) =>
+    api.factory.resolveApproval(project, branch, approvalId, decision, reason);
 
   // Which right-pane view the header tabs show. "logs" is dev-server-only, so it's Tauri-gated
   // alongside the rest of the server UI (the browser build has no processes).
@@ -295,6 +297,7 @@ export function Cockpit({
               onMessage={messageAgent}
               onStop={stopAgent}
               onBackfill={backfillAgent}
+              onResolveApproval={resolveApproval}
             />
           </div>
         </ResizablePanel>
