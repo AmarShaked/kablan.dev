@@ -93,12 +93,12 @@ export function LogsTab({
         </div>
         <div className="flex shrink-0 gap-2">
           {running ? (
-            <Button variant="destructive" size="sm" onClick={stop} disabled={busy}>
+            <Button variant="destructive" size="xs" onClick={stop} disabled={busy}>
               <Square className="size-3.5" /> Stop
             </Button>
           ) : (
             server && (
-              <Button variant="outline" size="sm" onClick={restart} disabled={busy}>
+              <Button variant="outline" size="xs" onClick={restart} disabled={busy}>
                 <RotateCw className="size-3.5" /> Restart
               </Button>
             )
@@ -133,7 +133,7 @@ export function LogsTab({
         </div>
         {!autoScroll && (
           <Button
-            size="sm"
+            size="xs"
             variant="secondary"
             className="absolute bottom-3 right-3 shadow-lg"
             onClick={() => {

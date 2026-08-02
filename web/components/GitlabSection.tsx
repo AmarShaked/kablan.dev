@@ -165,7 +165,7 @@ export function GitlabSection({
 
         {branch && !mr && !showForm && (
           <Button
-            size="sm"
+            size="xs"
             variant="outline"
             className="self-start"
             onClick={() => {
@@ -202,10 +202,10 @@ export function GitlabSection({
               </label>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" disabled={creating || !title.trim() || !target.trim()} onClick={submit}>
+              <Button size="xs" disabled={creating || !title.trim() || !target.trim()} onClick={submit}>
                 {creating ? "Creating…" : "Create MR"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
+              <Button size="xs" variant="ghost" onClick={() => setShowForm(false)}>
                 Cancel
               </Button>
             </div>

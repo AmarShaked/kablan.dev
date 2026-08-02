@@ -281,7 +281,7 @@ export function WorktreeDetails({
             trigger={
               <button
                 disabled={!hasWorktree}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ExternalLink className="size-3.5" /> Open
               </button>
@@ -296,11 +296,11 @@ export function WorktreeDetails({
           <>
             <div className="flex flex-wrap gap-2">
               {installing ? (
-                <Button size="sm" variant="destructive" disabled={busy} onClick={onStopServer}>
+                <Button size="xs" variant="destructive" disabled={busy} onClick={onStopServer}>
                   <Square className="size-3.5" /> Stop install
                 </Button>
               ) : running ? (
-                <Button size="sm" variant="destructive" disabled={busy} onClick={onStopServer}>
+                <Button size="xs" variant="destructive" disabled={busy} onClick={onStopServer}>
                   <Square className="size-3.5" /> Stop server
                 </Button>
               ) : otherRunningServers.length > 0 ? (
@@ -308,7 +308,7 @@ export function WorktreeDetails({
                 // instead REPLACE a dev server running on another branch (which holds the port).
                 <div className="flex">
                   <Button
-                    size="sm"
+                    size="xs"
                     disabled={busy}
                     onClick={onStartServer}
                     className="rounded-r-none"
@@ -327,7 +327,7 @@ export function WorktreeDetails({
                         disabled={busy}
                         aria-label="Replace a dev server running on another branch"
                         className={cn(
-                          buttonVariants({ size: "sm", variant: "outline" }),
+                          buttonVariants({ size: "xs", variant: "outline" }),
                           "rounded-l-none border-l-0 px-2",
                         )}
                       >
@@ -347,17 +347,17 @@ export function WorktreeDetails({
                   </DropdownMenu>
                 </div>
               ) : (
-                <Button size="sm" disabled={busy} onClick={onStartServer}>
+                <Button size="xs" disabled={busy} onClick={onStartServer}>
                   <Play className="size-3.5" /> Start server
                 </Button>
               )}
               {onInstall && !running && (
-                <Button size="sm" variant="outline" disabled={busy} onClick={onInstall}>
+                <Button size="xs" variant="outline" disabled={busy} onClick={onInstall}>
                   <Package className="size-3.5" /> Install deps
                 </Button>
               )}
               {onRefreshServer && (
-                <Button size="sm" variant="outline" disabled={busy} onClick={onRefreshServer}>
+                <Button size="xs" variant="outline" disabled={busy} onClick={onRefreshServer}>
                   <RefreshCw className="size-3.5" /> Refresh
                 </Button>
               )}

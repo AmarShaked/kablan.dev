@@ -159,8 +159,8 @@ export function EnvTab({
           />
 
           <div className="flex items-center gap-3">
-            <Button onClick={save} disabled={!dirty || saving}>
-              <Save className="size-4" />
+            <Button size="xs" onClick={save} disabled={!dirty || saving}>
+              <Save className="size-3.5" />
               {saving ? "Saving…" : `Save ${file.name}`}
             </Button>
             {dirty ? (
