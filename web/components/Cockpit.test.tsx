@@ -100,6 +100,14 @@ const workingStatus = {
   agent: { key: "proj::branch:feat/one", status: "working", sessionId: null, pid: 123, startedAt: 0, exitCode: null },
 };
 
+// A running agent that is idle (not mid-turn): the composer sends immediately here, whereas
+// submitting while "working" now parks the message in the client-side queue.
+const idleStatus = {
+  type: "agent-status",
+  key: "proj::branch:feat/one",
+  agent: { key: "proj::branch:feat/one", status: "idle", sessionId: null, pid: 123, startedAt: 0, exitCode: null },
+};
+
 describe("Cockpit", () => {
   it("shows the branch name in the header (no project prefix)", () => {
     branchesData = [bareBranch];
@@ -228,7 +236,7 @@ describe("Cockpit", () => {
     });
 
     it("sends the composer text via factory.agentMessage(project, branch, text)", async () => {
-      renderWithSeed([workingStatus]);
+      renderWithSeed([idleStatus]);
       const box = screen.getByPlaceholderText(/message the agent/i);
       fireEvent.change(box, { target: { value: "do the thing" } }); // see auto-starts test re: fireEvent
       await userEvent.click(screen.getByRole("button", { name: /send/i }));

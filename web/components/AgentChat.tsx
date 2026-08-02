@@ -974,6 +974,13 @@ export function AgentChat({
   // Images pasted/dropped into the composer, staged until the next send (removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const attachSeq = useRef(0);
+  // Client-side message queue: messages the user submits WHILE the agent is actively working
+  // (`status === "working"`) are parked here instead of sent, so they can keep typing the next
+  // one. When the agent next goes idle, the HEAD is auto-dequeued and sent (one per idle
+  // transition — see the effect below). Each item captures the composer text + staged attachments
+  // at enqueue time; the thinking keyword is applied at SEND time (consistent with `sendText`).
+  const [queue, setQueue] = useState<{ id: string; text: string; images: Attachment[] }[]>([]);
+  const queueSeq = useRef(0);
   const transcriptRef = useRef<HTMLDivElement>(null);
   // Drag-and-drop overlay state. `dragDepth` counts enter/leave over nested children so the
   // "Drop images to attach" overlay doesn't flicker as the pointer crosses child elements.
@@ -1138,19 +1145,18 @@ export function AgentChat({
       setBusy(false);
     }
   };
-  // Send path for the free-text composer: append the user's own "You" bubble to the timeline
-  // immediately (independent of whatever the agent does next), then forward it to the agent.
-  // Returns whether the send succeeded.
-  const sendText = async (value: string): Promise<boolean> => {
+  // Core send: append the user's own "You" bubble to the timeline immediately (independent of
+  // whatever the agent does next), then forward the message (with the thinking keyword applied)
+  // to the agent, auto-starting it first if it isn't running. Returns whether it succeeded. Used
+  // by both the composer path (`sendText`) and the queue auto-drain effect.
+  const sendMessage = async (value: string, imgs: Attachment[]): Promise<boolean> => {
     const t = value.trim();
-    const imgs = attachments;
     if (!t && imgs.length === 0) return false;
     // The bubble shows exactly what the user typed; the thinking keyword is appended only to what
     // the agent receives (so a "Think hard" setting doesn't visibly clutter the transcript).
     const keyword = THINKING_KEYWORD[thinking];
     const outgoing = keyword ? `${t}\n\n${keyword}` : t;
     setTimeline((prev) => [...prev, { kind: "you", text: t, images: imgs.map((a) => a.url) }]);
-    setAttachments([]);
     setBusy(true);
     try {
       // Auto-start the agent on the first message so the user can just type — no explicit Start
@@ -1170,9 +1176,52 @@ export function AgentChat({
       setBusy(false);
     }
   };
+  // Send path for the free-text composer: pulls the currently-staged attachments, clears them,
+  // and delivers the message. Returns whether the send succeeded.
+  const sendText = async (value: string): Promise<boolean> => {
+    const imgs = attachments;
+    if (!value.trim() && imgs.length === 0) return false;
+    setAttachments([]);
+    return sendMessage(value, imgs);
+  };
+  // Enqueue the current composer contents as a pending message, then clear the composer +
+  // attachments so the user can keep typing the next one.
+  const enqueue = () => {
+    const t = text.trim();
+    if (!t && attachments.length === 0) return;
+    const id = `q-${(queueSeq.current += 1)}`;
+    const imgs = attachments;
+    setQueue((prev) => [...prev, { id, text: t, images: imgs }]);
+    setText("");
+    setAttachments([]);
+  };
+  const removeQueued = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
+  // Composer submit (Send button / Enter). While the agent is actively working, park the message
+  // in the queue instead of sending — it drains on the next idle (see the effect below). Otherwise
+  // send immediately (auto-starting the agent if needed), matching the prior behavior.
   const send = async () => {
+    if (status === "working") {
+      enqueue();
+      return;
+    }
     if (await sendText(text)) setText("");
   };
+
+  // Auto-drain the queue: when the agent transitions out of "working" into a non-working ready
+  // state, dequeue the HEAD and send it. Exactly one per idle transition — the next drains when
+  // that turn finishes and the agent goes idle again. Guarded by `busy` so a send already in
+  // flight doesn't get doubled; if we skip (busy), the item stays queued for a later transition.
+  const prevStatusRef = useRef<AgentStatus | undefined>(status);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev !== "working" || status === "working") return;
+    if (busy || queue.length === 0) return;
+    const head = queue[0];
+    setQueue((q) => q.slice(1));
+    void sendMessage(head.text, head.images);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, busy, queue]);
 
   // Changing the model restarts a running agent with the new `--model` (resuming its session so
   // context is kept); for a not-yet-started agent it just records the choice for the next start.
@@ -1261,6 +1310,36 @@ export function AgentChat({
       </div>
 
       <div className="border-t border-border p-3">
+        {queue.length > 0 && (
+          <div className="mb-2 flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Queued ({queue.length})
+            </span>
+            <div className="flex flex-col gap-1">
+              {queue.map((q) => (
+                <div
+                  key={q.id}
+                  className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                >
+                  <span className="min-w-0 flex-1 truncate">{q.text || "(image only)"}</span>
+                  {q.images.length > 0 && (
+                    <span className="shrink-0 rounded bg-accent px-1 py-0.5 text-[10px] tabular-nums">
+                      {q.images.length} img
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeQueued(q.id)}
+                    aria-label="Cancel queued message"
+                    className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {attachments.map((a) => (

@@ -17,6 +17,17 @@ function Seed({ messages }: { messages: unknown[] }) {
   return null;
 }
 
+/** Renders a button that ingests the given frames when clicked — lets a test push a later status
+ * frame (e.g. flip the agent from working → idle) after the initial mount-time seed. */
+function LaterIngest({ messages, label }: { messages: unknown[]; label: string }) {
+  const { ingest } = useAgentStream();
+  return (
+    <button type="button" onClick={() => messages.forEach(ingest)}>
+      {label}
+    </button>
+  );
+}
+
 function renderChat(seed: unknown[] = [], overrides: Partial<Parameters<typeof AgentChat>[0]> = {}) {
   const onStart = vi.fn().mockResolvedValue(undefined);
   const onMessage = vi.fn().mockResolvedValue(undefined);
@@ -55,7 +66,8 @@ describe("AgentChat", () => {
   beforeEach(() => resetExpandStore());
 
   it("sends the composer text via onMessage and optimistically shows a You bubble", async () => {
-    const { onMessage } = renderChat([workingStatus]);
+    // idle = running but not mid-turn → send immediately (submitting while "working" queues, tested below).
+    const { onMessage } = renderChat([idleStatus]);
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "do the thing");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -77,7 +89,7 @@ describe("AgentChat", () => {
   });
 
   it("does not re-start an already-running agent when sending", async () => {
-    const { onStart, onMessage } = renderChat([workingStatus]); // already running
+    const { onStart, onMessage } = renderChat([idleStatus]); // already running (idle, not mid-turn)
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "another");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -100,7 +112,7 @@ describe("AgentChat", () => {
   });
 
   it("appends the thinking keyword to the sent message but keeps the visible bubble clean", async () => {
-    const { onMessage } = renderChat([workingStatus]);
+    const { onMessage } = renderChat([idleStatus]);
     await userEvent.selectOptions(screen.getByLabelText("Thinking"), "hard");
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "do it");
@@ -147,7 +159,7 @@ describe("AgentChat", () => {
   }
 
   it("attaches a pasted image and sends it as an image block alongside the text", async () => {
-    const { onMessage } = renderChat([workingStatus]);
+    const { onMessage } = renderChat([idleStatus]);
     const box = screen.getByPlaceholderText(/message the agent/i);
     pasteImage(box);
     expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
@@ -167,7 +179,7 @@ describe("AgentChat", () => {
   }
 
   it("stages a dropped image as an attachment and sends it as an image block", async () => {
-    const { onMessage } = renderChat([workingStatus]);
+    const { onMessage } = renderChat([idleStatus]);
     const box = screen.getByPlaceholderText(/message the agent/i);
     dropImage(box);
     expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
@@ -443,6 +455,74 @@ describe("AgentChat", () => {
     unmount();
     renderChat(seed);
     expect(screen.getByText("Bash ls")).toBeInTheDocument();
+  });
+
+  // ---- Message queueing: submit-while-working parks the message; it drains on next idle ----
+
+  /** Like renderChat, but also mounts a "go idle" button that ingests an idle status frame — so a
+   * test can flip the agent working → idle after enqueuing and observe the queue drain. */
+  function renderQueueChat() {
+    const onStart = vi.fn().mockResolvedValue(undefined);
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    const onStop = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentStreamProvider>
+        <Seed messages={[workingStatus]} />
+        <LaterIngest messages={[idleStatus]} label="go idle" />
+        <AgentChat
+          project="proj"
+          agentKey="proj::wt:/wt/one"
+          onStart={onStart}
+          onMessage={onMessage}
+          onStop={onStop}
+        />
+      </AgentStreamProvider>,
+    );
+    return { onStart, onMessage, onStop };
+  }
+
+  it("queues a message submitted while working instead of sending it, then drains it on idle", async () => {
+    const { onMessage } = renderQueueChat();
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "queued work");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    // Not sent — parked as a chip; the composer is cleared for the next message.
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(/queued \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText("queued work")).toBeInTheDocument();
+    expect(box).toHaveValue("");
+
+    // Flip the agent to idle → the head drains and is delivered.
+    await userEvent.click(screen.getByRole("button", { name: /go idle/i }));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("queued work", []));
+    // Chip is gone once drained.
+    expect(screen.queryByText(/queued \(1\)/i)).not.toBeInTheDocument();
+  });
+
+  it("cancels a queued message so it is never sent", async () => {
+    const { onMessage } = renderQueueChat();
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "never mind");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(screen.getByText("never mind")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel queued message/i }));
+    expect(screen.queryByText("never mind")).not.toBeInTheDocument();
+
+    // Even after going idle, the cancelled message is never delivered.
+    await userEvent.click(screen.getByRole("button", { name: /go idle/i }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends immediately (does not queue) when the agent is not working", async () => {
+    const { onMessage } = renderChat([idleStatus]); // idle, not working
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "go now");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("go now", []));
+    expect(screen.queryByText(/queued \(/i)).not.toBeInTheDocument();
   });
 
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
