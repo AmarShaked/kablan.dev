@@ -467,6 +467,7 @@ function AppContent() {
                 key={`${selectedProject.name}::${cockpitBranch}`}
                 project={selectedProject.name}
                 branch={cockpitBranch}
+                servers={servers}
                 logs={logs}
                 onSeedLogs={seedLogs}
                 onBack={() => setView("project")}

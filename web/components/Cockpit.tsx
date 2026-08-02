@@ -67,12 +67,18 @@ function CockpitHeader({
 export function Cockpit({
   project,
   branch,
+  servers = {},
   logs = {},
   onSeedLogs,
   onBack,
 }: {
   project: string;
   branch: string;
+  /** Live dev-server map keyed by working-copy `cwd` (owned by `App`, kept live via the WS
+   * "hello"/status frames). Used to detect a dev server already running on a DIFFERENT branch of
+   * this same project — only one branch can hold the project's port at a time, so this cockpit
+   * offers to "replace" it (stop there, start here). */
+  servers?: Record<string, RunningServer>;
   /** Back to the project view — rendered as the header's chevron. */
   onBack: () => void;
   /** Live dev-server output keyed by working-copy `cwd` (App owns the WS "log"-frame capture; see
@@ -194,6 +200,37 @@ export function Cockpit({
     try {
       const s = await api.startServer(project, { cwd, branch: entry.branchName, command: "npm install" });
       setServer(s);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setServerBusy(false);
+    }
+  };
+
+  // Dev servers running on OTHER working copies of this same project (a different branch/worktree,
+  // i.e. a different cwd). Since a project's dev server holds one port, only one branch can run it
+  // at a time — so we surface these to offer a "replace" (stop there, start here) action.
+  const otherRunningServers = useMemo(
+    () =>
+      Object.values(servers).filter(
+        (s) =>
+          s.projectName === project &&
+          s.cwd !== cwd &&
+          (s.status === "running" || s.status === "starting"),
+      ),
+    [servers, project, cwd],
+  );
+
+  // Replace: stop the dev server on another branch (`otherCwd`), then start one here — mirrors the
+  // plain `startServer` (same cwd/branch), with the same busy/error handling, then refreshes.
+  const replaceServer = async (otherCwd: string) => {
+    if (!cwd) return;
+    setServerBusy(true);
+    try {
+      await api.stopServer(project, otherCwd);
+      const s = await api.startServer(project, { cwd, branch: entry.branchName });
+      setServer(s);
+      await refreshServer();
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -347,6 +384,8 @@ export function Cockpit({
               onStopServer={stopServer}
               onInstall={installDeps}
               onRefreshServer={refreshServer}
+              otherRunningServers={otherRunningServers}
+              onReplaceServer={replaceServer}
               linearWorkspace={linearWorkspace}
               logs={cwd ? logs[cwd] ?? [] : []}
               view={rightTab}

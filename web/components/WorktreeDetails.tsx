@@ -10,6 +10,8 @@ import {
   Cloud,
   ExternalLink,
   Package,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { api, type RunningServer, type ProjectSummary, type LogLine } from "../api.ts";
 import { useGitlabOverview, useDiff } from "../queries.ts";
@@ -23,11 +25,19 @@ import { LogsTab } from "./LogsTab.tsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { OpenTarget } from "../api.ts";
 
 /** A plain label/value row — moved here from the retired `ItemDrawer.tsx` (its only remaining
  * caller). */
+const basename = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-1.5 text-sm">
@@ -95,6 +105,8 @@ export function WorktreeDetails({
   onStopServer,
   onInstall,
   onRefreshServer,
+  otherRunningServers = [],
+  onReplaceServer,
   linearWorkspace = "",
   logs = [],
   view = "details",
@@ -109,6 +121,11 @@ export function WorktreeDetails({
   /** Run `npm install` in this worktree (fixes a stale/missing node_modules). */
   onInstall?: () => void;
   onRefreshServer?: () => void;
+  /** Dev servers running on OTHER working copies of this same project (different branch/cwd). A
+   * project's dev server holds one port, so only one branch can run it — these enable "replace". */
+  otherRunningServers?: RunningServer[];
+  /** Stop the dev server on `otherCwd` (another branch) and start one here instead. */
+  onReplaceServer?: (otherCwd: string) => void;
   linearWorkspace?: string;
   logs?: LogLine[];
   /** Which right-pane view to render — driven by the cockpit header's tabs. Details is the
@@ -286,6 +303,42 @@ export function WorktreeDetails({
                 <Button size="sm" variant="destructive" disabled={busy} onClick={onStopServer}>
                   <Square className="size-3.5" /> Stop server
                 </Button>
+              ) : otherRunningServers.length > 0 ? (
+                // Split button: primary "Start server" (unchanged) + a caret opening a menu to
+                // instead REPLACE a dev server running on another branch (which holds the port).
+                <div className="flex">
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={onStartServer}
+                    className="rounded-r-none"
+                  >
+                    <Play className="size-3.5" /> Start server
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        aria-label="Replace a dev server running on another branch"
+                        className="rounded-l-none border-l-0 px-2"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {otherRunningServers.map((s) => {
+                        const label = s.branch ?? basename(s.cwd);
+                        return (
+                          <DropdownMenuItem key={s.cwd} onSelect={() => onReplaceServer?.(s.cwd)}>
+                            Replace: stop {label} &amp; start here
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ) : (
                 <Button size="sm" disabled={busy} onClick={onStartServer}>
                   <Play className="size-3.5" /> Start server
@@ -305,6 +358,13 @@ export function WorktreeDetails({
             {installing && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <RefreshCw className="size-3 animate-spin" /> Installing dependencies… (output in Logs)
+              </p>
+            )}
+            {!running && otherRunningServers.length > 0 && (
+              <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="size-3 shrink-0" /> A dev server is running on{" "}
+                <span className="font-mono">{otherRunningServers[0].branch ?? basename(otherRunningServers[0].cwd)}</span>{" "}
+                (same project/port).
               </p>
             )}
             {url && (

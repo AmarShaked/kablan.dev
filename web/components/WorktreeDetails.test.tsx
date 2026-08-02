@@ -186,6 +186,34 @@ describe("WorktreeDetails", () => {
     expect(onInstall).toHaveBeenCalled();
   });
 
+  it("shows a Replace dropdown (and calls onReplaceServer) when a server runs on another branch", async () => {
+    const other: RunningServer = {
+      projectName: "proj",
+      cwd: "/wt/two",
+      command: "npm run dev",
+      branch: "feat/two",
+      pid: 2,
+      status: "running",
+      startedAt: 0,
+      exitCode: null,
+    };
+    const onReplaceServer = vi.fn();
+    renderDetails({ otherRunningServers: [other], onReplaceServer });
+    // The plain Start button is still there; a caret opens the replace menu.
+    expect(screen.getByRole("button", { name: /start server/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /replace a dev server running on another branch/i }));
+    await userEvent.click(await screen.findByText(/Replace: stop feat\/two/i));
+    expect(onReplaceServer).toHaveBeenCalledWith("/wt/two");
+  });
+
+  it("renders only the plain Start button (no replace caret) when no other servers run", () => {
+    renderDetails({ otherRunningServers: [] });
+    expect(screen.getByRole("button", { name: /start server/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /replace a dev server running on another branch/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows an install-in-progress state (and hides Start/Install) while an install command runs", () => {
     const server: RunningServer = {
       projectName: "proj",
