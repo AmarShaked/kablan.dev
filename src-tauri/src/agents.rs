@@ -603,6 +603,37 @@ impl Agents {
         ok
     }
 
+    /// Rekey a live agent record from `old_key` to `new_key` — used after the
+    /// factory reconciles a session whose worktree was checked out onto a new
+    /// branch (see `factory::reconcile_project_worktrees`), so the real branch's
+    /// cockpit finds the still-running process instead of a dead row.
+    ///
+    /// Moves the record only when one exists under `old_key` and NONE exists under
+    /// `new_key` — a record already living on `new_key` is a distinct live agent we
+    /// must never clobber (returns false). On a successful move it broadcasts a
+    /// status frame for `new_key` (so its cockpit picks up pid/status/session) and
+    /// one for `old_key` (whose record is now gone, so `get` returns None and the
+    /// frame carries a null agent — stale UIs drop the old row). Returns whether it
+    /// moved. Broadcasts happen off the registry lock (matches `emit_status`).
+    pub fn rekey(&self, old_key: &str, new_key: &str) -> bool {
+        if old_key == new_key {
+            return false;
+        }
+        {
+            let mut reg = self.registry.lock().unwrap();
+            if reg.contains_key(new_key) {
+                return false; // never clobber a live agent already on new_key
+            }
+            let Some(mut rec) = reg.remove(old_key) else { return false };
+            rec.view.key = new_key.to_string();
+            reg.insert(new_key.to_string(), rec);
+        }
+        self.emit_status(new_key);
+        // old_key's record is gone now → get() is None → this frame's agent is null.
+        self.emit_status(old_key);
+        true
+    }
+
     pub fn stop(&self, key: &str) -> bool {
         let pid = { let reg = self.registry.lock().unwrap();
             match reg.get(key) { Some(r) if r.view.pid.is_some() => r.view.pid.unwrap(), _ => return false } };
@@ -877,6 +908,33 @@ mod tests {
     /// means the first agent's trailing output is dropped once the second
     /// `start()` swaps in a fresh generation, so the second agent is free
     /// to capture its own session id and reach `AwaitingInput` normally.
+    #[test]
+    fn rekey_moves_record_and_guards_against_clobber() {
+        let agents = Agents::new();
+        let cwd = std::env::temp_dir().to_string_lossy().to_string();
+
+        // A live agent under the old (session) key.
+        agents.start("p::branch:session/x", &cwd, mock_argv(), None);
+        assert!(wait_until(|| agents.get("p::branch:session/x").is_some()));
+
+        // Rekey onto a fresh key: the record moves and the old key is emptied.
+        assert!(agents.rekey("p::branch:session/x", "p::branch:feat/real"));
+        assert!(agents.get("p::branch:session/x").is_none(), "old key removed");
+        let moved = agents.get("p::branch:feat/real").expect("record now under new key");
+        assert_eq!(moved.key, "p::branch:feat/real", "view.key updated");
+
+        // Unknown old key → no move.
+        assert!(!agents.rekey("p::branch:missing", "p::branch:whatever"));
+        // Same key → no move.
+        assert!(!agents.rekey("p::branch:feat/real", "p::branch:feat/real"));
+
+        // Clobber guard: a second live agent must not be overwritten by a rekey onto its key.
+        agents.start("p::branch:other", &cwd, mock_argv(), None);
+        assert!(wait_until(|| agents.get("p::branch:other").is_some()));
+        assert!(!agents.rekey("p::branch:other", "p::branch:feat/real"), "occupied target not clobbered");
+        assert!(agents.get("p::branch:other").is_some(), "source left intact when target occupied");
+    }
+
     #[test]
     fn restart_on_same_key_lets_new_agent_capture_session() {
         let agents = Agents::new();

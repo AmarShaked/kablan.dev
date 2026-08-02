@@ -282,11 +282,31 @@ fn factory_store_path() -> std::path::PathBuf {
     config::config_dir().join("factory.json")
 }
 
-async fn get_factory(Path(name): Path<String>) -> ApiResult {
-    projects::project_path_from_name(&name).map_err(bad)?;
+async fn get_factory(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult {
+    let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let key = name.clone();
+    let agents = st.agents.clone();
     let out = blocking(move || {
-        let file = factory::load_file(&factory_store_path());
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        // Reconcile-on-read (BY WORKTREE PATH): heal any session whose worktree was
+        // checked out onto a new branch (e.g. the agent ran `git checkout -b …`), so
+        // the returned factory — and the live agent registry — are already correct and
+        // one session can't show up as two branches. See
+        // `factory::reconcile_project_worktrees`.
+        let mut path_to_branch: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        for w in git::list_worktrees(&dir) {
+            if let Some(branch) = w.branch {
+                path_to_branch.insert(w.path, branch);
+            }
+        }
+        let rekeys = factory::reconcile_project_worktrees(&mut file, &key, &path_to_branch);
+        if !rekeys.is_empty() {
+            for (old_key, new_key) in &rekeys {
+                agents.rekey(old_key, new_key);
+            }
+            let _ = factory::save_file(&path, &file);
+        }
         let pf = file.projects.get(&key).cloned().unwrap_or_default();
         json!({ "features": pf.features, "branchState": pf.branch_state })
     })

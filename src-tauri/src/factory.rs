@@ -381,6 +381,114 @@ pub fn reorder_features(file: &mut FactoryFile, project: &str, order: Vec<String
     Ok(())
 }
 
+/// Reconcile one project's factory state BY WORKTREE PATH, healing sessions whose
+/// worktree was checked out onto a new branch after the session was created.
+///
+/// The "New session" flow creates a `session/<hex>` branch + worktree and files it
+/// into the factory keyed by that branch. When the agent later runs
+/// `git checkout -b <real-branch>` in that same worktree, the worktree at path `P`
+/// is now on branch `M` (`<real-branch>`), but the factory still records the old
+/// key `N` (`session/<hex>`) → `P`. Both `N` (via its stale worktree_path) and `M`
+/// (via the live worktree) then resolve to the same working copy, so the sidebar
+/// lights up two rows for one running agent.
+///
+/// For each `branch_state[N]` whose `worktree_path = P` is Some, look up the branch
+/// `M` the worktree at `P` is currently on (via `path_to_branch`). If `M` is
+/// non-empty and differs from `N`, MIGRATE `N` → `M`:
+/// - `branch_state`: move `N`'s state onto `M` (insert if `M` has none; otherwise
+///   prefer `M`'s fields but fill any missing worktree_path/agent_session_id/title
+///   from `N`), then remove `N` (it becomes a plain branch with no factory state —
+///   no git refs are touched).
+/// - `features`: replace `N` with `M` in every feature's `branches` (dedupe if `M`
+///   is already present; order otherwise preserved).
+///
+/// Skips (rather than clobbers) a migration when `M` already owns a DISTINCT
+/// worktree — i.e. `M` has its own `branch_state` whose `worktree_path` is Some and
+/// points at a path other than `P` — since that's a genuinely separate session.
+///
+/// Pure: makes no git calls (the caller supplies `path_to_branch` from
+/// `git::list_worktrees`) and performs no agent rekeys itself. Returns the list of
+/// `(old_key, new_key)` FULL agent keys (`{project}::branch:{branch}`) the caller
+/// must rekey on the live `Agents` registry — empty when nothing changed (a
+/// non-empty result is exactly the "something changed, persist me" signal).
+pub fn reconcile_project_worktrees(
+    file: &mut FactoryFile,
+    project: &str,
+    path_to_branch: &BTreeMap<String, String>,
+) -> Vec<(String, String)> {
+    let mut rekeys = Vec::new();
+    let Some(pf) = file.projects.get_mut(project) else { return rekeys };
+
+    // Plan the migrations from an immutable scan first, so we never mutate
+    // `branch_state` while iterating it. Each planned entry is (N, M).
+    let mut migrations: Vec<(String, String)> = Vec::new();
+    for (n, st) in pf.branch_state.iter() {
+        let Some(p) = st.worktree_path.as_deref() else { continue };
+        let Some(m) = path_to_branch.get(p) else { continue };
+        // Only migrate onto a real, different branch.
+        if m.is_empty() || m == n {
+            continue;
+        }
+        // Don't clobber a genuinely separate session: if M already has its own
+        // branch_state pointing at a DIFFERENT worktree path, leave both alone.
+        if let Some(m_state) = pf.branch_state.get(m) {
+            if let Some(m_path) = m_state.worktree_path.as_deref() {
+                if m_path != p {
+                    continue;
+                }
+            }
+        }
+        migrations.push((n.clone(), m.clone()));
+    }
+
+    for (n, m) in migrations {
+        // 1. branch_state: move N onto M (merge into M if it already exists).
+        if let Some(n_state) = pf.branch_state.remove(&n) {
+            match pf.branch_state.get_mut(&m) {
+                Some(m_state) => {
+                    // Prefer M's own fields; fill only the gaps from N.
+                    if m_state.worktree_path.is_none() {
+                        m_state.worktree_path = n_state.worktree_path;
+                    }
+                    if m_state.agent_session_id.is_none() {
+                        m_state.agent_session_id = n_state.agent_session_id;
+                    }
+                    if m_state.title.is_none() {
+                        m_state.title = n_state.title;
+                    }
+                }
+                None => {
+                    pf.branch_state.insert(m.clone(), n_state);
+                }
+            }
+        }
+
+        // 2. features: replace N with M in every feature's branches, deduping M.
+        for feat in pf.features.iter_mut() {
+            if !feat.branches.iter().any(|b| b == &n) {
+                continue;
+            }
+            let mut rebuilt: Vec<String> = Vec::with_capacity(feat.branches.len());
+            for b in feat.branches.drain(..) {
+                let name = if b == n { m.clone() } else { b };
+                if name == m && rebuilt.iter().any(|x| x == &m) {
+                    continue; // dedupe M
+                }
+                rebuilt.push(name);
+            }
+            feat.branches = rebuilt;
+        }
+
+        // 3. Tell the caller to rekey the live agent from N's key onto M's.
+        rekeys.push((
+            format!("{project}::branch:{n}"),
+            format!("{project}::branch:{m}"),
+        ));
+    }
+
+    rekeys
+}
+
 /// Build the global inbox: branches whose agent needs attention (AwaitingInput
 /// or Failed). Deterministic order: projects (BTreeMap order), branches
 /// (BTreeMap order — `branch_state` is a BTreeMap too).
@@ -832,6 +940,129 @@ mod tests {
         reorder_features(&mut file, "p", vec![f3.id.clone(), f1.id.clone()]).unwrap();
         let ids: Vec<String> = file.projects["p"].features.iter().map(|f| f.id.clone()).collect();
         assert_eq!(ids, vec![f3.id, f1.id, f2.id]);
+    }
+
+    /// Helper: a `path -> branch` map from `(path, branch)` pairs.
+    fn path_map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs.iter().map(|(p, b)| (p.to_string(), b.to_string())).collect()
+    }
+
+    #[test]
+    fn reconcile_migrates_session_onto_checked_out_branch() {
+        // A `session/x` session filed in a feature, whose worktree at /p is now on
+        // `feat/real` (the agent ran `git checkout -b feat/real`). Reconcile migrates
+        // the state + feature membership onto `feat/real` and returns the agent rekey.
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        file_branch(&mut file, "acme/app", &feat.id, "session/x").unwrap();
+        {
+            let pf = file.projects.get_mut("acme/app").unwrap();
+            pf.branch_state.insert(
+                "session/x".to_string(),
+                BranchState {
+                    worktree_path: Some("/p".to_string()),
+                    agent_session_id: Some("s".to_string()),
+                    created_at: 42,
+                    title: Some("t".to_string()),
+                },
+            );
+        }
+
+        let rekeys = reconcile_project_worktrees(&mut file, "acme/app", &path_map(&[("/p", "feat/real")]));
+
+        // branch_state moved to feat/real (carrying worktree/session/title) and session/x is gone.
+        let pf = &file.projects["acme/app"];
+        assert!(!pf.branch_state.contains_key("session/x"), "old key removed");
+        let st = &pf.branch_state["feat/real"];
+        assert_eq!(st.worktree_path.as_deref(), Some("/p"));
+        assert_eq!(st.agent_session_id.as_deref(), Some("s"));
+        assert_eq!(st.title.as_deref(), Some("t"));
+        assert_eq!(st.created_at, 42);
+
+        // Feature membership swapped session/x -> feat/real.
+        assert_eq!(pf.features[0].branches, vec!["feat/real".to_string()]);
+
+        // Rekey list is the full old/new agent keys.
+        assert_eq!(
+            rekeys,
+            vec![("acme/app::branch:session/x".to_string(), "acme/app::branch:feat/real".to_string())]
+        );
+    }
+
+    #[test]
+    fn reconcile_noop_when_worktree_still_on_same_branch() {
+        // The worktree at /p is still on session/x — nothing to migrate.
+        let mut file = FactoryFile::default();
+        set_branch_worktree(&mut file, "acme/app", "session/x", "/p");
+
+        let rekeys = reconcile_project_worktrees(&mut file, "acme/app", &path_map(&[("/p", "session/x")]));
+
+        assert!(rekeys.is_empty());
+        assert!(file.projects["acme/app"].branch_state.contains_key("session/x"));
+    }
+
+    #[test]
+    fn reconcile_noop_when_no_worktree_at_path() {
+        // No worktree currently lives at the recorded path (nothing in the map) —
+        // the session's state is left untouched.
+        let mut file = FactoryFile::default();
+        set_branch_worktree(&mut file, "acme/app", "session/x", "/p");
+
+        let rekeys = reconcile_project_worktrees(&mut file, "acme/app", &path_map(&[("/other", "feat/real")]));
+
+        assert!(rekeys.is_empty());
+        assert!(file.projects["acme/app"].branch_state.contains_key("session/x"));
+        assert!(!file.projects["acme/app"].branch_state.contains_key("feat/real"));
+    }
+
+    #[test]
+    fn reconcile_merges_into_existing_target_and_dedupes_feature() {
+        // feat/real already has partial state (its own session id, no worktree path)
+        // AND is already filed alongside session/x in the feature. Migration merges
+        // (prefers M's session id, fills M's missing worktree_path from N) and the
+        // feature ends with a single, deduped feat/real entry.
+        let mut file = FactoryFile::default();
+        let feat = create_feature(&mut file, "acme/app", "Audit").unwrap();
+        file_branch(&mut file, "acme/app", &feat.id, "session/x").unwrap();
+        file_branch(&mut file, "acme/app", &feat.id, "feat/real").unwrap();
+        {
+            let pf = file.projects.get_mut("acme/app").unwrap();
+            pf.branch_state.insert(
+                "session/x".to_string(),
+                BranchState { worktree_path: Some("/p".to_string()), agent_session_id: Some("old".to_string()), created_at: 1, title: Some("old-title".to_string()) },
+            );
+            pf.branch_state.insert(
+                "feat/real".to_string(),
+                BranchState { worktree_path: None, agent_session_id: Some("new".to_string()), created_at: 2, title: None },
+            );
+        }
+
+        let rekeys = reconcile_project_worktrees(&mut file, "acme/app", &path_map(&[("/p", "feat/real")]));
+
+        let pf = &file.projects["acme/app"];
+        assert!(!pf.branch_state.contains_key("session/x"));
+        let st = &pf.branch_state["feat/real"];
+        assert_eq!(st.agent_session_id.as_deref(), Some("new"), "prefers M's session id");
+        assert_eq!(st.worktree_path.as_deref(), Some("/p"), "fills M's missing worktree_path from N");
+        assert_eq!(st.title.as_deref(), Some("old-title"), "fills M's missing title from N");
+        assert_eq!(pf.features[0].branches, vec!["feat/real".to_string()], "session/x replaced, feat/real deduped");
+        assert_eq!(rekeys.len(), 1);
+    }
+
+    #[test]
+    fn reconcile_skips_when_target_owns_a_distinct_worktree() {
+        // feat/real already has its own DISTINCT worktree (/other). Migrating session/x
+        // onto it would corrupt that separate session, so reconcile leaves both alone.
+        let mut file = FactoryFile::default();
+        set_branch_worktree(&mut file, "acme/app", "session/x", "/p");
+        set_branch_worktree(&mut file, "acme/app", "feat/real", "/other");
+
+        let rekeys = reconcile_project_worktrees(&mut file, "acme/app", &path_map(&[("/p", "feat/real")]));
+
+        assert!(rekeys.is_empty());
+        let pf = &file.projects["acme/app"];
+        assert_eq!(pf.branch_state["session/x"].worktree_path.as_deref(), Some("/p"));
+        assert_eq!(pf.branch_state["feat/real"].worktree_path.as_deref(), Some("/other"));
     }
 
     #[test]
