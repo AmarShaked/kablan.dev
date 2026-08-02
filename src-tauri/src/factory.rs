@@ -269,6 +269,17 @@ pub fn set_branch_session(file: &mut FactoryFile, project: &str, branch: &str, s
     entry.agent_session_id = Some(sid.to_string());
 }
 
+/// Forget the recorded Claude session id for `branch` under `project`, so the next agent start
+/// launches a brand-new conversation instead of `--resume`-ing the old one. Used by the chat
+/// RESET action. A no-op when there's no state entry (nothing to forget).
+pub fn clear_branch_session(file: &mut FactoryFile, project: &str, branch: &str) {
+    if let Some(pf) = file.projects.get_mut(project) {
+        if let Some(entry) = pf.branch_state.get_mut(branch) {
+            entry.agent_session_id = None;
+        }
+    }
+}
+
 /// Upsert the friendly display title for `branch` under `project`. An empty or
 /// whitespace-only `title` clears it back to `None` (the sidebar then falls back
 /// to the raw branch name). Creates the branch's state entry if this is its first

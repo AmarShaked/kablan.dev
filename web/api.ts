@@ -393,6 +393,51 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ branch }),
       }),
+    // Fork the branch's Claude session to re-run the conversation from an earlier point — the chat
+    // EDIT / RETRY actions. `messageUuid` is the fork point (the final assistant-message uuid of the
+    // turn BEFORE the one being replaced); omit it to edit the very first turn (starts fresh). The
+    // agent is stopped, relaunched resuming AT that uuid, and `text` (+ `images`) delivered as the
+    // new turn. `model`/`permissionMode` apply the per-session launch overrides, matching agentStart.
+    agentFork: (
+      name: string,
+      branch: string,
+      opts: {
+        messageUuid?: string | null;
+        text: string;
+        images?: { mediaType: string; data: string }[];
+        model?: string;
+        permissionMode?: string;
+      },
+    ) =>
+      req<{ ok: boolean; sent: boolean; agent: AgentView | null }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/agent/fork`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            branch,
+            messageUuid: opts.messageUuid ?? undefined,
+            text: opts.text,
+            ...(opts.images && opts.images.length ? { images: opts.images } : {}),
+            ...(opts.model !== undefined ? { model: opts.model } : {}),
+            ...(opts.permissionMode !== undefined ? { permissionMode: opts.permissionMode } : {}),
+          }),
+        },
+      ),
+    // Reset the branch's chat: forget the session and start a brand-new conversation (no message
+    // sent). The transcript below is abandoned. Distinct from agentFork by the `reset` flag.
+    agentReset: (name: string, branch: string, opts: { model?: string; permissionMode?: string } = {}) =>
+      req<{ ok: boolean; sent: boolean; agent: AgentView | null }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/agent/fork`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            branch,
+            reset: true,
+            ...(opts.model !== undefined ? { model: opts.model } : {}),
+            ...(opts.permissionMode !== undefined ? { permissionMode: opts.permissionMode } : {}),
+          }),
+        },
+      ),
     // Resolve a supervised per-tool approval. `decision` is "allow" or "deny"; `reason` is an
     // optional note surfaced to the agent on deny.
     resolveApproval: (

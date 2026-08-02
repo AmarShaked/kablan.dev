@@ -588,6 +588,108 @@ describe("AgentChat", () => {
     await waitFor(() => expect(onMessage).toHaveBeenCalledWith("just a message", []));
   });
 
+  // ---- Message EDIT / RETRY / RESET (fork the Claude session) ----
+
+  // An assistant event carrying a uuid — the fork point derived for the NEXT user turn.
+  const assistantWithUuid = (text: string, uuid: string) =>
+    ev({ type: "assistant", uuid, message: { role: "assistant", content: [{ type: "text", text }] } });
+
+  it("editing a You bubble forks at the preceding assistant uuid with the new text", async () => {
+    const onEditMessage = vi.fn().mockResolvedValue(undefined);
+    // Seed a completed turn (assistant with uuid A1), then send a user turn so a "You" bubble exists.
+    renderChat([idleStatus, assistantWithUuid("first answer", "A1")], { onEditMessage });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "original question");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(screen.getByText("original question")).toBeInTheDocument();
+
+    // Open the inline editor (pencil), change the text, and Save & run.
+    await userEvent.click(screen.getByRole("button", { name: /edit message/i }));
+    const editor = screen.getByRole("textbox", { name: /edit message/i });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "edited question");
+    await userEvent.click(screen.getByRole("button", { name: /save & run/i }));
+
+    // Forks at A1 (the assistant uuid that preceded this user turn) with the edited text.
+    expect(onEditMessage).toHaveBeenCalledWith("A1", "edited question", [], expect.any(Object));
+  });
+
+  it("editing drops the tail after the edited message but keeps prior context", async () => {
+    // Full render with a LaterIngest button so we can push the reply to the edited turn AFTER it's
+    // sent (it lands below the You bubble, i.e. the stale tail a fork discards).
+    const onEditMessage = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentStreamProvider>
+        <Seed messages={[idleStatus, assistantWithUuid("first answer", "A1")]} />
+        <LaterIngest messages={[assistantWithUuid("second answer", "A2")]} label="reply" />
+        <AgentChat project="proj" agentKey="proj::wt:/wt/one" onStart={vi.fn().mockResolvedValue(undefined)} onMessage={vi.fn().mockResolvedValue(undefined)} onStop={vi.fn().mockResolvedValue(undefined)} onEditMessage={onEditMessage} />
+      </AgentStreamProvider>,
+    );
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "original question");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    // The reply to the sent turn arrives below the You bubble.
+    await userEvent.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(screen.getByText("second answer")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /edit message/i }));
+    const editor = screen.getByRole("textbox", { name: /edit message/i });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "edited question");
+    await userEvent.click(screen.getByRole("button", { name: /save & run/i }));
+
+    // Edited text shows; the stale tail (its reply + old bubble) is dropped; prior-turn context stays.
+    expect(screen.getByText("edited question")).toBeInTheDocument();
+    expect(screen.queryByText("original question")).not.toBeInTheDocument();
+    expect(screen.queryByText("second answer")).not.toBeInTheDocument();
+    expect(screen.getByText("first answer")).toBeInTheDocument();
+  });
+
+  it("editing the first turn (no preceding assistant) forks fresh with a null uuid", async () => {
+    const onEditMessage = vi.fn().mockResolvedValue(undefined);
+    renderChat([idleStatus], { onEditMessage }); // no assistant seeded → no fork point
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "first ever");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await userEvent.click(screen.getByRole("button", { name: /edit message/i }));
+    const editor = screen.getByRole("textbox", { name: /edit message/i });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "reworded");
+    await userEvent.click(screen.getByRole("button", { name: /save & run/i }));
+
+    expect(onEditMessage).toHaveBeenCalledWith(null, "reworded", [], expect.any(Object));
+  });
+
+  it("Retry re-runs the last user turn unchanged at its fork point", async () => {
+    const onEditMessage = vi.fn().mockResolvedValue(undefined);
+    renderChat([idleStatus, assistantWithUuid("answer", "A1")], { onEditMessage });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "please retry me");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await userEvent.click(screen.getByRole("button", { name: /^retry$/i }));
+    expect(onEditMessage).toHaveBeenCalledWith("A1", "please retry me", [], expect.any(Object));
+  });
+
+  it("Reset starts a fresh session and clears the transcript", async () => {
+    const onReset = vi.fn().mockResolvedValue(undefined);
+    renderChat([idleStatus, assistantWithUuid("some answer", "A1")], { onReset });
+    expect(screen.getByText("some answer")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^reset$/i }));
+    expect(onReset).toHaveBeenCalled();
+    expect(screen.queryByText("some answer")).not.toBeInTheDocument();
+  });
+
+  it("shows no edit pencil when onEditMessage is not provided", async () => {
+    renderChat([idleStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "hello");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(screen.queryByRole("button", { name: /edit message/i })).not.toBeInTheDocument();
+  });
+
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
     const onBackfill = vi.fn().mockResolvedValue({
       agent: { key: "proj::wt:/wt/one", status: "awaitingInput", sessionId: "s1", pid: 1, startedAt: 0, exitCode: null },

@@ -96,6 +96,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/session", post(post_new_session))
         .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
         .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
+        .route("/api/projects/:name/factory/agent/fork", post(post_branch_agent_fork))
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
         .route("/api/projects/:name/factory/agent/approval", post(post_branch_agent_approval))
         .route("/api/projects/:name/factory/agent", get(get_branch_agent))
@@ -445,6 +446,12 @@ async fn start_branch_agent(
     copy_env: bool,
     model: Option<String>,
     permission_mode: Option<String>,
+    // Fork a resumed session AT this message uuid (`--resume-session-at`) — the chat EDIT / RETRY
+    // path. Only honored when `fresh` is false and a session id is on record.
+    resume_at: Option<String>,
+    // Start a brand-new conversation: ignore (and forget) any persisted session id, so nothing is
+    // resumed. The chat RESET path. Overrides `resume_at`.
+    fresh: bool,
 ) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
     let mut cfg = config::load();
@@ -484,7 +491,14 @@ async fn start_branch_agent(
         let path = factory_store_path();
         let mut file = factory::load_file(&path);
         factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
-        let session_id = factory::get_branch_state(&file, &name2, &branch2).and_then(|s| s.agent_session_id.clone());
+        // RESET forgets the persisted session so a brand-new conversation starts (and its fresh
+        // session id is captured on the next poll). Otherwise resume the stored session id.
+        let session_id = if fresh {
+            factory::clear_branch_session(&mut file, &name2, &branch2);
+            None
+        } else {
+            factory::get_branch_state(&file, &name2, &branch2).and_then(|s| s.agent_session_id.clone())
+        };
         factory::save_file(&path, &file)?;
         // Seed the worktree with node_modules/.env from the project's main working copy so it can
         // build/run immediately (a fresh worktree has neither — both gitignored). Gated by the
@@ -503,7 +517,9 @@ async fn start_branch_agent(
     .map_err(bad)?;
 
     let key = branch_agent_key(name, branch);
-    let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref());
+    // `resume_at` is only meaningful when resuming a session (see build_agent_argv); when `fresh`
+    // cleared the session id it's dropped automatically since `session_id` is None.
+    let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref(), resume_at.as_deref());
     let view = st.agents.start(&key, &worktree_path, argv, session_id.as_deref());
     Ok(view)
 }
@@ -525,8 +541,55 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
     let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
     let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
-    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode).await?;
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode, None, false).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
+}
+
+/// `POST .../factory/agent/fork` — the chat EDIT / RETRY / RESET actions. Restarts the branch's
+/// agent resuming its Claude session and (optionally) re-sending an edited turn:
+///
+/// - Body `{ branch, messageUuid, text, images? }` — EDIT / RETRY: stop the agent, relaunch with
+///   `--resume <sid> --resume-session-at <messageUuid>` (forking history at the final assistant
+///   uuid of the turn BEFORE the one being replaced), then deliver `text` as the new turn. Earlier
+///   context is kept; the replaced turn and everything after it is dropped.
+/// - `messageUuid` absent (editing the very first turn — no preceding assistant): start a fresh
+///   session and deliver `text`.
+/// - Body `{ branch, reset: true }` — RESET: forget the session id and start a brand-new
+///   conversation; no message is sent.
+///
+/// The session id is preserved across an EDIT/RETRY fork (no `--fork-session`), so the persisted
+/// `agent_session_id` stays valid. Verified against Claude Code 2.1.x.
+async fn post_branch_agent_fork(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let reset = b.get("reset").and_then(|v| v.as_bool()).unwrap_or(false);
+    let message_uuid = b
+        .get("messageUuid")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let images = parse_message_images(&b);
+    let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
+    let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
+
+    // A fork with no fork point (RESET, or editing the first turn) starts fresh; otherwise it
+    // resumes the session AT the given uuid.
+    let fresh = reset || message_uuid.is_none();
+    let resume_at = if fresh { None } else { message_uuid };
+    // The worktree already exists for a session being forked, so don't reseed dev assets.
+    let view = start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, resume_at, fresh).await?;
+
+    // RESET just restarts the conversation; EDIT/RETRY (and first-turn edit) deliver the new turn.
+    let key = branch_agent_key(&name, &branch);
+    let sent = if !reset && (!text.is_empty() || !images.is_empty()) {
+        st.agents.send(&key, &text, &images)
+    } else {
+        false
+    };
+    Ok(Json(json!({ "ok": true, "sent": sent, "agent": view })))
 }
 
 /// Short, effectively-unique branch suffix for the "New session" flow — the
@@ -638,7 +701,7 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
     .map_err(bad)?;
 
     let key = branch_agent_key(&name, &new_branch);
-    let argv = agents::build_agent_argv(&cfg.factory, None);
+    let argv = agents::build_agent_argv(&cfg.factory, None, None);
     let _ = st.agents.start(&key, &worktree_path, argv, None);
     if let Some(text) = message {
         st.agents.send(&key, &text, &[]);

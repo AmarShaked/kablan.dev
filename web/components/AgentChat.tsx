@@ -10,6 +10,9 @@ import {
   Check,
   Circle,
   CircleDot,
+  Pencil,
+  RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
@@ -241,7 +244,10 @@ type TodoItem = { content: string; status?: string; activeForm?: string };
  * they're folded onto their originating `tool` prim (by `tool_use_id`) as `resultText`/`isError`,
  * revealed on demand rather than dumped inline. */
 type Prim =
-  | { t: "you"; key: string; text: string; images?: string[] }
+  // `forkUuid` is the fork point for editing/retrying this user turn: the final assistant-message
+  // uuid of the PRECEDING turn (undefined for the first turn — editing it starts fresh). `timelineIndex`
+  // is this bubble's position in the `timeline`, used to truncate everything after it on edit.
+  | { t: "you"; key: string; text: string; images?: string[]; forkUuid?: string; timelineIndex: number }
   | { t: "text"; key: string; text: string }
   | { t: "thinking"; key: string; text: string }
   | {
@@ -322,15 +328,20 @@ function collectToolResults(timeline: TimelineItem[]): Map<string, { content: st
 function flattenTimeline(timeline: TimelineItem[]): Prim[] {
   const out: Prim[] = [];
   const results = collectToolResults(timeline);
+  // The uuid of the most recent assistant message seen so far. When we reach a user bubble, this is
+  // the final assistant message of the previous turn — exactly the fork point `--resume-session-at`
+  // needs to re-run the conversation from just before that user turn (see build_agent_argv).
+  let lastAssistantUuid: string | undefined;
   timeline.forEach((item, i) => {
     if (item.kind === "you") {
-      out.push({ t: "you", key: `you-${i}`, text: item.text, images: item.images });
+      out.push({ t: "you", key: `you-${i}`, text: item.text, images: item.images, forkUuid: lastAssistantUuid, timelineIndex: i });
       return;
     }
     const e = item.event as Record<string, any> | null;
     if (!e || typeof e !== "object") return;
     switch (e.type) {
       case "assistant": {
+        if (typeof e.uuid === "string" && e.uuid) lastAssistantUuid = e.uuid;
         const content = Array.isArray(e.message?.content) ? e.message.content : [];
         content.forEach((block: any, b: number) => {
           if (block?.type === "text" && block.text) {
@@ -728,9 +739,114 @@ function SubagentCard({
   );
 }
 
+/** Edit affordances threaded from AgentChat into the `you` bubble renderer. `editingKey` is the
+ * key of the bubble currently in inline-edit mode (null = none). Absent (undefined) when the parent
+ * supplies no `onEditMessage` — the pencil then never shows. */
+type EditCtx = {
+  editingKey: string | null;
+  onStartEdit: (key: string) => void;
+  onCancelEdit: () => void;
+  onSubmitEdit: (prim: Extract<Prim, { t: "you" }>, newText: string) => void;
+};
+
+/** One "You" bubble with an inline edit affordance. Hovering reveals a pencil; clicking it swaps the
+ * bubble for a textarea prefilled with the message text. Submitting re-runs the conversation from
+ * this point (fork), Cancel restores the bubble. Save is disabled for empty text. */
+function YouBubble({
+  prim,
+  edit,
+}: {
+  prim: Extract<Prim, { t: "you" }>;
+  edit?: EditCtx;
+}) {
+  const editing = edit?.editingKey === prim.key;
+  const [draft, setDraft] = useState(prim.text);
+  // Re-seed the draft each time this bubble enters edit mode (the component instance persists across
+  // renders, so a stale draft from a prior edit would otherwise linger).
+  useEffect(() => {
+    if (editing) setDraft(prim.text);
+  }, [editing, prim.text]);
+
+  if (editing && edit) {
+    const submit = () => {
+      const t = draft.trim();
+      if (!t) return;
+      edit.onSubmitEdit(prim, t);
+    };
+    return (
+      <div className="flex w-full flex-col items-end gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Edit message</span>
+        <div className="flex w-full max-w-[85%] flex-col gap-2 self-end rounded-lg border border-primary/40 bg-card px-3 py-2">
+          <Textarea
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                edit.onCancelEdit();
+              }
+            }}
+            className="min-h-[60px] resize-none text-sm focus-visible:ring-0"
+            aria-label="Edit message"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={edit.onCancelEdit}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!draft.trim()} onClick={submit}>
+              Save &amp; run
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex flex-col items-end gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
+      {prim.images && prim.images.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          {prim.images.map((src, k) => (
+            <img
+              key={k}
+              src={src}
+              alt="pasted attachment"
+              className="size-20 rounded-md border border-border object-cover"
+            />
+          ))}
+        </div>
+      )}
+      {prim.text && (
+        <div className="flex max-w-[85%] items-start gap-1.5 self-end">
+          {edit && (
+            <button
+              type="button"
+              onClick={() => edit.onStartEdit(prim.key)}
+              aria-label="Edit message"
+              title="Edit & re-run from here"
+              className="mt-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+            >
+              <Pencil className="size-3" />
+            </button>
+          )}
+          <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
+            {prim.text}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Renders the flattened prims, coalescing runs of ≥2 consecutive tool calls into one
- * collapsible `ToolGroup`; a lone tool call stays a plain inline line. */
-function renderPrims(prims: Prim[]): ReactNode[] {
+ * collapsible `ToolGroup`; a lone tool call stays a plain inline line. `edit`, if supplied, wires
+ * the per-bubble edit affordance (pencil + inline editor). */
+function renderPrims(prims: Prim[], edit?: EditCtx): ReactNode[] {
   const nodes: ReactNode[] = [];
   let run: ToolPrimData[] = [];
   const flush = () => {
@@ -758,28 +874,7 @@ function renderPrims(prims: Prim[]): ReactNode[] {
     flush();
     switch (p.t) {
       case "you":
-        nodes.push(
-          <div key={p.key} className="flex flex-col items-end gap-1">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
-            {p.images && p.images.length > 0 && (
-              <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
-                {p.images.map((src, k) => (
-                  <img
-                    key={k}
-                    src={src}
-                    alt="pasted attachment"
-                    className="size-20 rounded-md border border-border object-cover"
-                  />
-                ))}
-              </div>
-            )}
-            {p.text && (
-              <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
-                {p.text}
-              </div>
-            )}
-          </div>,
-        );
+        nodes.push(<YouBubble key={p.key} prim={p} edit={edit} />);
         break;
       case "text":
         nodes.push(
@@ -1055,6 +1150,8 @@ export function AgentChat({
   onStart,
   onMessage,
   onStop,
+  onEditMessage,
+  onReset,
   onBackfill,
   onResolveApproval,
 }: {
@@ -1071,6 +1168,19 @@ export function AgentChat({
   onStart: (opts?: { model?: string; permissionMode?: string }) => Promise<unknown>;
   onMessage: (text: string, images?: { mediaType: string; data: string }[]) => Promise<unknown>;
   onStop: () => Promise<unknown>;
+  /** EDIT / RETRY: fork the session and re-run from an earlier turn. `messageUuid` is the fork point
+   * (a preceding assistant-message uuid, or null to start fresh when editing the very first turn),
+   * `text` the new turn. `opts` carries the composer's model/permission overrides. Optional — the
+   * edit/retry affordances only render when supplied. */
+  onEditMessage?: (
+    messageUuid: string | null,
+    text: string,
+    images?: { mediaType: string; data: string }[],
+    opts?: { model?: string; permissionMode?: string },
+  ) => Promise<unknown>;
+  /** RESET: forget the session and start a brand-new conversation (clears the transcript). Optional —
+   * the Reset action only renders when supplied. */
+  onReset?: (opts?: { model?: string; permissionMode?: string }) => Promise<unknown>;
   onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[]; approvals?: AgentApproval[] }>;
   /** Resolves a supervised per-tool approval (Approve/Deny card). Optional so tests and non-
    * supervised callers can omit it — the cards only appear when there are pending approvals. */
@@ -1267,6 +1377,80 @@ export function AgentChat({
   // Latest known token usage for the session, recomputed as the transcript grows (cheap: two
   // backward scans that early-exit). null until any usage has streamed in → the gauge stays hidden.
   const usage = useMemo(() => latestUsage(timeline), [timeline]);
+
+  // Flattened transcript prims (memoized), reused for both rendering and to locate the last user
+  // turn for Retry.
+  const prims = useMemo(() => flattenTimeline(timeline), [timeline]);
+  const lastYou = useMemo(() => {
+    for (let i = prims.length - 1; i >= 0; i--) {
+      const p = prims[i];
+      if (p.t === "you") return p;
+    }
+    return undefined;
+  }, [prims]);
+
+  // Which "You" bubble is in inline-edit mode (its prim key), or null.
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
+  // EDIT: fork the session at this turn's fork point and re-run with the new text. Optimistically
+  // truncate the local timeline — everything from this bubble onward is stale (the fork produces a
+  // fresh continuation) — and replace it with the edited "You" bubble. `processedRef` stays at
+  // `events.length`, so the fork's fresh events append after our new bubble (never re-folding the
+  // dropped tail). Images aren't carried on edit (the original attachments aren't retained).
+  const submitEdit = async (prim: Extract<Prim, { t: "you" }>, newText: string) => {
+    if (!onEditMessage) return;
+    setEditingKey(null);
+    setTimeline((prev) => [...prev.slice(0, prim.timelineIndex), { kind: "you", text: newText }]);
+    setBusy(true);
+    try {
+      await onEditMessage(prim.forkUuid ?? null, newText, [], { model, permissionMode });
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // RETRY: re-run the last user turn unchanged. Keep the "You" bubble, drop the assistant response
+  // after it, and fork at the same point.
+  const retry = async () => {
+    if (!onEditMessage || !lastYou) return;
+    setTimeline((prev) => prev.slice(0, lastYou.timelineIndex + 1));
+    setBusy(true);
+    try {
+      await onEditMessage(lastYou.forkUuid ?? null, lastYou.text, [], { model, permissionMode });
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // RESET: forget the session and start fresh. Clear the local transcript (the fresh session's
+  // events append from empty).
+  const reset = async () => {
+    if (!onReset) return;
+    setEditingKey(null);
+    setTimeline([]);
+    setBusy(true);
+    try {
+      await onReset({ model, permissionMode });
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Edit affordance context passed into renderPrims — only when the parent supports editing.
+  const editCtx: EditCtx | undefined = onEditMessage
+    ? {
+        editingKey,
+        onStartEdit: (key: string) => setEditingKey(key),
+        onCancelEdit: () => setEditingKey(null),
+        onSubmitEdit: (prim, newText) => void submitEdit(prim, newText),
+      }
+    : undefined;
 
   const stop = async () => {
     setBusy(true);
@@ -1465,13 +1649,40 @@ export function AgentChat({
                   : "Send a message to begin — the agent starts on your first message."}
               </p>
             ) : (
-              renderPrims(flattenTimeline(timeline))
+              renderPrims(prims, editCtx)
             )}
             {onResolveApproval &&
               live.approvals.map((appr) => (
                 <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
               ))}
             {status === "working" && <ThinkingRow />}
+            {/* Retry / Reset actions — re-run the last user turn, or start the conversation over.
+                Shown once there's a turn to act on and the agent isn't mid-run (a fork stops and
+                relaunches the process, so acting while it works would be surprising). */}
+            {status !== "working" && (lastYou || onReset) && (onEditMessage || onReset) && (
+              <div className="flex items-center gap-2 self-start pt-1">
+                {onEditMessage && lastYou && (
+                  <button
+                    type="button"
+                    onClick={retry}
+                    disabled={busy}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  >
+                    <RotateCcw className="size-3" /> Retry
+                  </button>
+                )}
+                {onReset && timeline.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={reset}
+                    disabled={busy}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  >
+                    <RefreshCw className="size-3" /> Reset
+                  </button>
+                )}
+              </div>
+            )}
           </AgentKeyContext.Provider>
         </div>
         {!isAtBottom && (

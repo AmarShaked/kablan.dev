@@ -244,7 +244,20 @@ fn now_ms() -> i64 {
 
 /// Build the argv (program + flags) for launching an owned agent process.
 /// Pure and unit-tested: verifies the spike-confirmed flag set.
-pub fn build_agent_argv(cfg: &crate::config::FactorySettings, resume: Option<&str>) -> Vec<String> {
+///
+/// `resume` resumes a persisted Claude session (`--resume <session_id>`). `resume_at`, only
+/// meaningful alongside `resume`, forks that session AT a specific message uuid
+/// (`--resume-session-at <uuid>`): Claude truncates its conversation history to that message
+/// (inclusive) and continues from there. We fork at the FINAL assistant-message uuid of the turn
+/// preceding the edited/retried user turn, then re-send the (edited) text — so the earlier context
+/// is kept, the replaced turn and everything after it is dropped, and the session id is unchanged
+/// (no `--fork-session`). This is the message EDIT / RETRY mechanism; verified end-to-end against
+/// the Claude Code CLI (2.1.x). Mirrors vibe-kanban's `spawn_follow_up`.
+pub fn build_agent_argv(
+    cfg: &crate::config::FactorySettings,
+    resume: Option<&str>,
+    resume_at: Option<&str>,
+) -> Vec<String> {
     let supervised = cfg.permission_mode == "supervised";
     let mut a: Vec<String> = vec![
         cfg.agent_command.clone(),
@@ -271,7 +284,17 @@ pub fn build_agent_argv(cfg: &crate::config::FactorySettings, resume: Option<&st
         a.push(cfg.mcp_config_path.trim().to_string());
     }
     if !cfg.agent_model.trim().is_empty() { a.push("--model".into()); a.push(cfg.agent_model.clone()); }
-    if let Some(sid) = resume { a.push("--resume".into()); a.push(sid.to_string()); }
+    if let Some(sid) = resume {
+        a.push("--resume".into());
+        a.push(sid.to_string());
+        // `--resume-session-at` only applies when resuming an existing session (it forks THAT
+        // session's history at a message uuid). Without `--resume` it is meaningless, so it's
+        // nested here on purpose.
+        if let Some(uuid) = resume_at {
+            a.push("--resume-session-at".into());
+            a.push(uuid.to_string());
+        }
+    }
     a
 }
 
@@ -661,7 +684,7 @@ mod tests {
         let mut cfg = crate::config::FactorySettings::default();
         cfg.agent_command = "claude".into();
         cfg.permission_mode = "supervised".into();
-        let argv = build_agent_argv(&cfg, None);
+        let argv = build_agent_argv(&cfg, None, None);
         // Supervised launches with the stdio prompt tool + bypassPermissions (NOT "supervised"),
         // and replays user messages.
         assert!(has_pair(&argv, "--permission-prompt-tool", "stdio"), "{argv:?}");
@@ -675,7 +698,7 @@ mod tests {
         let mut cfg = crate::config::FactorySettings::default();
         cfg.agent_command = "claude".into();
         cfg.permission_mode = "acceptEdits".into();
-        let argv = build_agent_argv(&cfg, None);
+        let argv = build_agent_argv(&cfg, None, None);
         assert!(has_pair(&argv, "--permission-mode", "acceptEdits"), "{argv:?}");
         assert!(!argv.iter().any(|a| a == "--permission-prompt-tool"), "{argv:?}");
         assert!(!argv.iter().any(|a| a == "--replay-user-messages"), "{argv:?}");
@@ -688,14 +711,14 @@ mod tests {
         cfg.agent_command = "claude".into();
         cfg.permission_mode = "acceptEdits".into();
         cfg.mcp_config_path = "/some/path".into();
-        let argv = build_agent_argv(&cfg, None);
+        let argv = build_agent_argv(&cfg, None, None);
         assert!(has_pair(&argv, "--mcp-config", "/some/path"), "{argv:?}");
 
         // Empty (default): no --mcp-config flag at all.
         let mut empty = crate::config::FactorySettings::default();
         empty.agent_command = "claude".into();
         empty.permission_mode = "acceptEdits".into();
-        let argv2 = build_agent_argv(&empty, None);
+        let argv2 = build_agent_argv(&empty, None, None);
         assert!(!argv2.iter().any(|a| a == "--mcp-config"), "{argv2:?}");
     }
 
@@ -706,7 +729,7 @@ mod tests {
         cfg.agent_command = "claude".into();
         cfg.permission_mode = "supervised".into();
         cfg.mcp_config_path = "  /trim/me.json  ".into();
-        let argv = build_agent_argv(&cfg, None);
+        let argv = build_agent_argv(&cfg, None, None);
         // Trimmed before it hits the argv.
         assert!(has_pair(&argv, "--mcp-config", "/trim/me.json"), "{argv:?}");
         // Supervised handshake flags still present.
@@ -792,11 +815,30 @@ mod tests {
         cfg.agent_command = "claude".into();
         cfg.permission_mode = "acceptEdits".into();
         cfg.agent_model = "opus".into();
-        let argv = build_agent_argv(&cfg, Some("sid-9"));
+        let argv = build_agent_argv(&cfg, Some("sid-9"), None);
         assert_eq!(argv[0], "claude");
         for f in ["--print","--output-format","stream-json","--input-format","--permission-mode","acceptEdits","--model","opus","--resume","sid-9"] {
             assert!(argv.iter().any(|a| a == f), "missing {f} in {argv:?}");
         }
+        // No fork requested → no --resume-session-at flag.
+        assert!(!argv.iter().any(|a| a == "--resume-session-at"), "{argv:?}");
+    }
+
+    #[test]
+    fn build_argv_resume_at_adds_fork_flag() {
+        let mut cfg = crate::config::FactorySettings::default();
+        cfg.agent_command = "claude".into();
+        cfg.permission_mode = "acceptEdits".into();
+        // Forking a resumed session: both --resume <sid> and --resume-session-at <uuid> are present,
+        // and the fork uuid immediately follows the flag (order matters for the CLI).
+        let argv = build_agent_argv(&cfg, Some("sid-9"), Some("uuid-abc"));
+        assert!(has_pair(&argv, "--resume", "sid-9"), "{argv:?}");
+        assert!(has_pair(&argv, "--resume-session-at", "uuid-abc"), "{argv:?}");
+
+        // resume_at is ignored without a session to resume (it's meaningless on its own).
+        let fresh = build_agent_argv(&cfg, None, Some("uuid-abc"));
+        assert!(!fresh.iter().any(|a| a == "--resume-session-at"), "{fresh:?}");
+        assert!(!fresh.iter().any(|a| a == "--resume"), "{fresh:?}");
     }
 
     #[test]

@@ -227,6 +227,18 @@ export function Cockpit({
   const messageAgent = (text: string, images?: { mediaType: string; data: string }[]) =>
     api.factory.agentMessage(project, branch, text, images);
   const stopAgent = () => api.factory.agentStop(project, branch);
+  // EDIT / RETRY: fork the session at `messageUuid` (or fresh, when null) and re-run with `text`.
+  // `opts` carries the composer's per-session model/permission overrides so the fork relaunches
+  // with the same settings as a normal start.
+  const editMessage = (
+    messageUuid: string | null,
+    text: string,
+    images?: { mediaType: string; data: string }[],
+    opts?: { model?: string; permissionMode?: string },
+  ) => api.factory.agentFork(project, branch, { messageUuid, text, images, ...opts });
+  // RESET: forget the session, start a brand-new conversation.
+  const resetAgent = (opts?: { model?: string; permissionMode?: string }) =>
+    api.factory.agentReset(project, branch, opts ?? {});
   const backfillAgent = () => api.factory.getAgent(project, branch);
   const resolveApproval = (approvalId: string, decision: "allow" | "deny", reason?: string) =>
     api.factory.resolveApproval(project, branch, approvalId, decision, reason);
@@ -300,6 +312,8 @@ export function Cockpit({
               onStart={startAgent}
               onMessage={messageAgent}
               onStop={stopAgent}
+              onEditMessage={editMessage}
+              onReset={resetAgent}
               onBackfill={backfillAgent}
               onResolveApproval={resolveApproval}
             />
