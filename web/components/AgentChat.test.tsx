@@ -263,6 +263,82 @@ describe("AgentChat", () => {
     expect(screen.getByRole("heading", { level: 2, name: /my plan/i })).toBeInTheDocument();
   });
 
+  // ---- Phase 2: diff rendering, thinking content, subagent cards, semantic aggregation ----
+
+  it("renders an Edit tool_use as a diff header with a +/− stat and a revealable diff", async () => {
+    renderChat([
+      assistant([
+        {
+          type: "tool_use",
+          id: "e1",
+          name: "Edit",
+          input: { file_path: "/a/foo.ts", old_string: "const a = 1;", new_string: "const b = 2;" },
+        },
+      ]),
+    ]);
+    // Header: basename + a +N stat; the diff body is collapsed until the header is clicked.
+    expect(screen.getByText("foo.ts")).toBeInTheDocument();
+    expect(screen.getByText("+1")).toBeInTheDocument();
+    expect(screen.queryByText("const b = 2;")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("foo.ts"));
+    // Expanded: the removed old line and the added new line both show.
+    expect(screen.getByText("const a = 1;")).toBeInTheDocument();
+    expect(screen.getByText("const b = 2;")).toBeInTheDocument();
+  });
+
+  it("renders a Write tool_use as an all-additions diff", async () => {
+    renderChat([
+      assistant([
+        {
+          type: "tool_use",
+          id: "w1",
+          name: "Write",
+          input: { file_path: "/a/new.ts", content: "line one\nline two" },
+        },
+      ]),
+    ]);
+    expect(screen.getByText("new.ts")).toBeInTheDocument();
+    expect(screen.getByText("+2")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("new.ts"));
+    expect(screen.getByText("line one")).toBeInTheDocument();
+    expect(screen.getByText("line two")).toBeInTheDocument();
+  });
+
+  it("renders a Task tool_use as a subagent card with the subagent_type and description", () => {
+    renderChat([
+      assistant([
+        {
+          type: "tool_use",
+          id: "tk1",
+          name: "Task",
+          input: { subagent_type: "Explore", description: "find the bug", prompt: "go look" },
+        },
+      ]),
+    ]);
+    expect(screen.getByText("Explore")).toBeInTheDocument();
+    expect(screen.getByText("find the bug")).toBeInTheDocument();
+  });
+
+  it("collapses a run of consecutive Read tool_uses into a 'Read N files' header", () => {
+    renderChat([
+      assistant([
+        { type: "tool_use", id: "rd1", name: "Read", input: { file_path: "/a/App.tsx" } },
+        { type: "tool_use", id: "rd2", name: "Read", input: { file_path: "/a/api.ts" } },
+        { type: "tool_use", id: "rd3", name: "Read", input: { file_path: "/a/z.ts" } },
+      ]),
+    ]);
+    expect(screen.getByText("Read 3 files")).toBeInTheDocument();
+    expect(screen.queryByText("3 tool calls")).not.toBeInTheDocument();
+  });
+
+  it("renders a thinking block that is collapsed by default and reveals its content on click", async () => {
+    renderChat([assistant([{ type: "thinking", thinking: "I should look at the config first" }])]);
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.queryByText(/look at the config/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("Thinking"));
+    expect(screen.getByText(/look at the config/i)).toBeInTheDocument();
+  });
+
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
     const onBackfill = vi.fn().mockResolvedValue({
       agent: { key: "proj::wt:/wt/one", status: "awaitingInput", sessionId: "s1", pid: 1, startedAt: 0, exitCode: null },

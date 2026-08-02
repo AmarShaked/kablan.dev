@@ -15,6 +15,7 @@ import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
 import { Markdown } from "./Markdown.tsx";
+import { DiffView } from "./DiffView.tsx";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -118,6 +119,7 @@ type TodoItem = { content: string; status?: string; activeForm?: string };
 type Prim =
   | { t: "you"; key: string; text: string; images?: string[] }
   | { t: "text"; key: string; text: string }
+  | { t: "thinking"; key: string; text: string }
   | {
       t: "tool";
       key: string;
@@ -128,10 +130,30 @@ type Prim =
       resultText?: string;
       isError?: boolean;
     }
+  | {
+      t: "diff";
+      key: string;
+      name: string;
+      input: unknown;
+      resultText?: string;
+      isError?: boolean;
+    }
+  | {
+      t: "task";
+      key: string;
+      subagentType: string;
+      description: string;
+      resultText?: string;
+      isError?: boolean;
+    }
   | { t: "todo"; key: string; todos: TodoItem[] }
   | { t: "plan"; key: string; plan: string }
   | { t: "result"; key: string; label: string }
   | { t: "error"; key: string; text: string };
+
+/** File-editing tools whose `tool_use` becomes a rich, non-groupable `diff` entry instead of a
+ * plain "⏺ Edit file.ts" line. */
+const DIFF_TOOLS = new Set(["Edit", "MultiEdit", "Write"]);
 
 /** Flattens a tool_result's `content` (a string, or an array of `{type:"text",text}` blocks) into
  * one display string. Non-text blocks (images, etc.) are noted but not rendered. */
@@ -189,15 +211,35 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
         content.forEach((block: any, b: number) => {
           if (block?.type === "text" && block.text) {
             out.push({ t: "text", key: `t-${i}-${b}`, text: block.text });
+          } else if (block?.type === "thinking" && block.thinking) {
+            out.push({ t: "thinking", key: `k-${i}-${b}`, text: String(block.thinking) });
           } else if (block?.type === "tool_use") {
             const key = `u-${i}-${b}`;
+            const res = block.id ? results.get(String(block.id)) : undefined;
             if (block.name === "TodoWrite") {
               const todos = Array.isArray(block.input?.todos) ? (block.input.todos as TodoItem[]) : [];
               out.push({ t: "todo", key, todos });
             } else if (block.name === "ExitPlanMode") {
               out.push({ t: "plan", key, plan: String(block.input?.plan ?? "") });
+            } else if (DIFF_TOOLS.has(block.name)) {
+              out.push({
+                t: "diff",
+                key,
+                name: block.name,
+                input: block.input,
+                resultText: res?.content,
+                isError: res?.isError,
+              });
+            } else if (block.name === "Task") {
+              out.push({
+                t: "task",
+                key,
+                subagentType: String(block.input?.subagent_type ?? "agent"),
+                description: String(block.input?.description ?? block.input?.prompt ?? ""),
+                resultText: res?.content,
+                isError: res?.isError,
+              });
             } else {
-              const res = block.id ? results.get(String(block.id)) : undefined;
               out.push({
                 t: "tool",
                 key,
@@ -239,9 +281,49 @@ type ToolPrimData = {
   key: string;
   name: string;
   label: string;
+  input?: unknown;
   resultText?: string;
   isError?: boolean;
 };
+
+/** The collapsed header for a group of ≥2 consecutive tool calls. When the run is all one tool
+ * type we summarize semantically ("Read 5 files", "Ran 3 commands", …) with an optional muted
+ * detail (basenames for Read); a mixed run falls back to the generic "N tool calls". */
+function groupHeader(tools: ToolPrimData[]): { main: string; detail?: string } {
+  const n = tools.length;
+  const name = tools[0].name;
+  const same = tools.every((t) => t.name === name);
+  if (!same) return { main: `${n} tool calls` };
+  const arg = (t: ToolPrimData, keys: string[]) => {
+    const inp = (t.input && typeof t.input === "object" ? t.input : {}) as Record<string, any>;
+    for (const k of keys) if (inp[k] != null) return String(inp[k]);
+    return "";
+  };
+  const basename = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+  const list = (vals: string[]) => {
+    const nonEmpty = vals.filter(Boolean);
+    if (nonEmpty.length === 0) return undefined;
+    const shown = nonEmpty.slice(0, 3);
+    const extra = nonEmpty.length - shown.length;
+    return shown.join(", ") + (extra > 0 ? `, … +${extra}` : "");
+  };
+  switch (name) {
+    case "Read":
+      return { main: `Read ${n} files`, detail: list(tools.map((t) => basename(arg(t, ["file_path"])))) };
+    case "Grep":
+      return { main: `Searched ${n} times` };
+    case "Glob":
+      return { main: `Globbed ${n} times` };
+    case "Bash":
+      return { main: `Ran ${n} commands` };
+    case "WebFetch":
+      return { main: `Fetched ${n} pages` };
+    case "WebSearch":
+      return { main: `Ran ${n} web searches` };
+    default:
+      return { main: `${n} tool calls` };
+  }
+}
 
 /** A small status dot for a tool line: green = succeeded (result present, not an error),
  * red = errored, hollow = still pending (no result folded in yet). */
@@ -338,13 +420,14 @@ function ToolLine({ tool }: { tool: ToolPrimData }) {
  * revealable (see `ToolLine`). Always starts collapsed — the count is usually all you want. */
 function ToolGroup({ tools }: { tools: ToolPrimData[] }) {
   const [open, setOpen] = useState(false);
+  const header = groupHeader(tools);
   return (
     <div className="flex max-w-full flex-col self-start">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 self-start rounded px-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex max-w-full items-center gap-1.5 self-start rounded px-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         {open ? (
           <ChevronDown className="size-3 shrink-0 opacity-70" />
@@ -352,7 +435,8 @@ function ToolGroup({ tools }: { tools: ToolPrimData[] }) {
           <ChevronRight className="size-3 shrink-0 opacity-70" />
         )}
         <span className="shrink-0 text-primary">⏺</span>
-        <span className="font-medium text-foreground">{tools.length} tool calls</span>
+        <span className="shrink-0 font-medium text-foreground">{header.main}</span>
+        {header.detail && <span className="truncate text-muted-foreground">{header.detail}</span>}
       </button>
       {open && (
         <div className="mt-1 ml-[9px] flex flex-col gap-0.5 border-l border-border pl-3">
@@ -421,6 +505,103 @@ function PlanCard({ plan }: { plan: string }) {
   );
 }
 
+/** A muted, collapsible "Thinking" block rendered from an assistant `thinking` content block.
+ * Collapsed by default (the reasoning is available on demand, not in your face); expanding renders
+ * the thinking text as markdown. Distinct from the live animated "thinking…" indicator, which is
+ * only for the in-progress state — this is for reasoning content that has arrived. */
+function ThinkingBlock({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex w-full max-w-[85%] flex-col self-start">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 self-start rounded px-1 py-0.5 text-xs italic text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {open ? (
+          <ChevronDown className="size-3 shrink-0 opacity-60" />
+        ) : (
+          <ChevronRight className="size-3 shrink-0 opacity-60" />
+        )}
+        <span>Thinking</span>
+      </button>
+      {open && (
+        <div className="mt-1 ml-[15px] border-l-2 border-border pl-3 text-muted-foreground">
+          <Markdown>{text}</Markdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A card for a `Task` (subagent) tool call: a badge with the `subagent_type`, the `description`,
+ * and — reusing ToolLine's reveal mechanism — the subagent's output revealed on expand. Rich,
+ * non-groupable (never absorbed into a "N tool calls" group). */
+function SubagentCard({
+  subagentType,
+  description,
+  resultText,
+  isError,
+}: {
+  subagentType: string;
+  description: string;
+  resultText?: string;
+  isError?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [full, setFull] = useState(false);
+  const hasResult = resultText != null || isError === true;
+  const text = resultText ?? "";
+  const clamped = !full && text.length > RESULT_CLAMP;
+  const shown = clamped ? `${text.slice(0, RESULT_CLAMP)}…` : text;
+
+  return (
+    <div className="flex w-full max-w-[85%] flex-col gap-1.5 self-start rounded-lg border border-border bg-card/60 px-3 py-2">
+      <button
+        type="button"
+        onClick={() => hasResult && setOpen((o) => !o)}
+        aria-expanded={open}
+        disabled={!hasResult}
+        className="flex items-center gap-2 text-left disabled:cursor-default"
+      >
+        {hasResult ? (
+          open ? (
+            <ChevronDown className="size-3 shrink-0 opacity-60" />
+          ) : (
+            <ChevronRight className="size-3 shrink-0 opacity-60" />
+          )
+        ) : (
+          <span className="size-3 shrink-0" />
+        )}
+        <ToolStatusDot hasResult={hasResult} isError={isError} />
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-primary">
+          {subagentType}
+        </span>
+        {description && <span className="truncate text-sm text-foreground">{description}</span>}
+      </button>
+      {open && hasResult && (
+        <div className="ml-[15px] flex flex-col gap-1">
+          <pre
+            className={`max-h-64 overflow-auto rounded ${isError ? "bg-destructive/10 text-destructive" : "bg-muted/60 text-muted-foreground"} custom-scroll px-2 py-1.5 font-mono text-[11px] leading-snug whitespace-pre-wrap`}
+          >
+            {shown || "(no output)"}
+          </pre>
+          {text.length > RESULT_CLAMP && (
+            <button
+              type="button"
+              onClick={() => setFull((f) => !f)}
+              className="self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {full ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Renders the flattened prims, coalescing runs of ≥2 consecutive tool calls into one
  * collapsible `ToolGroup`; a lone tool call stays a plain inline line. */
 function renderPrims(prims: Prim[]): ReactNode[] {
@@ -438,7 +619,14 @@ function renderPrims(prims: Prim[]): ReactNode[] {
   };
   for (const p of prims) {
     if (p.t === "tool") {
-      run.push({ key: p.key, name: p.name, label: p.label, resultText: p.resultText, isError: p.isError });
+      run.push({
+        key: p.key,
+        name: p.name,
+        label: p.label,
+        input: p.input,
+        resultText: p.resultText,
+        isError: p.isError,
+      });
       continue;
     }
     flush();
@@ -472,6 +660,31 @@ function renderPrims(prims: Prim[]): ReactNode[] {
           <div key={p.key} className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2">
             <Markdown>{p.text}</Markdown>
           </div>,
+        );
+        break;
+      case "thinking":
+        nodes.push(<ThinkingBlock key={p.key} text={p.text} />);
+        break;
+      case "diff":
+        nodes.push(
+          <DiffView
+            key={p.key}
+            name={p.name}
+            input={p.input}
+            hasResult={p.resultText != null || p.isError === true}
+            isError={p.isError}
+          />,
+        );
+        break;
+      case "task":
+        nodes.push(
+          <SubagentCard
+            key={p.key}
+            subagentType={p.subagentType}
+            description={p.description}
+            resultText={p.resultText}
+            isError={p.isError}
+          />,
         );
         break;
       case "todo":
