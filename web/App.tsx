@@ -34,6 +34,7 @@ import { CommandPalette } from "./components/CommandPalette.tsx";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { buildBranchEntities } from "./lib/projectEntities.ts";
 import { branchKey } from "./lib/agentKey.ts";
+import { useInboxRead, isRead } from "./lib/inboxRead.ts";
 import { pickDefaultProject } from "./lib/pickDefaultProject.ts";
 import { useProjects, useFactory, useBranches, useWorktrees, useInbox, qk } from "./queries.ts";
 
@@ -255,8 +256,14 @@ function AppContent() {
   }, []);
 
   // Global attention inbox — jump straight into a branch's cockpit from any project, without
-  // going through the project menu's drill-down.
+  // going through the project menu's drill-down. The rail badge shows the UNREAD count (the read
+  // overlay lives in localStorage; `useInboxRead` shares it with InboxView so the two agree).
   const inboxQuery = useInbox();
+  const { readSet } = useInboxRead();
+  const inboxUnreadCount = useMemo(
+    () => (inboxQuery.data ?? []).filter((e) => !isRead(readSet, e)).length,
+    [inboxQuery.data, readSet],
+  );
 
   // Desktop notifications: reuse the inbox's project::branch → name mapping for notification
   // titles (falls back to the raw key for statuses the inbox doesn't list, e.g. "done"). The
@@ -362,7 +369,7 @@ function AppContent() {
           floats within the shell. */}
       <div className="flex min-h-0 flex-1 overflow-hidden bg-sidebar">
         <GlobalRail
-          inboxCount={isTauri ? inboxQuery.data?.length ?? 0 : 0}
+          inboxCount={isTauri ? inboxUnreadCount : 0}
           active={railActive}
           onInbox={() => isTauri && setView("inbox")}
           onHome={() => setView("home")}
