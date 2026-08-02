@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, Play } from "lucide-react";
 import { api, type RunningServer, type LogLine } from "../api.ts";
-import { useBranches, useWorktrees, useFactory, qk } from "../queries.ts";
+import { useBranches, useWorktrees, useFactory, useFiles, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
 import { findServerUrl } from "../lib/serverUrl.ts";
@@ -129,6 +129,9 @@ export function Cockpit({
   const [url, setUrl] = useState<string | null>(null);
   const [serverBusy, setServerBusy] = useState(false);
   const cwd = entry.cwd;
+
+  // File list for the composer's @-file mention typeahead — scoped to this branch's working copy.
+  const files = useFiles(project, cwd ?? undefined).data?.files ?? [];
 
   const refreshServer = useCallback(async () => {
     if (!cwd) {
@@ -293,6 +296,7 @@ export function Cockpit({
             <AgentChat
               project={project}
               agentKey={agentKey}
+              files={files}
               onStart={startAgent}
               onMessage={messageAgent}
               onStop={stopAgent}

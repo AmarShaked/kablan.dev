@@ -74,6 +74,129 @@ const THINKING_OPTIONS: { value: keyof typeof THINKING_KEYWORD; label: string }[
   { value: "ultra", label: "Ultrathink" },
 ];
 
+/** A composer slash command — a prompt TEMPLATE (not a CLI command). Typing `/` at the start of the
+ * composer opens a menu of these; selecting one replaces the composer text with `run()`'s output,
+ * ready to send or edit. Extend by adding entries; keep them short and honestly useful. */
+type SlashCommand = { name: string; description: string; run: () => string };
+const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    name: "review",
+    description: "Review my current changes and flag issues.",
+    run: () => "Review my current changes (git diff) and flag issues.",
+  },
+  {
+    name: "test",
+    description: "Write tests for the code you just changed.",
+    run: () => "Write tests for the code you just changed.",
+  },
+  {
+    name: "explain",
+    description: "Explain how this codebase is structured.",
+    run: () => "Explain how this codebase is structured.",
+  },
+  {
+    name: "plan",
+    description: "Make a plan first; don't write code yet.",
+    run: () => "Make a plan before doing anything; don't write code yet.",
+  },
+];
+
+/** One row in the composer typeahead. `value` is the identifier used on select (a file path or a
+ * slash-command name); `label` is what's shown; `description` is an optional muted subtitle. */
+type MenuItem = { value: string; label: string; description?: string };
+/** The open typeahead menu: either the @-file mention list or the slash-command list. `null` = closed. */
+type MenuState = { kind: "file" | "slash"; items: MenuItem[] } | null;
+
+/** Max files shown in the mention dropdown (the matched list is capped so a big repo stays usable). */
+const MENTION_LIMIT = 20;
+/** The `@<query>` token immediately before the caret: an `@` at a word boundary (start or after
+ * whitespace) followed by non-whitespace. Group 1 is the boundary char, group 2 is the query. */
+const MENTION_RE = /(^|\s)@(\S*)$/;
+
+/** Derives the composer typeahead menu from the current text + caret, or null when neither trigger
+ * is active. Slash commands win when the text starts with `/` and the caret is still in that first
+ * token; otherwise an `@<query>` token before the caret drives a fuzzy-ish (substring) file match. */
+function computeMenu(value: string, caret: number, files: string[]): MenuState {
+  // Slash-command menu: text begins with "/" and the caret is still within the first token.
+  if (value.startsWith("/")) {
+    const ws = value.search(/\s/);
+    const firstTokenEnd = ws === -1 ? value.length : ws;
+    if (caret <= firstTokenEnd) {
+      const query = value.slice(1, firstTokenEnd).toLowerCase();
+      const items: MenuItem[] = SLASH_COMMANDS.filter((c) => c.name.includes(query)).map((c) => ({
+        value: c.name,
+        label: `/${c.name}`,
+        description: c.description,
+      }));
+      if (items.length > 0) return { kind: "slash", items };
+    }
+  }
+  // @-file mention: the @<query> token immediately before the caret.
+  const m = value.slice(0, caret).match(MENTION_RE);
+  if (m) {
+    const query = m[2].toLowerCase();
+    const items: MenuItem[] = files
+      .filter((f) => {
+        if (query === "") return true;
+        const base = (f.split("/").pop() ?? f).toLowerCase();
+        return f.toLowerCase().includes(query) || base.includes(query);
+      })
+      .slice(0, MENTION_LIMIT)
+      .map((f) => ({ value: f, label: f }));
+    if (items.length > 0) return { kind: "file", items };
+  }
+  return null;
+}
+
+/** The composer typeahead dropdown — a keyboard-navigable list floated ABOVE the textarea (the
+ * composer sits at the bottom of the pane). Shared by the @-file mention and slash-command menus;
+ * the parent owns selection + keyboard nav, this just renders and reports hover/click. */
+function TypeaheadMenu({
+  menu,
+  index,
+  onHover,
+  onSelect,
+}: {
+  menu: NonNullable<MenuState>;
+  index: number;
+  onHover: (i: number) => void;
+  onSelect: (item: MenuItem) => void;
+}) {
+  return (
+    <div
+      role="listbox"
+      aria-label={menu.kind === "file" ? "Files" : "Commands"}
+      className="absolute bottom-full left-0 z-40 mb-1 max-h-64 w-full max-w-md overflow-y-auto custom-scroll rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+    >
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {menu.kind === "file" ? "Files" : "Commands"}
+      </div>
+      {menu.items.map((item, i) => (
+        <button
+          key={item.value}
+          type="button"
+          role="option"
+          aria-selected={i === index}
+          // mousedown (not click) + preventDefault so the textarea keeps focus/caret through select.
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onSelect(item);
+          }}
+          onMouseEnter={() => onHover(i)}
+          className={`flex w-full flex-col items-start rounded px-2 py-1 text-left ${
+            i === index ? "bg-accent text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          <span className="w-full truncate font-mono text-xs">{item.label}</span>
+          {item.description && (
+            <span className="w-full truncate text-[11px] text-muted-foreground">{item.description}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** True while the agent process is alive and able to receive a message — including `idle`
  * (freshly started, no turn yet) so the composer stays enabled and the Stop button shows.
  * Only `working` drives the "thinking…" row. */
@@ -928,6 +1051,7 @@ export function AgentChat({
   agentKey,
   title,
   canChat = true,
+  files = [],
   onStart,
   onMessage,
   onStop,
@@ -938,6 +1062,9 @@ export function AgentChat({
   agentKey: string;
   title?: string;
   canChat?: boolean;
+  /** Repo-relative file paths for the @-file mention typeahead (from `useFiles`). Empty = no
+   * mention menu; everything else in the composer still works. */
+  files?: string[];
   /** Starts (or, for an already-running agent, restarts) the agent. `opts.model` /
    * `opts.permissionMode` apply per-branch launch overrides — restarting resumes the persisted
    * session so context is kept. */
@@ -964,6 +1091,12 @@ export function AgentChat({
   const [backfillStatus, setBackfillStatus] = useState<AgentStatus | undefined>(undefined);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // Composer typeahead (@-file mentions + slash commands). `menu` is the open list (null = closed);
+  // `menuIndex` is the highlighted row. `taRef` is populated from textarea events (the shared UI
+  // Textarea doesn't forward refs) so select handlers can read the caret and restore focus.
+  const [menu, setMenu] = useState<MenuState>(null);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
   // Per-session agent parameters, set from the dropdowns under the composer. `model` and
   // `permissionMode` are launch args (changing either restarts the agent, resuming its session);
   // `thinking` is applied per-message by appending Claude Code's thinking-budget keyword to the
@@ -1207,6 +1340,54 @@ export function AgentChat({
     if (await sendText(text)) setText("");
   };
 
+  // Recompute the typeahead menu from the latest composer value + caret. Called on every text
+  // change and caret move; navigation keys are intercepted in onKeyDown (so they never land here),
+  // hence resetting the highlight to the top on each refresh is safe.
+  const refreshMenu = (value: string, caret: number) => {
+    setMenu(computeMenu(value, caret, files));
+    setMenuIndex(0);
+  };
+  // Selecting a file mention: replace the `@<query>` token immediately before the caret with
+  // `@<path> ` (a trailing space so it reads as plain text the agent can act on).
+  const applyFileMention = (path: string) => {
+    const el = taRef.current;
+    const caret = el ? el.selectionStart ?? text.length : text.length;
+    const m = text.slice(0, caret).match(MENTION_RE);
+    const start = m ? caret - m[2].length - 1 : caret; // index of the '@'
+    const insert = `@${path} `;
+    const next = text.slice(0, start) + insert + text.slice(caret);
+    setText(next);
+    setMenu(null);
+    const pos = start + insert.length;
+    requestAnimationFrame(() => {
+      const t = taRef.current;
+      if (t) {
+        t.focus();
+        t.setSelectionRange(pos, pos);
+      }
+    });
+  };
+  // Selecting a slash command: replace the whole composer with its template, caret at the end.
+  const applySlashCommand = (name: string) => {
+    const cmd = SLASH_COMMANDS.find((c) => c.name === name);
+    if (!cmd) return;
+    const tmpl = cmd.run();
+    setText(tmpl);
+    setMenu(null);
+    requestAnimationFrame(() => {
+      const t = taRef.current;
+      if (t) {
+        t.focus();
+        t.setSelectionRange(tmpl.length, tmpl.length);
+      }
+    });
+  };
+  const selectMenuItem = (item: MenuItem) => {
+    if (!menu) return;
+    if (menu.kind === "file") applyFileMention(item.value);
+    else applySlashCommand(item.value);
+  };
+
   // Auto-drain the queue: when the agent transitions out of "working" into a non-working ready
   // state, dequeue the HEAD and send it. Exactly one per idle transition — the next drains when
   // that turn finishes and the agent goes idle again. Guarded by `busy` so a send already in
@@ -1361,15 +1542,58 @@ export function AgentChat({
             ))}
           </div>
         )}
-        <div className="flex items-end gap-2">
+        <div className="relative flex items-end gap-2">
+          {menu && menu.items.length > 0 && (
+            <TypeaheadMenu
+              menu={menu}
+              index={menuIndex}
+              onHover={setMenuIndex}
+              onSelect={selectMenuItem}
+            />
+          )}
           <Textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onFocus={(e) => (taRef.current = e.currentTarget)}
+            onChange={(e) => {
+              taRef.current = e.currentTarget;
+              setText(e.target.value);
+              refreshMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
+            onSelect={(e) => {
+              const el = e.currentTarget;
+              taRef.current = el;
+              refreshMenu(el.value, el.selectionStart ?? el.value.length);
+            }}
             onPaste={onPaste}
             disabled={!chatEnabled}
             placeholder={!canChat ? "Start a session to chat" : "Message the agent… (paste an image to attach)"}
             className="min-h-[40px] flex-1 resize-none text-sm focus-visible:ring-0"
             onKeyDown={(e) => {
+              taRef.current = e.currentTarget;
+              // While the typeahead is open, arrows navigate and Enter/Tab selects (never sends);
+              // Escape closes it. Everything falls through to normal composer behavior when closed.
+              if (menu && menu.items.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMenuIndex((i) => (i + 1) % menu.items.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMenuIndex((i) => (i - 1 + menu.items.length) % menu.items.length);
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  selectMenuItem(menu.items[menuIndex]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMenu(null);
+                  return;
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 send();

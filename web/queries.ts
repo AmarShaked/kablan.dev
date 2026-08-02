@@ -61,6 +61,17 @@ export function useDiff(name: string, sha?: string, cwd?: string, enabled = true
   });
 }
 
+/** Tracked + untracked file paths for a working copy — feeds the composer's @-file typeahead.
+ * Enabled only when a `cwd` is known; the list changes rarely, so it's cached generously. */
+export function useFiles(name: string, cwd?: string) {
+  return useQuery({
+    queryKey: ["files", name, cwd ?? ""] as const,
+    queryFn: () => api.getFiles(name, cwd),
+    enabled: !!name && !!cwd,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useGitlabOverview(name: string) {
   return useQuery({
     queryKey: ["gitlab-overview", name] as const,

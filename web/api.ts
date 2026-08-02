@@ -264,6 +264,12 @@ export const api = {
       `/api/projects/${encodeURIComponent(name)}/diff${qs ? `?${qs}` : ""}`,
     );
   },
+  // Repo-relative paths of tracked + untracked-but-not-ignored files in `cwd` (default: the
+  // project's main path). Powers the composer's @-file mention typeahead.
+  getFiles: (name: string, cwd?: string) =>
+    req<{ files: string[] }>(
+      `/api/projects/${encodeURIComponent(name)}/files${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`,
+    ),
   openIn: (name: string, target: OpenTarget, opts: { cwd?: string; url?: string } = {}) =>
     req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/open`, {
       method: "POST",

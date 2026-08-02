@@ -74,6 +74,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/commits", get(get_commits))
         .route("/api/projects/:name/log", get(get_log))
         .route("/api/projects/:name/diff", get(get_diff))
+        .route("/api/projects/:name/files", get(get_files))
         .route("/api/projects/:name/open", post(post_open))
         .route("/api/projects/:name/checkout", post(post_checkout))
         .route("/api/projects/:name/pull", post(post_pull))
@@ -195,6 +196,19 @@ async fn get_diff(Path(name): Path<String>, Query(q): Query<HashMap<String, Stri
     };
     let diff = blocking(move || git::get_diff(&dir, sha.as_deref(), against.as_deref())).await;
     Ok(Json(json!({ "diff": diff })))
+}
+async fn get_files(Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    let cwd = q.get("cwd").filter(|s| !s.is_empty()).cloned();
+    let dir = match &cwd {
+        Some(c) => {
+            let n = name.clone();
+            let c = c.clone();
+            blocking(move || projects::resolve_workdir(&n, Some(&c))).await.map_err(bad)?
+        }
+        None => projects::project_path_from_name(&name).map_err(bad)?,
+    };
+    let files = blocking(move || git::list_files(&dir)).await;
+    Ok(Json(json!({ "files": files })))
 }
 
 // --- GitLab ---

@@ -525,6 +525,69 @@ describe("AgentChat", () => {
     expect(screen.queryByText(/queued \(/i)).not.toBeInTheDocument();
   });
 
+  // ---- Composer typeahead: @-file mentions + slash commands ----
+
+  const mentionFiles = ["src/App.tsx", "api.ts", "README.md"];
+
+  it("typing @ap opens a file dropdown filtered to matching paths", async () => {
+    renderChat([idleStatus], { files: mentionFiles });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "@ap");
+    // "ap" matches src/App.tsx and api.ts, but not README.md.
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /src\/App\.tsx/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /api\.ts/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /README\.md/ })).not.toBeInTheDocument();
+  });
+
+  it("pressing Enter with the file dropdown open inserts the path and does NOT send", async () => {
+    const { onMessage } = renderChat([idleStatus], { files: mentionFiles });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "@ap");
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    await userEvent.keyboard("{Enter}");
+    // The @query token is replaced by the top match's path + a trailing space, and nothing is sent.
+    expect(box).toHaveValue("@src/App.tsx ");
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("typing / opens the slash menu and selecting /review fills the composer with its template", async () => {
+    const { onMessage } = renderChat([idleStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "/review");
+    expect(await screen.findByRole("option", { name: /\/review/ })).toBeInTheDocument();
+    await userEvent.keyboard("{Enter}");
+    expect(box).toHaveValue("Review my current changes (git diff) and flag issues.");
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it("Escape closes the file mention menu", async () => {
+    renderChat([idleStatus], { files: mentionFiles });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "@ap");
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("Escape closes the slash command menu", async () => {
+    renderChat([idleStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "/");
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("a normal Enter still sends when no typeahead menu is open", async () => {
+    const { onMessage } = renderChat([idleStatus], { files: mentionFiles });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "just a message");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("just a message", []));
+  });
+
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
     const onBackfill = vi.fn().mockResolvedValue({
       agent: { key: "proj::wt:/wt/one", status: "awaitingInput", sessionId: "s1", pid: 1, startedAt: 0, exitCode: null },

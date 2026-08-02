@@ -18,6 +18,7 @@ import {
   getCommitActivity,
   listCommits,
   getDiff,
+  listFiles,
 } from "./git.ts";
 import { openTarget, type OpenTarget } from "./open.ts";
 import {
@@ -163,6 +164,18 @@ api.get("/projects/:name/diff", async (req, res) => {
     const sha = typeof req.query.sha === "string" && req.query.sha ? req.query.sha : undefined;
     const against = typeof req.query.against === "string" && req.query.against ? req.query.against : undefined;
     res.json({ diff: await getDiff(dir, sha, against) });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
+api.get("/projects/:name/files", async (req, res) => {
+  try {
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : undefined;
+    const dir = cwdParam
+      ? await resolveWorkdir(req.params.name, cwdParam)
+      : projectPathFromName(req.params.name);
+    res.json({ files: await listFiles(dir) });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }

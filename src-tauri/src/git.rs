@@ -554,6 +554,24 @@ pub fn get_diff(dir: &str, sha: Option<&str>, against: Option<&str>) -> String {
     git(dir, &args).unwrap_or_default()
 }
 
+/// Upper bound on the file list so a huge repo can't flood the composer typeahead.
+const FILE_LIST_CAP: usize = 5000;
+
+/// Repo-relative paths of tracked + untracked-but-not-ignored files in `dir`
+/// (via `git ls-files --cached --others --exclude-standard`), capped to a sane
+/// max. Mirrors `server/git.ts`'s `listFiles`.
+pub fn list_files(dir: &str) -> Vec<String> {
+    let out = match git(dir, &["ls-files", "--cached", "--others", "--exclude-standard"]) {
+        Ok(s) if !s.is_empty() => s,
+        _ => return vec![],
+    };
+    out.lines()
+        .filter(|l| !l.is_empty())
+        .take(FILE_LIST_CAP)
+        .map(|s| s.to_string())
+        .collect()
+}
+
 fn non_empty(s: &str) -> Option<String> {
     if s.is_empty() {
         None

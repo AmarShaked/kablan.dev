@@ -166,3 +166,28 @@ describe("diff API", () => {
     }
   });
 });
+
+describe("files API", () => {
+  test("lists tracked + untracked files but not ignored ones", async () => {
+    const s = await startServer();
+    try {
+      const main = join(s.workspace, "repo");
+      await initRepo(main, { "README.md": "# repo\n" });
+      await commit(main, "add src", { "src/App.tsx": "export {}\n" });
+      // An untracked (but not ignored) file, plus a .gitignore that hides one path.
+      writeFileSync(join(main, "notes.txt"), "scratch");
+      writeFileSync(join(main, ".gitignore"), "ignored.txt\n");
+      writeFileSync(join(main, "ignored.txt"), "secret");
+
+      const { status, json } = await s.api.get("/api/projects/repo/files");
+      assert.equal(status, 200);
+      assert.ok(Array.isArray(json.files));
+      assert.ok(json.files.includes("README.md"), "tracked file present");
+      assert.ok(json.files.includes("src/App.tsx"), "tracked nested file present");
+      assert.ok(json.files.includes("notes.txt"), "untracked-not-ignored file present");
+      assert.ok(!json.files.includes("ignored.txt"), "ignored file absent");
+    } finally {
+      await s.stop();
+    }
+  });
+});

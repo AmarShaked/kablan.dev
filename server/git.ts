@@ -370,3 +370,21 @@ export async function getDiff(dir: string, sha?: string, against?: string): Prom
     return "";
   }
 }
+
+/** Upper bound on the file list so a huge repo can't flood the composer typeahead. */
+const FILE_LIST_CAP = 5000;
+
+/**
+ * Repo-relative paths of tracked + untracked-but-not-ignored files in `dir`
+ * (via `git ls-files --cached --others --exclude-standard`), capped to a sane
+ * max. Mirrors `git.rs`'s `list_files`.
+ */
+export async function listFiles(dir: string): Promise<string[]> {
+  try {
+    const out = await git(dir, ["ls-files", "--cached", "--others", "--exclude-standard"]);
+    if (!out) return [];
+    return out.split("\n").filter(Boolean).slice(0, FILE_LIST_CAP);
+  } catch {
+    return [];
+  }
+}
