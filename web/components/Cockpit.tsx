@@ -8,6 +8,7 @@ import { useBranches, useWorktrees, useFactory, useFiles, useGitlabHosts, qk } f
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
 import { findServerUrl } from "../lib/serverUrl.ts";
+import { markIntentionalStop } from "../lib/serverStopIntent.ts";
 import { AgentChat } from "./AgentChat.tsx";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,23 @@ import { isTauri } from "../lib/version.ts";
 
 /** The right-pane views selectable from the cockpit header's tabs. */
 type RightTab = "details" | "environment" | "integrations" | "logs";
+
+/** Poll until the dev server at `cwd` has actually exited (or vanished), so its port is released
+ * before we bind it from another branch. Bounded so a stuck process can't hang the swap; a small
+ * grace after it clears gives the OS time to free the socket. */
+async function waitForServerStopped(project: string, cwd: string, timeoutMs = 6000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const s = await api.getServer(project, cwd);
+      if (!s || (s.status !== "running" && s.status !== "starting")) break;
+    } catch {
+      break; // treat an errored poll as "gone" rather than blocking the swap
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  await new Promise((r) => setTimeout(r, 400));
+}
 
 /**
  * The unified cockpit for a single branch — chat (left) + details (right) once it has a working
@@ -182,6 +200,7 @@ export function Cockpit({
     if (!cwd) return;
     setServerBusy(true);
     try {
+      markIntentionalStop(cwd); // this exit is expected — App suppresses its "crashed" toast
       await api.stopServer(project, cwd);
       setServer(null);
       setUrl(null);
@@ -221,13 +240,17 @@ export function Cockpit({
     [servers, project, cwd],
   );
 
-  // Replace: stop the dev server on another branch (`otherCwd`), then start one here — mirrors the
-  // plain `startServer` (same cwd/branch), with the same busy/error handling, then refreshes.
+  // Replace: stop the dev server on another branch (`otherCwd`), WAIT for it to actually exit so
+  // its port is freed, then start one here. Without the wait the new server races the old one for
+  // the port and fails to bind (spamming crash toasts); `markIntentionalStop` silences the old
+  // server's own expected-exit toast. Mirrors the plain `startServer` (same cwd/branch) otherwise.
   const replaceServer = async (otherCwd: string) => {
     if (!cwd) return;
     setServerBusy(true);
     try {
+      markIntentionalStop(otherCwd);
       await api.stopServer(project, otherCwd);
+      await waitForServerStopped(project, otherCwd);
       const s = await api.startServer(project, { cwd, branch: entry.branchName });
       setServer(s);
       await refreshServer();

@@ -11,6 +11,7 @@ import {
   type LogLine,
 } from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
+import { consumeIntentionalStop } from "./lib/serverStopIntent.ts";
 import { useAgentNotifications } from "./hooks/useAgentNotifications.tsx";
 import {
   APP_VERSION,
@@ -164,7 +165,11 @@ function AppContent() {
           // kills via signal (exitCode null), so this only fires on real crashes
           // (e.g. "command not found", a dev server that errored out). Name the
           // working copy (branch, else the cwd's folder) so it's clear which one.
-          if (s && (s.status === "error" || (s.status === "exited" && !!s.exitCode))) {
+          if (
+            s &&
+            (s.status === "error" || (s.status === "exited" && !!s.exitCode)) &&
+            !(cwd && consumeIntentionalStop(cwd))
+          ) {
             const where = s.branch ?? s.cwd.split("/").filter(Boolean).pop() ?? s.cwd;
             toast.error(
               `${msg.projectName} · ${where}: dev server exited (code ${s.exitCode ?? "error"}). Open the cockpit's Logs card for details.`,
