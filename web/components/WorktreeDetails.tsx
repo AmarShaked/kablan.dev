@@ -104,7 +104,6 @@ export function WorktreeDetails({
   onStartServer,
   onStopServer,
   onInstall,
-  onRefreshServer,
   otherRunningServers = [],
   onReplaceServer,
   linearWorkspace = "",
@@ -120,7 +119,6 @@ export function WorktreeDetails({
   onStopServer: () => void;
   /** Run `npm install` in this worktree (fixes a stale/missing node_modules). */
   onInstall?: () => void;
-  onRefreshServer?: () => void;
   /** Dev servers running on OTHER working copies of this same project (different branch/cwd). A
    * project's dev server holds one port, so only one branch can run it — these enable "replace". */
   otherRunningServers?: RunningServer[];
@@ -354,11 +352,6 @@ export function WorktreeDetails({
               {onInstall && !running && (
                 <Button size="xs" variant="outline" disabled={busy} onClick={onInstall}>
                   <Package className="size-3.5" /> Install deps
-                </Button>
-              )}
-              {onRefreshServer && (
-                <Button size="xs" variant="outline" disabled={busy} onClick={onRefreshServer}>
-                  <RefreshCw className="size-3.5" /> Refresh
                 </Button>
               )}
             </div>

@@ -406,7 +406,6 @@ export function Cockpit({
               onStartServer={startServer}
               onStopServer={stopServer}
               onInstall={installDeps}
-              onRefreshServer={refreshServer}
               otherRunningServers={otherRunningServers}
               onReplaceServer={replaceServer}
               linearWorkspace={linearWorkspace}
