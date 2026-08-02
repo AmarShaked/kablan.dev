@@ -45,6 +45,7 @@ const DEFAULT_FACTORY: FactorySettings = {
   stopAgentsOnExit: true,
   autoResumeAgents: false,
   chatHistoryDays: 30,
+  mcpConfigPath: "",
   notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 

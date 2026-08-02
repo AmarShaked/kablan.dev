@@ -112,6 +112,21 @@ export function AgentSettings({
             onChange={(e) => set("worktreeRoot", e.target.value)}
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="af-mcp">MCP config path (optional)</Label>
+          <Input
+            id="af-mcp"
+            value={value.mcpConfigPath}
+            placeholder="(none)"
+            spellCheck={false}
+            className="font-mono text-xs"
+            onChange={(e) => set("mcpConfigPath", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Path to an .mcp.json to load extra MCP servers for cockpit agents (they'll go through
+            Approve/Deny).
+          </p>
+        </div>
         <div className="flex items-center justify-between">
           <Label htmlFor="af-max">Max concurrent agents</Label>
           <Input

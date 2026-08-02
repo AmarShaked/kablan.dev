@@ -14,6 +14,7 @@ export interface FactorySettings {
   stopAgentsOnExit: boolean;
   autoResumeAgents: boolean;
   chatHistoryDays: number;
+  mcpConfigPath: string;
   notifications: NotificationSettings;
 }
 

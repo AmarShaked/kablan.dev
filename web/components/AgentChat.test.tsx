@@ -159,6 +159,45 @@ describe("AgentChat", () => {
     ]);
   });
 
+  function dropImage(target: HTMLElement, type = "image/png") {
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "x.png", { type });
+    fireEvent.drop(target, {
+      dataTransfer: { types: ["Files"], files: [file], items: [{ kind: "file", type }] },
+    });
+  }
+
+  it("stages a dropped image as an attachment and sends it as an image block", async () => {
+    const { onMessage } = renderChat([workingStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    dropImage(box);
+    expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
+
+    await userEvent.type(box, "see this");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(onMessage).toHaveBeenCalledWith("see this", [
+      expect.objectContaining({ mediaType: "image/png", data: expect.any(String) }),
+    ]);
+  });
+
+  it("shows the drop overlay on dragover with files and hides it on dragleave", async () => {
+    renderChat([workingStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    const dt = { types: ["Files"], files: [], items: [] };
+    fireEvent.dragOver(box, { dataTransfer: dt });
+    expect(await screen.findByText(/drop images to attach/i)).toBeInTheDocument();
+    fireEvent.dragLeave(box, { dataTransfer: dt });
+    expect(screen.queryByText(/drop images to attach/i)).not.toBeInTheDocument();
+  });
+
+  it("hides the drop overlay after a drop", async () => {
+    renderChat([workingStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    fireEvent.dragOver(box, { dataTransfer: { types: ["Files"], files: [], items: [] } });
+    expect(await screen.findByText(/drop images to attach/i)).toBeInTheDocument();
+    dropImage(box);
+    expect(screen.queryByText(/drop images to attach/i)).not.toBeInTheDocument();
+  });
+
   it("removes a staged image when its remove button is clicked", async () => {
     renderChat([workingStatus]);
     const box = screen.getByPlaceholderText(/message the agent/i);

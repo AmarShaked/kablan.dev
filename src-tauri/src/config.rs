@@ -55,6 +55,8 @@ pub struct FactorySettings {
     #[serde(default = "default_chat_history_days")]
     pub chat_history_days: u32,
     #[serde(default)]
+    pub mcp_config_path: String,
+    #[serde(default)]
     pub notifications: NotificationSettings,
 }
 
@@ -77,6 +79,7 @@ impl Default for FactorySettings {
             stop_agents_on_exit: true,
             auto_resume_agents: false,
             chat_history_days: default_chat_history_days(),
+            mcp_config_path: String::new(),
             notifications: NotificationSettings::default(),
         }
     }
@@ -260,6 +263,9 @@ fn apply_factory_patch(fac: &mut FactorySettings, f: &Value) {
             fac.chat_history_days = (n.floor() as u32).min(3650);
         }
     }
+    if let Some(s) = f.get("mcpConfigPath").and_then(|v| v.as_str()) {
+        fac.mcp_config_path = s.trim().to_string();
+    }
     if let Some(b) = f.get("stopAgentsOnExit").and_then(|v| v.as_bool()) {
         fac.stop_agents_on_exit = b;
     }
@@ -424,6 +430,27 @@ mod tests {
         // Negative is ignored (keeps default).
         let neg = apply_patch(base, &serde_json::json!({"factory":{"chatHistoryDays":-5}}));
         assert_eq!(neg.factory.chat_history_days, 30);
+    }
+
+    #[test]
+    fn mcp_config_path_default_empty_and_roundtrips() {
+        assert_eq!(FactorySettings::default().mcp_config_path, "");
+        // Absent from JSON → default empty.
+        let cfg: AppConfig = serde_json::from_str(r#"{"factory":{}}"#).unwrap();
+        assert_eq!(cfg.factory.mcp_config_path, "");
+        // Present in JSON round-trips as camelCase.
+        let json = serde_json::to_string(&AppConfig::default()).unwrap();
+        assert!(json.contains("\"mcpConfigPath\""));
+    }
+
+    #[test]
+    fn apply_patch_sets_and_trims_mcp_config_path() {
+        let base = AppConfig::default();
+        let set = apply_patch(base.clone(), &serde_json::json!({"factory":{"mcpConfigPath":"  /some/.mcp.json  "}}));
+        assert_eq!(set.factory.mcp_config_path, "/some/.mcp.json");
+        // An empty string clears it.
+        let cleared = apply_patch(set, &serde_json::json!({"factory":{"mcpConfigPath":""}}));
+        assert_eq!(cleared.factory.mcp_config_path, "");
     }
 
     #[test]

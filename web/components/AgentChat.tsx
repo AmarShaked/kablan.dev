@@ -971,13 +971,33 @@ export function AgentChat({
   const [model, setModel] = useState("");
   const [permissionMode, setPermissionMode] = useState("acceptEdits");
   const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
-  // Images pasted into the composer, staged until the next send (rendered as removable thumbnails).
+  // Images pasted/dropped into the composer, staged until the next send (removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const attachSeq = useRef(0);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  // Drag-and-drop overlay state. `dragDepth` counts enter/leave over nested children so the
+  // "Drop images to attach" overlay doesn't flicker as the pointer crosses child elements.
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
 
-  // Paste-to-attach: pull image files off the clipboard, read them as base64 data URLs, and stage
-  // them. preventDefault stops the browser also pasting the image's name as text into the box.
+  // Shared "image File → staged Attachment" logic used by BOTH the paste and the drop handlers:
+  // read the file as a base64 data URL, split off the raw base64 for the API, and append a
+  // thumbnail-able attachment.
+  const stageImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result); // data:<mediaType>;base64,<data>
+      const comma = url.indexOf(",");
+      const data = comma >= 0 ? url.slice(comma + 1) : "";
+      if (!data) return;
+      const id = `att-${(attachSeq.current += 1)}`;
+      setAttachments((prev) => [...prev, { id, url, mediaType: file.type, data }]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Paste-to-attach: pull image files off the clipboard and stage them. preventDefault stops the
+  // browser also pasting the image's name as text into the box.
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const imageItems = Array.from(e.clipboardData?.items ?? []).filter(
       (it) => it.kind === "file" && it.type.startsWith("image/"),
@@ -986,20 +1006,42 @@ export function AgentChat({
     e.preventDefault();
     for (const item of imageItems) {
       const file = item.getAsFile();
-      if (!file) continue;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = String(reader.result); // data:<mediaType>;base64,<data>
-        const comma = url.indexOf(",");
-        const data = comma >= 0 ? url.slice(comma + 1) : "";
-        if (!data) return;
-        const id = `att-${(attachSeq.current += 1)}`;
-        setAttachments((prev) => [...prev, { id, url, mediaType: file.type, data }]);
-      };
-      reader.readAsDataURL(file);
+      if (file) stageImageFile(file);
     }
   };
   const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
+
+  // Drag-and-drop-to-attach. A drag carrying files toggles the overlay (via the enter/leave depth
+  // counter); dragover preventDefault marks the pane a valid drop target. On drop we preventDefault
+  // (so the browser doesn't navigate to the file), stage the image files, and ignore the rest.
+  const dragHasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!canChat || !dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragActive(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!canChat || !dragHasFiles(e)) return;
+    e.preventDefault(); // required so the drop event fires
+    if (!dragActive) setDragActive(true);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!dragHasFiles(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragActive(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    dragDepth.current = 0;
+    setDragActive(false);
+    if (files.length === 0) return;
+    e.preventDefault();
+    if (!canChat) return;
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    for (const file of images) stageImageFile(file);
+    if (images.length === 0) toast("Only image files can be attached.");
+  };
 
   // Backfill the transcript from the server once, if nothing has streamed in live yet.
   useEffect(() => {
@@ -1167,7 +1209,18 @@ export function AgentChat({
   const chatEnabled = canChat;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-background/80 text-sm font-medium text-primary backdrop-blur-sm">
+          Drop images to attach
+        </div>
+      )}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={transcriptRef}

@@ -16,6 +16,7 @@ const base: FactorySettings = {
   stopAgentsOnExit: true,
   autoResumeAgents: false,
   chatHistoryDays: 30,
+  mcpConfigPath: "",
   notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 
@@ -82,6 +83,16 @@ describe("AgentSettings", () => {
     await userEvent.type(input, "0");
     expect(onChange.mock.calls.at(-1)![0].chatHistoryDays).toBe(0);
     expect(input).toHaveValue(0);
+  });
+
+  it("edits the MCP config path", async () => {
+    const onChange = vi.fn();
+    render(<Harness initial={base} onChange={onChange} />);
+    const input = screen.getByLabelText(/mcp config path/i);
+    expect(input).toHaveValue("");
+    await userEvent.type(input, "/x/.mcp.json");
+    expect(onChange.mock.calls.at(-1)![0].mcpConfigPath).toBe("/x/.mcp.json");
+    expect(input).toHaveValue("/x/.mcp.json");
   });
 
   it("selects a permission mode", async () => {

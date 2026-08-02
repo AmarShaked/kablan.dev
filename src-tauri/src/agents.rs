@@ -264,6 +264,12 @@ pub fn build_agent_argv(cfg: &crate::config::FactorySettings, resume: Option<&st
     } else {
         a.push("--permission-mode".into()); a.push(cfg.permission_mode.clone());
     }
+    // An explicit MCP config file loads its servers' tools into the spawned CLI (they still get
+    // gated by our supervised Approve/Deny flow). Applies regardless of permission mode.
+    if !cfg.mcp_config_path.trim().is_empty() {
+        a.push("--mcp-config".into());
+        a.push(cfg.mcp_config_path.trim().to_string());
+    }
     if !cfg.agent_model.trim().is_empty() { a.push("--model".into()); a.push(cfg.agent_model.clone()); }
     if let Some(sid) = resume { a.push("--resume".into()); a.push(sid.to_string()); }
     a
@@ -673,6 +679,38 @@ mod tests {
         assert!(has_pair(&argv, "--permission-mode", "acceptEdits"), "{argv:?}");
         assert!(!argv.iter().any(|a| a == "--permission-prompt-tool"), "{argv:?}");
         assert!(!argv.iter().any(|a| a == "--replay-user-messages"), "{argv:?}");
+    }
+
+    #[test]
+    fn build_argv_appends_mcp_config_when_set() {
+        // Set: the flag+path pair is appended (normal, non-supervised branch).
+        let mut cfg = crate::config::FactorySettings::default();
+        cfg.agent_command = "claude".into();
+        cfg.permission_mode = "acceptEdits".into();
+        cfg.mcp_config_path = "/some/path".into();
+        let argv = build_agent_argv(&cfg, None);
+        assert!(has_pair(&argv, "--mcp-config", "/some/path"), "{argv:?}");
+
+        // Empty (default): no --mcp-config flag at all.
+        let mut empty = crate::config::FactorySettings::default();
+        empty.agent_command = "claude".into();
+        empty.permission_mode = "acceptEdits".into();
+        let argv2 = build_agent_argv(&empty, None);
+        assert!(!argv2.iter().any(|a| a == "--mcp-config"), "{argv2:?}");
+    }
+
+    #[test]
+    fn build_argv_appends_mcp_config_in_supervised_branch() {
+        // The mcp flag applies regardless of permission mode — supervised included.
+        let mut cfg = crate::config::FactorySettings::default();
+        cfg.agent_command = "claude".into();
+        cfg.permission_mode = "supervised".into();
+        cfg.mcp_config_path = "  /trim/me.json  ".into();
+        let argv = build_agent_argv(&cfg, None);
+        // Trimmed before it hits the argv.
+        assert!(has_pair(&argv, "--mcp-config", "/trim/me.json"), "{argv:?}");
+        // Supervised handshake flags still present.
+        assert!(has_pair(&argv, "--permission-prompt-tool", "stdio"), "{argv:?}");
     }
 
     #[test]
