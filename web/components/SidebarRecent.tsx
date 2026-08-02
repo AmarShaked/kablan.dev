@@ -246,9 +246,12 @@ function BranchRow({
   onRowDrop,
   dropBefore,
   dropAfter,
+  active,
 }: {
   entity: BranchEntity;
   features: { id: string; name: string }[];
+  /** True when this branch's cockpit is the one currently open — highlights the row as selected. */
+  active?: boolean;
   onOpenBranch: (name: string) => void;
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
@@ -283,8 +286,10 @@ function BranchRow({
       onDragEnd={onDragEnd}
       onDragOver={onRowDragOver}
       onDrop={onRowDrop}
+      aria-current={active ? "true" : undefined}
       className={cn(
         "group flex w-full min-w-0 cursor-grab items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent active:cursor-grabbing",
+        active && "bg-accent font-medium text-foreground ring-1 ring-inset ring-primary/40",
         dropBefore && "border-t-2 border-primary",
         dropAfter && "border-b-2 border-primary",
       )}
@@ -324,6 +329,8 @@ export interface SidebarRecentProps {
    * project's full new feature-id order. */
   onReorderFeatures: (order: string[]) => void;
   onNewFeature: () => void;
+  /** The branch whose cockpit is currently open, if any — its row is highlighted as selected. */
+  activeBranch?: string | null;
   /** Fetches all remotes (git fetch --all --prune) for the active project — surfaced as a
    * small action in the Branches group header. Omitted entirely when there's nothing to fetch
    * for (no project selected). */
@@ -348,6 +355,7 @@ export function SidebarRecent({
   onReorderFeatureBranches,
   onReorderFeatures,
   onNewFeature,
+  activeBranch,
   onFetch,
   featuresLoading = false,
   branchesLoading = false,
@@ -651,6 +659,7 @@ export function SidebarRecent({
                               key={entity.name}
                               entity={entity}
                               features={features}
+                              active={entity.name === activeBranch}
                               onOpenBranch={onOpenBranch}
                               onFileBranch={onFileBranch}
                               onUnfileBranch={onUnfileBranch}
@@ -715,6 +724,7 @@ export function SidebarRecent({
                   key={entity.name}
                   entity={entity}
                   features={features}
+                  active={entity.name === activeBranch}
                   onOpenBranch={onOpenBranch}
                   onFileBranch={onFileBranch}
                   onUnfileBranch={onUnfileBranch}

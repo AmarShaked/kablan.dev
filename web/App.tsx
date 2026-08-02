@@ -381,6 +381,7 @@ function AppContent() {
           onRescan={refreshProjects}
           featureGroups={branchEntities.featureGroups}
           unfiled={branchEntities.unfiled}
+          activeBranch={view === "cockpit" ? cockpitBranch : null}
           onOpenBranch={openBranch}
           onFetch={fetchRemote}
           featuresLoading={factoryQuery.isLoading}

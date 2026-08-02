@@ -18,6 +18,8 @@ export interface ProjectMenuProps {
   featureGroups: FeatureGroup[];
   unfiled: BranchEntity[];
   onOpenBranch: (name: string) => void;
+  /** The branch whose cockpit is currently open — highlighted as selected in the branch lists. */
+  activeBranch?: string | null;
   /** Fetches all remotes for the selected project (`git fetch --all --prune`) and invalidates
    * the branches/worktrees queries — surfaced in the Branches group header. */
   onFetch: () => Promise<void> | void;
@@ -45,6 +47,7 @@ export function ProjectMenu({
   featureGroups,
   unfiled,
   onOpenBranch,
+  activeBranch,
   onFetch,
   featuresLoading,
   branchesLoading,
@@ -110,6 +113,7 @@ export function ProjectMenu({
         <SidebarRecent
           featureGroups={featureGroups}
           unfiled={unfiled}
+          activeBranch={activeBranch}
           onOpenBranch={onOpenBranch}
           onFileBranch={fileBranch}
           onUnfileBranch={unfileBranch}

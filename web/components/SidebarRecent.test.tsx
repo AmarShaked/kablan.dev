@@ -93,6 +93,16 @@ describe("SidebarRecent", () => {
     expect(screen.getByText("main")).toHaveClass("font-semibold");
   });
 
+  it("marks the active branch's row as current (aria-current)", () => {
+    renderComponent({ unfiled: [branchEntity({ name: "main" })], activeBranch: "main" });
+    expect(screen.getByRole("button", { name: /main/i })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("does not mark rows as current when no branch is active", () => {
+    renderComponent({ unfiled: [branchEntity({ name: "main" })], activeBranch: null });
+    expect(screen.getByRole("button", { name: /main/i })).not.toHaveAttribute("aria-current");
+  });
+
   it("shows a green dot for a branch with a running dev server", () => {
     renderComponent({ unfiled: [branchEntity({ name: "main", serverRunning: true })] });
     expect(screen.getByLabelText("Dev server running")).toBeInTheDocument();
