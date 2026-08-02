@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
+import { AgentKeyContext, useExpanded } from "../lib/chatExpand.ts";
 import { AgentDot } from "./AgentDot.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { DiffView } from "./DiffView.tsx";
@@ -346,7 +347,7 @@ const RESULT_CLAMP = 2000;
  * clamped with a show-more for very long output. An MCP tool that errored (name `mcp__…`) shows a
  * clear "not available in this agent" notice instead of the raw dead-end error. */
 function ToolLine({ tool }: { tool: ToolPrimData }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useExpanded(tool.key);
   const [full, setFull] = useState(false);
   const hasResult = tool.resultText != null || tool.isError === true;
   const revealable = hasResult;
@@ -368,7 +369,7 @@ function ToolLine({ tool }: { tool: ToolPrimData }) {
       {revealable ? (
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setOpen(!open)}
           aria-expanded={open}
           className="flex max-w-full items-center gap-1 rounded px-0.5 py-0.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -419,13 +420,13 @@ function ToolLine({ tool }: { tool: ToolPrimData }) {
  * reveal the individual `⏺` lines under a hairline rail — each of which is itself independently
  * revealable (see `ToolLine`). Always starts collapsed — the count is usually all you want. */
 function ToolGroup({ tools }: { tools: ToolPrimData[] }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useExpanded(`g-${tools[0].key}`);
   const header = groupHeader(tools);
   return (
     <div className="flex max-w-full flex-col self-start">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="flex max-w-full items-center gap-1.5 self-start rounded px-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
@@ -509,13 +510,13 @@ function PlanCard({ plan }: { plan: string }) {
  * Collapsed by default (the reasoning is available on demand, not in your face); expanding renders
  * the thinking text as markdown. Distinct from the live animated "thinking…" indicator, which is
  * only for the in-progress state — this is for reasoning content that has arrived. */
-function ThinkingBlock({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
+function ThinkingBlock({ id, text }: { id: string; text: string }) {
+  const [open, setOpen] = useExpanded(id);
   return (
     <div className="flex w-full max-w-[85%] flex-col self-start">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="flex items-center gap-1.5 self-start rounded px-1 py-0.5 text-xs italic text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
@@ -539,17 +540,19 @@ function ThinkingBlock({ text }: { text: string }) {
  * and — reusing ToolLine's reveal mechanism — the subagent's output revealed on expand. Rich,
  * non-groupable (never absorbed into a "N tool calls" group). */
 function SubagentCard({
+  id,
   subagentType,
   description,
   resultText,
   isError,
 }: {
+  id: string;
   subagentType: string;
   description: string;
   resultText?: string;
   isError?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useExpanded(id);
   const [full, setFull] = useState(false);
   const hasResult = resultText != null || isError === true;
   const text = resultText ?? "";
@@ -560,7 +563,7 @@ function SubagentCard({
     <div className="flex w-full max-w-[85%] flex-col gap-1.5 self-start rounded-lg border border-border bg-card/60 px-3 py-2">
       <button
         type="button"
-        onClick={() => hasResult && setOpen((o) => !o)}
+        onClick={() => hasResult && setOpen(!open)}
         aria-expanded={open}
         disabled={!hasResult}
         className="flex items-center gap-2 text-left disabled:cursor-default"
@@ -663,12 +666,13 @@ function renderPrims(prims: Prim[]): ReactNode[] {
         );
         break;
       case "thinking":
-        nodes.push(<ThinkingBlock key={p.key} text={p.text} />);
+        nodes.push(<ThinkingBlock key={p.key} id={p.key} text={p.text} />);
         break;
       case "diff":
         nodes.push(
           <DiffView
             key={p.key}
+            id={p.key}
             name={p.name}
             input={p.input}
             hasResult={p.resultText != null || p.isError === true}
@@ -680,6 +684,7 @@ function renderPrims(prims: Prim[]): ReactNode[] {
         nodes.push(
           <SubagentCard
             key={p.key}
+            id={p.key}
             subagentType={p.subagentType}
             description={p.description}
             resultText={p.resultText}
@@ -735,6 +740,115 @@ function ThinkingRow() {
       </span>
       <span>thinking…</span>
     </div>
+  );
+}
+
+/** The token accounting we surface in the footer gauge: the four raw counters Claude Code reports
+ * (`usage.input_tokens` / `output_tokens` / `cache_read_input_tokens` / `cache_creation_input_tokens`),
+ * their sum, and the model's context window (best-effort — a sane default when unknown). */
+type Usage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreation: number;
+  total: number;
+  contextWindow: number;
+};
+
+/** Fallback context window when we can't infer the model's real one from the stream. Claude Code
+ * models are ≥200k, so this keeps the gauge honest-ish without over-claiming. */
+const DEFAULT_CONTEXT_WINDOW = 200_000;
+
+/** Parses a raw Claude Code `usage` object into our `Usage`, summing the four token counters.
+ * Returns null when there's nothing meaningful (no object / all-zero) so callers can hide the gauge. */
+function parseUsage(u: unknown): Usage | null {
+  if (!u || typeof u !== "object") return null;
+  const o = u as Record<string, any>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const input = num(o.input_tokens);
+  const output = num(o.output_tokens);
+  const cacheRead = num(o.cache_read_input_tokens);
+  const cacheCreation = num(o.cache_creation_input_tokens);
+  const total = input + output + cacheRead + cacheCreation;
+  if (total <= 0) return null;
+  return { input, output, cacheRead, cacheCreation, total, contextWindow: DEFAULT_CONTEXT_WINDOW };
+}
+
+/** The latest known token usage for the session: prefer the most recent `result` event's usage
+ * (the authoritative end-of-turn tally), falling back to the most recent assistant `message.usage`
+ * (the running turn). Returns null until any usage has arrived. */
+function latestUsage(timeline: TimelineItem[]): Usage | null {
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    const item = timeline[i];
+    if (item.kind !== "agent") continue;
+    const e = item.event as Record<string, any> | null;
+    if (e?.type === "result") {
+      const u = parseUsage(e.usage);
+      if (u) return u;
+    }
+  }
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    const item = timeline[i];
+    if (item.kind !== "agent") continue;
+    const e = item.event as Record<string, any> | null;
+    if (e?.type === "assistant") {
+      const u = parseUsage(e.message?.usage);
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
+/** Compact token count formatter: 1234 → "1k", 128000 → "128k", 2_500_000 → "2.5M". */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+/** A small, muted context-usage indicator for the composer footer: a thin progress ring (color
+ * shifting toward amber/red as the window fills) plus a "used / window" label, with a tooltip
+ * breaking down input/output/cache tokens. Rendered only when usage exists (see the footer). */
+function ContextUsage({ usage }: { usage: Usage }) {
+  const pct = Math.min(1, usage.total / usage.contextWindow);
+  const pctLabel = Math.round(pct * 100);
+  const r = 6;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - pct);
+  const ring = pct >= 0.9 ? "text-destructive" : pct >= 0.75 ? "text-amber-500" : "text-primary";
+  const n = (v: number) => v.toLocaleString();
+  const tip =
+    `Context: ${n(usage.total)} / ${n(usage.contextWindow)} tokens (${pctLabel}%)\n` +
+    `input ${n(usage.input)} · output ${n(usage.output)} · ` +
+    `cache read ${n(usage.cacheRead)} · cache write ${n(usage.cacheCreation)}`;
+  return (
+    <span
+      className="flex items-center gap-1"
+      title={tip}
+      aria-label={`Context usage ${pctLabel}%`}
+    >
+      <svg viewBox="0 0 16 16" className="size-3.5 -rotate-90" aria-hidden>
+        <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-border" />
+        <circle
+          cx="8"
+          cy="8"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={`${c} ${c}`}
+          strokeDashoffset={off}
+          className={`${ring} transition-[stroke-dashoffset] duration-500 ease-out`}
+        />
+      </svg>
+      <span className="tabular-nums">
+        {formatTokens(usage.total)} / {formatTokens(usage.contextWindow)}
+      </span>
+    </span>
   );
 }
 
@@ -925,10 +1039,52 @@ export function AgentChat({
     setTimeline((prev) => [...prev, ...newItems]);
   }, [events]);
 
+  // Follow-only-when-at-bottom scrolling. We auto-pin to the bottom on new content ONLY if the user
+  // was already there; if they've scrolled up to read history we leave them put (and surface a
+  // "Jump to bottom" pill). `atBottomRef` mirrors `isAtBottom` so the content-growth effect can read
+  // the latest value without re-subscribing on every scroll.
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasUnread, setHasUnread] = useState(false);
+  const atBottomRef = useRef(true);
+  const prevLenRef = useRef(0);
+
+  const onTranscriptScroll = () => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    atBottomRef.current = atBottom;
+    setIsAtBottom(atBottom);
+    if (atBottom) setHasUnread(false);
+  };
+
+  const scrollToBottom = () => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+    setIsAtBottom(true);
+    setHasUnread(false);
+  };
+
   useEffect(() => {
     const el = transcriptRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const grew = timeline.length > prevLenRef.current;
+    prevLenRef.current = timeline.length;
+    // At bottom → keep following (covers new messages, status/approval-driven height changes, and
+    // the initial mount, since atBottomRef starts true). Scrolled up → only flag unread on actual
+    // new timeline content, never yank the viewport.
+    if (atBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      setHasUnread(false);
+    } else if (grew) {
+      setHasUnread(true);
+    }
   }, [timeline.length, status, live.approvals.length]);
+
+  // Latest known token usage for the session, recomputed as the transcript grows (cheap: two
+  // backward scans that early-exit). null until any usage has streamed in → the gauge stays hidden.
+  const usage = useMemo(() => latestUsage(timeline), [timeline]);
 
   const stop = async () => {
     setBusy(true);
@@ -1012,21 +1168,43 @@ export function AgentChat({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div ref={transcriptRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4">
-        {timeline.length === 0 && status !== "working" ? (
-          <p className="text-sm text-muted-foreground">
-            {!canChat
-              ? "Start a session to chat with an agent here."
-              : "Send a message to begin — the agent starts on your first message."}
-          </p>
-        ) : (
-          renderPrims(flattenTimeline(timeline))
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={transcriptRef}
+          onScroll={onTranscriptScroll}
+          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto custom-scroll p-4"
+        >
+          <AgentKeyContext.Provider value={agentKey}>
+            {timeline.length === 0 && status !== "working" ? (
+              <p className="text-sm text-muted-foreground">
+                {!canChat
+                  ? "Start a session to chat with an agent here."
+                  : "Send a message to begin — the agent starts on your first message."}
+              </p>
+            ) : (
+              renderPrims(flattenTimeline(timeline))
+            )}
+            {onResolveApproval &&
+              live.approvals.map((appr) => (
+                <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
+              ))}
+            {status === "working" && <ThinkingRow />}
+          </AgentKeyContext.Provider>
+        </div>
+        {!isAtBottom && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            aria-label="Jump to bottom"
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-md backdrop-blur transition-colors hover:text-foreground"
+          >
+            <ChevronDown className="size-3.5" />
+            Jump to bottom
+            {hasUnread && (
+              <span aria-hidden className="ml-0.5 size-1.5 rounded-full bg-primary" />
+            )}
+          </button>
         )}
-        {onResolveApproval &&
-          live.approvals.map((appr) => (
-            <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
-          ))}
-        {status === "working" && <ThinkingRow />}
       </div>
 
       <div className="border-t border-border p-3">
@@ -1127,7 +1305,12 @@ export function AgentChat({
               <Square className="size-3" /> Stop
             </button>
           )}
-          <span className="ml-auto flex items-center gap-1.5">
+          {usage && (
+            <span className="ml-auto">
+              <ContextUsage usage={usage} />
+            </span>
+          )}
+          <span className={`flex items-center gap-1.5 ${usage ? "" : "ml-auto"}`}>
             <AgentDot status={status} />
             {title ? `${title} · ` : ""}
             {status ? STATUS_LABEL[status] ?? "Idle" : "Not started"}

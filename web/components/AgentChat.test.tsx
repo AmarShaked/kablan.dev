@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentChat } from "./AgentChat.tsx";
+import { resetExpandStore } from "../lib/chatExpand.ts";
 
 /** Feeds messages into the AgentStreamProvider's ingest on mount, the way the app's WebSocket
  * handler normally would — lets a test seed the transcript without a real socket. */
@@ -20,7 +21,7 @@ function renderChat(seed: unknown[] = [], overrides: Partial<Parameters<typeof A
   const onStart = vi.fn().mockResolvedValue(undefined);
   const onMessage = vi.fn().mockResolvedValue(undefined);
   const onStop = vi.fn().mockResolvedValue(undefined);
-  render(
+  const { unmount } = render(
     <AgentStreamProvider>
       <Seed messages={seed} />
       <AgentChat
@@ -33,7 +34,7 @@ function renderChat(seed: unknown[] = [], overrides: Partial<Parameters<typeof A
       />
     </AgentStreamProvider>,
   );
-  return { onStart, onMessage, onStop };
+  return { onStart, onMessage, onStop, unmount };
 }
 
 const workingStatus = {
@@ -49,6 +50,10 @@ const idleStatus = {
 };
 
 describe("AgentChat", () => {
+  // The expand/collapse store is a module-level singleton persisted to localStorage; reset it
+  // between tests so open state from one test can't leak into another that reuses the same keys.
+  beforeEach(() => resetExpandStore());
+
   it("sends the composer text via onMessage and optimistically shows a You bubble", async () => {
     const { onMessage } = renderChat([workingStatus]);
     const box = screen.getByPlaceholderText(/message the agent/i);
@@ -337,6 +342,68 @@ describe("AgentChat", () => {
     expect(screen.queryByText(/look at the config/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByText("Thinking"));
     expect(screen.getByText(/look at the config/i)).toBeInTheDocument();
+  });
+
+  // ---- Phase 3: follow/jump scroll, token gauge, persisted expand/collapse ----
+
+  it("shows a 'Jump to bottom' button once the transcript is scrolled up, and hides it on click", async () => {
+    renderChat([assistant([{ type: "text", text: "hello there" }])]);
+    const el = document.querySelector(".overflow-y-auto") as HTMLElement;
+    expect(el).toBeTruthy();
+    // jsdom does no layout, so stub the geometry to make the isAtBottom math see us scrolled up.
+    Object.defineProperty(el, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(el, "clientHeight", { value: 300, configurable: true });
+    el.scrollTop = 0;
+    fireEvent.scroll(el);
+    const jump = await screen.findByRole("button", { name: /jump to bottom/i });
+    expect(jump).toBeInTheDocument();
+    await userEvent.click(jump);
+    expect(screen.queryByRole("button", { name: /jump to bottom/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a context-usage gauge in the footer when a result event carries usage", () => {
+    renderChat([
+      ev({
+        type: "result",
+        subtype: "success",
+        usage: {
+          input_tokens: 100000,
+          output_tokens: 2000,
+          cache_read_input_tokens: 26000,
+          cache_creation_input_tokens: 0,
+        },
+      }),
+    ]);
+    // total = 128000 → "128k", default window 200000 → "128k / 200k".
+    expect(screen.getByText("128k / 200k")).toBeInTheDocument();
+  });
+
+  it("shows no usage gauge before any usage has arrived", () => {
+    renderChat([assistant([{ type: "text", text: "hi" }])]);
+    expect(screen.queryByText(/\/ 200k/)).not.toBeInTheDocument();
+  });
+
+  it("persists an expanded ToolGroup to localStorage and restores it on remount", async () => {
+    localStorage.clear();
+    const seed = [
+      assistant([
+        { type: "tool_use", id: "b1", name: "Bash", input: { command: "ls" } },
+        { type: "tool_use", id: "b2", name: "Bash", input: { command: "pwd" } },
+      ]),
+    ];
+    const { unmount } = renderChat(seed);
+    // Collapsed by default: only the group header shows, the individual lines are hidden.
+    const header = screen.getByText("Ran 2 commands");
+    expect(screen.queryByText("Bash ls")).not.toBeInTheDocument();
+    await userEvent.click(header);
+    expect(screen.getByText("Bash ls")).toBeInTheDocument();
+    // The open state was written to localStorage.
+    const stored = JSON.parse(localStorage.getItem("kablan:chatExpand") || "{}") as Record<string, boolean>;
+    expect(Object.values(stored)).toContain(true);
+    // Remounting a fresh cockpit restores the expanded group from the persisted state.
+    unmount();
+    renderChat(seed);
+    expect(screen.getByText("Bash ls")).toBeInTheDocument();
   });
 
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {

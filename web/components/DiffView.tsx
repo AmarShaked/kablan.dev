@@ -1,6 +1,7 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { diffLines, type Change } from "diff";
+import { useExpanded } from "../lib/chatExpand.ts";
 
 /** One contiguous run of diff parts (an Edit's single before→after, or one hunk of a MultiEdit). */
 type DiffHunk = Change[];
@@ -70,17 +71,20 @@ function DiffStatusDot({ hasResult, isError }: { hasResult: boolean; isError?: b
  * dot; expanding reveals a unified-diff view (added lines green, removed red, context muted) that
  * scrolls horizontally so long lines never widen the pane. */
 export function DiffView({
+  id,
   name,
   input,
   hasResult,
   isError,
 }: {
+  /** Stable per-entry id for persisting the open state across reloads/remounts. */
+  id: string;
   name: string;
   input: unknown;
   hasResult: boolean;
   isError?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useExpanded(id);
   const { hunks, additions, deletions, filePath } = useMemo(() => buildDiff(name, input), [name, input]);
   const label = filePath ? base(filePath) : name;
 
@@ -88,7 +92,7 @@ export function DiffView({
     <div className="flex max-w-full flex-col self-start">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
         title={filePath ?? name}
         className="flex max-w-full items-center gap-1.5 self-start rounded px-0.5 py-0.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
