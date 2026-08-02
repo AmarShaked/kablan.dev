@@ -589,10 +589,30 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
     let argv = agents::build_agent_argv(&cfg.factory, None);
     let _ = st.agents.start(&key, &worktree_path, argv, None);
     if let Some(text) = message {
-        st.agents.send(&key, &text);
+        st.agents.send(&key, &text, &[]);
     }
 
     Ok(Json(json!({ "branch": new_branch })))
+}
+
+/// Parse an optional `images` array — `[{ mediaType, data }]` (base64) — from a message body into
+/// the `(media_type, base64)` pairs `agents.send` expects. Silently drops malformed entries.
+fn parse_message_images(b: &Value) -> Vec<(String, String)> {
+    b.get("images")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|img| {
+                    let mt = img.get("mediaType").and_then(|v| v.as_str())?;
+                    let data = img.get("data").and_then(|v| v.as_str())?;
+                    if mt.is_empty() || data.is_empty() {
+                        return None;
+                    }
+                    Some((mt.to_string(), data.to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
@@ -600,11 +620,13 @@ async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<
     let b = parse_body(&body);
     let branch = branch_from_body(&b)?;
     let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if text.is_empty() {
-        return Err(bad("text is required"));
+    let images = parse_message_images(&b);
+    // A turn needs at least text or one image.
+    if text.is_empty() && images.is_empty() {
+        return Err(bad("text or an image is required"));
     }
     let key = branch_agent_key(&name, &branch);
-    let ok = st.agents.send(&key, &text);
+    let ok = st.agents.send(&key, &text, &images);
     Ok(Json(json!({ "ok": ok })))
 }
 

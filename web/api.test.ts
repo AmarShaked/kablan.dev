@@ -28,7 +28,9 @@ describe("factory types", () => {
     expectTypeOf<typeof api.factory.agentStart>().parameters.toEqualTypeOf<
       [string, string, { copyNodeModules?: boolean; copyEnv?: boolean; model?: string }?]
     >();
-    expectTypeOf<typeof api.factory.agentMessage>().parameters.toEqualTypeOf<[string, string, string]>();
+    expectTypeOf<typeof api.factory.agentMessage>().parameters.toEqualTypeOf<
+      [string, string, string, { mediaType: string; data: string }[]?]
+    >();
     expectTypeOf<typeof api.factory.agentStop>().parameters.toEqualTypeOf<[string, string]>();
     expectTypeOf<typeof api.factory.getAgent>().parameters.toEqualTypeOf<[string, string]>();
   });

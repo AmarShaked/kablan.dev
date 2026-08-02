@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
@@ -55,7 +55,7 @@ describe("AgentChat", () => {
     await userEvent.type(box, "do the thing");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
-    expect(onMessage).toHaveBeenCalledWith("do the thing");
+    expect(onMessage).toHaveBeenCalledWith("do the thing", []);
     expect(screen.getByText("You")).toBeInTheDocument();
     expect(screen.getByText("do the thing")).toBeInTheDocument();
   });
@@ -66,7 +66,7 @@ describe("AgentChat", () => {
     await userEvent.type(box, "kick off");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
     // waitFor polls inside act(), flushing the async start→send→setBusy(false) chain.
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("kick off"));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("kick off", []));
     expect(onStart).toHaveBeenCalled();
     expect(screen.getByText("kick off")).toBeInTheDocument();
   });
@@ -76,7 +76,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "another");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("another"));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("another", []));
     expect(onStart).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "do it");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    expect(onMessage).toHaveBeenCalledWith("do it\n\nthink hard");
+    expect(onMessage).toHaveBeenCalledWith("do it\n\nthink hard", []);
     expect(screen.getByText("do it")).toBeInTheDocument(); // bubble shows what the user typed
   });
 
@@ -144,7 +144,36 @@ describe("AgentChat", () => {
     const chip = screen.getByRole("button", { name: "Add tests" });
     await userEvent.click(chip);
 
-    expect(onMessage).toHaveBeenCalledWith("Add tests");
+    expect(onMessage).toHaveBeenCalledWith("Add tests", []);
+  });
+
+  function pasteImage(box: HTMLElement, type = "image/png") {
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "x.png", { type });
+    fireEvent.paste(box, {
+      clipboardData: { items: [{ kind: "file", type, getAsFile: () => file }] },
+    });
+  }
+
+  it("attaches a pasted image and sends it as an image block alongside the text", async () => {
+    const { onMessage } = renderChat([workingStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    pasteImage(box);
+    expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
+
+    await userEvent.type(box, "look at this");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(onMessage).toHaveBeenCalledWith("look at this", [
+      expect.objectContaining({ mediaType: "image/png", data: expect.any(String) }),
+    ]);
+  });
+
+  it("removes a staged image when its remove button is clicked", async () => {
+    renderChat([workingStatus]);
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    pasteImage(box);
+    expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /remove image/i }));
+    expect(screen.queryByAltText("pasted attachment")).not.toBeInTheDocument();
   });
 
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {

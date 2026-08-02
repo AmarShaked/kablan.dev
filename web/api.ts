@@ -350,10 +350,15 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ branch, ...opts }),
       }),
-    agentMessage: (name: string, branch: string, text: string) =>
+    agentMessage: (
+      name: string,
+      branch: string,
+      text: string,
+      images: { mediaType: string; data: string }[] = [],
+    ) =>
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/message`, {
         method: "POST",
-        body: JSON.stringify({ branch, text }),
+        body: JSON.stringify(images.length ? { branch, text, images } : { branch, text }),
       }),
     agentStop: (name: string, branch: string) =>
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/stop`, {

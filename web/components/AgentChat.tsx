@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Square, Send, ChevronDown, ChevronRight } from "lucide-react";
+import { Square, Send, ChevronDown, ChevronRight, X } from "lucide-react";
 import type { AgentStatus, AgentView } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
@@ -10,8 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { parseChoices } from "../lib/parseChoices.ts";
 
 /** One entry in the chat's local timeline: either the user's own sent message (never echoed
- * back by the stream — it goes straight to stdin) or a raw agent stream-json event. */
-type TimelineItem = { kind: "you"; text: string } | { kind: "agent"; event: unknown };
+ * back by the stream — it goes straight to stdin) or a raw agent stream-json event. `images` are
+ * data-URL previews of any pasted images that went with the message. */
+type TimelineItem =
+  | { kind: "you"; text: string; images?: string[] }
+  | { kind: "agent"; event: unknown };
+
+/** A pasted image staged in the composer, awaiting send. `data` is the raw base64 (no data-URL
+ * prefix) for the API; `url` is the full data URL for the thumbnail preview. */
+type Attachment = { id: string; url: string; mediaType: string; data: string };
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "Ready",
@@ -125,7 +132,7 @@ function splitChoice(label: string): { title: string; desc: string } {
  * renders inline. Tool *results* (the raw `user` events) never become prims — they're the bulk of
  * the noise, and the `tool` line already says what ran. */
 type Prim =
-  | { t: "you"; key: string; text: string }
+  | { t: "you"; key: string; text: string; images?: string[] }
   | { t: "text"; key: string; text: string }
   | { t: "tool"; key: string; label: string }
   | { t: "result"; key: string; label: string }
@@ -139,7 +146,7 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
   const out: Prim[] = [];
   timeline.forEach((item, i) => {
     if (item.kind === "you") {
-      out.push({ t: "you", key: `you-${i}`, text: item.text });
+      out.push({ t: "you", key: `you-${i}`, text: item.text, images: item.images });
       return;
     }
     const e = item.event as Record<string, any> | null;
@@ -243,9 +250,23 @@ function renderPrims(prims: Prim[]): ReactNode[] {
         nodes.push(
           <div key={p.key} className="flex flex-col items-end gap-1">
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">You</span>
-            <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
-              {p.text}
-            </div>
+            {p.images && p.images.length > 0 && (
+              <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+                {p.images.map((src, k) => (
+                  <img
+                    key={k}
+                    src={src}
+                    alt="pasted attachment"
+                    className="size-20 rounded-md border border-border object-cover"
+                  />
+                ))}
+              </div>
+            )}
+            {p.text && (
+              <div className="max-w-[85%] self-end rounded-lg border border-border bg-card px-3 py-2 text-sm whitespace-pre-wrap">
+                {p.text}
+              </div>
+            )}
           </div>,
         );
         break;
@@ -351,7 +372,7 @@ export function AgentChat({
   /** Starts (or, for an already-running agent, restarts) the agent. `opts.model` applies a
    * per-branch model override — restarting resumes the persisted session so context is kept. */
   onStart: (opts?: { model?: string }) => Promise<unknown>;
-  onMessage: (text: string) => Promise<unknown>;
+  onMessage: (text: string, images?: { mediaType: string; data: string }[]) => Promise<unknown>;
   onStop: () => Promise<unknown>;
   onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[] }>;
 }) {
@@ -375,7 +396,35 @@ export function AgentChat({
   // by appending Claude Code's thinking-budget keyword to the outgoing text (no restart).
   const [model, setModel] = useState("");
   const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
+  // Images pasted into the composer, staged until the next send (rendered as removable thumbnails).
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachSeq = useRef(0);
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Paste-to-attach: pull image files off the clipboard, read them as base64 data URLs, and stage
+  // them. preventDefault stops the browser also pasting the image's name as text into the box.
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageItems = Array.from(e.clipboardData?.items ?? []).filter(
+      (it) => it.kind === "file" && it.type.startsWith("image/"),
+    );
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = String(reader.result); // data:<mediaType>;base64,<data>
+        const comma = url.indexOf(",");
+        const data = comma >= 0 ? url.slice(comma + 1) : "";
+        if (!data) return;
+        const id = `att-${(attachSeq.current += 1)}`;
+        setAttachments((prev) => [...prev, { id, url, mediaType: file.type, data }]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
   // Backfill the transcript from the server once, if nothing has streamed in live yet.
   useEffect(() => {
@@ -445,12 +494,14 @@ export function AgentChat({
   // does next), then forward it to the agent. Returns whether the send succeeded.
   const sendText = async (value: string): Promise<boolean> => {
     const t = value.trim();
-    if (!t) return false;
+    const imgs = attachments;
+    if (!t && imgs.length === 0) return false;
     // The bubble shows exactly what the user typed; the thinking keyword is appended only to what
     // the agent receives (so a "Think hard" setting doesn't visibly clutter the transcript).
     const keyword = THINKING_KEYWORD[thinking];
     const outgoing = keyword ? `${t}\n\n${keyword}` : t;
-    setTimeline((prev) => [...prev, { kind: "you", text: t }]);
+    setTimeline((prev) => [...prev, { kind: "you", text: t, images: imgs.map((a) => a.url) }]);
+    setAttachments([]);
     setBusy(true);
     try {
       // Auto-start the agent on the first message so the user can just type — no explicit Start
@@ -458,7 +509,10 @@ export function AgentChat({
       // resolves once the process is spawned (stdin ready), then we deliver the message. The
       // selected model is applied at launch.
       if (!running) await onStart({ model });
-      await onMessage(outgoing);
+      await onMessage(
+        outgoing,
+        imgs.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+      );
       return true;
     } catch (err) {
       toast.error(String(err));
@@ -571,12 +625,34 @@ export function AgentChat({
       )}
 
       <div className="border-t border-border p-3">
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <div key={a.id} className="group relative">
+                <img
+                  src={a.url}
+                  alt="pasted attachment"
+                  className="size-16 rounded-md border border-border object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.id)}
+                  aria-label="Remove image"
+                  className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onPaste={onPaste}
             disabled={!chatEnabled}
-            placeholder={!canChat ? "Start a session to chat" : "Message the agent…"}
+            placeholder={!canChat ? "Start a session to chat" : "Message the agent… (paste an image to attach)"}
             className="min-h-[40px] flex-1 resize-none text-sm focus-visible:ring-0"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -585,7 +661,12 @@ export function AgentChat({
               }
             }}
           />
-          <Button size="icon-lg" disabled={!chatEnabled || busy || !text.trim()} onClick={send} aria-label="Send">
+          <Button
+            size="icon-lg"
+            disabled={!chatEnabled || busy || (!text.trim() && attachments.length === 0)}
+            onClick={send}
+            aria-label="Send"
+          >
             <Send className="size-3.5" />
           </Button>
         </div>

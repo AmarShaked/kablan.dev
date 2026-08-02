@@ -213,7 +213,7 @@ describe("Cockpit", () => {
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() => {
         expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one", { model: "" });
-        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off");
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off", []);
       });
     });
 
@@ -229,7 +229,7 @@ describe("Cockpit", () => {
       fireEvent.change(box, { target: { value: "do the thing" } }); // see auto-starts test re: fireEvent
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() =>
-        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing"),
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing", []),
       );
     });
 

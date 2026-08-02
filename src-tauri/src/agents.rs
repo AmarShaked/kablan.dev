@@ -253,8 +253,21 @@ impl Agents {
         self.get(key).unwrap()
     }
 
-    pub fn send(&self, key: &str, text: &str) -> bool {
-        let msg = json!({ "type":"user","message":{ "role":"user","content":[{"type":"text","text":text}] } }).to_string();
+    /// Send a user turn to the agent over stdin as a stream-json message. `images` are
+    /// `(media_type, base64_data)` pairs rendered as Anthropic image content blocks before the
+    /// text — so pasted images reach the model natively (multimodal), no temp files. A turn with
+    /// only images (empty text) is allowed.
+    pub fn send(&self, key: &str, text: &str, images: &[(String, String)]) -> bool {
+        let mut content: Vec<Value> = images
+            .iter()
+            .map(|(media_type, data)| {
+                json!({ "type": "image", "source": { "type": "base64", "media_type": media_type, "data": data } })
+            })
+            .collect();
+        if !text.is_empty() {
+            content.push(json!({ "type": "text", "text": text }));
+        }
+        let msg = json!({ "type":"user","message":{ "role":"user","content": content } }).to_string();
         // Lock the registry only briefly to confirm the agent exists and clone
         // its per-agent stdin handle, then drop the registry lock before doing
         // any blocking IO — the registry must never be held across writeln!/flush.
@@ -369,7 +382,7 @@ mod tests {
         let agents = Agents::new();
         let cwd = std::env::temp_dir();
         agents.start("p::tf1", &cwd.to_string_lossy(), mock_argv(), None);
-        agents.send("p::tf1", "hello");
+        agents.send("p::tf1", "hello", &[]);
         assert!(wait_until(|| agents.get("p::tf1").and_then(|v| v.session_id).is_some()));
         assert!(wait_until(|| matches!(agents.get("p::tf1").map(|v| v.status), Some(AgentStatus::AwaitingInput))));
         let evs = agents.events("p::tf1");
@@ -380,7 +393,7 @@ mod tests {
     fn supervisor_marks_failed_on_error_result() {
         let agents = Agents::new();
         agents.start("p::tf2", &std::env::temp_dir().to_string_lossy(), mock_argv(), None);
-        agents.send("p::tf2", "please FAILME");
+        agents.send("p::tf2", "please FAILME", &[]);
         assert!(wait_until(|| matches!(agents.get("p::tf2").map(|v| v.status), Some(AgentStatus::Failed))));
     }
 
@@ -419,7 +432,7 @@ mod tests {
         // capture its own session id and progress to AwaitingInput after
         // a message — proving the guard doesn't break normal restarts and
         // that the record which ends up populated is the new one.
-        agents.send(key, "hello");
+        agents.send(key, "hello", &[]);
         assert!(wait_until(|| agents.get(key).and_then(|v| v.session_id).is_some()));
         assert!(wait_until(|| matches!(agents.get(key).map(|v| v.status), Some(AgentStatus::AwaitingInput))));
     }
