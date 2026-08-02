@@ -15,6 +15,7 @@ const base: FactorySettings = {
   maxConcurrentAgents: 4,
   stopAgentsOnExit: true,
   autoResumeAgents: false,
+  chatHistoryDays: 30,
   notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 
@@ -70,6 +71,17 @@ describe("AgentSettings", () => {
     expect(onChange.mock.calls.at(-1)![0].stopAgentsOnExit).toBe(false);
     await userEvent.click(toggle);
     expect(onChange.mock.calls.at(-1)![0].stopAgentsOnExit).toBe(true);
+  });
+
+  it("edits chat history retention days", async () => {
+    const onChange = vi.fn();
+    render(<Harness initial={base} onChange={onChange} />);
+    const input = screen.getByLabelText(/keep chat history/i);
+    expect(input).toHaveValue(30);
+    await userEvent.clear(input);
+    await userEvent.type(input, "0");
+    expect(onChange.mock.calls.at(-1)![0].chatHistoryDays).toBe(0);
+    expect(input).toHaveValue(0);
   });
 
   it("selects a permission mode", async () => {

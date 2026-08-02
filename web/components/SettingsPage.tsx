@@ -44,6 +44,7 @@ const DEFAULT_FACTORY: FactorySettings = {
   maxConcurrentAgents: 4,
   stopAgentsOnExit: true,
   autoResumeAgents: false,
+  chatHistoryDays: 30,
   notifications: { enabled: true, events: ["awaitingInput", "failed"] },
 };
 

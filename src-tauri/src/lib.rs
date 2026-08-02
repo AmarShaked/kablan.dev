@@ -1,6 +1,7 @@
 //! Kablan.dev native backend — HTTP + WebSocket API, behaviorally identical to
 //! the original Node/Express server (validated by the shared server test suite).
 pub mod agents;
+pub mod chat_history;
 pub mod config;
 pub mod factory;
 pub mod git;
@@ -683,7 +684,16 @@ async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, 
     };
     let key = branch_agent_key(&name, &branch);
     let agent = st.agents.get(&key);
-    let events = st.agents.events(&key);
+    // In-memory events are the source of truth while an agent is live this
+    // session (they already include everything streamed so far). When the
+    // registry has none (fresh app start, or a reopened/restarted branch),
+    // fall back to the persisted transcript on disk so the UI backfill shows
+    // history instead of an empty pane.
+    let mut events = st.agents.events(&key);
+    if events.is_empty() {
+        let key2 = key.clone();
+        events = blocking(move || chat_history::load_events(&key2)).await;
+    }
 
     // Lightweight reconcile: the session id arrives asynchronously via the
     // agent's stream, so persist it into the store the first time a
@@ -949,6 +959,9 @@ async fn handle_ws(mut socket: WebSocket, st: AppState) {
 /// registry, and serve until the task is dropped. Prints the machine-readable
 /// ready line the test harness and Tauri shell key off.
 pub async fn serve_on_with(port: u16, procs: Arc<Processes>, agents: Arc<agents::Agents>) {
+    // Best-effort startup retention sweep: drop persisted chat transcripts older
+    // than the configured window (0 = keep forever).
+    chat_history::prune(config::load().factory.chat_history_days);
     let state = AppState { procs, agents };
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.expect("bind");

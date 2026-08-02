@@ -205,6 +205,11 @@ impl Agents {
                             if r.events.len() > MAX_EVENTS { let ex = r.events.len() - MAX_EVENTS; r.events.drain(0..ex); }
                         } else { break; }
                     }
+                    // Persist to disk off the registry lock (best-effort; never
+                    // panics/propagates). Same `raw` value that went into the
+                    // in-memory `record.events` above — real agent stream events
+                    // only, never the synthetic status frames.
+                    crate::chat_history::append_event(&k, &raw);
                     let _ = me.tx.send(json!({ "type":"agent-event","key":k,"event":raw }).to_string());
                     if status_changed { me.emit_status(&k); }
                 }

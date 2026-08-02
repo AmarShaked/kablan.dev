@@ -13,6 +13,7 @@ export interface FactorySettings {
   maxConcurrentAgents: number;
   stopAgentsOnExit: boolean;
   autoResumeAgents: boolean;
+  chatHistoryDays: number;
   notifications: NotificationSettings;
 }
 

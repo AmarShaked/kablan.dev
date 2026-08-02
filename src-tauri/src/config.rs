@@ -52,6 +52,8 @@ pub struct FactorySettings {
     pub stop_agents_on_exit: bool,
     #[serde(default)]
     pub auto_resume_agents: bool,
+    #[serde(default = "default_chat_history_days")]
+    pub chat_history_days: u32,
     #[serde(default)]
     pub notifications: NotificationSettings,
 }
@@ -60,6 +62,7 @@ fn default_agent_command() -> String { "claude".into() }
 fn default_permission_mode() -> String { "acceptEdits".into() }
 fn default_branch_pattern() -> String { "feat/{feature}-{task}".into() }
 fn default_max_agents() -> u32 { 4 }
+fn default_chat_history_days() -> u32 { 30 }
 
 impl Default for FactorySettings {
     fn default() -> Self {
@@ -73,6 +76,7 @@ impl Default for FactorySettings {
             max_concurrent_agents: default_max_agents(),
             stop_agents_on_exit: true,
             auto_resume_agents: false,
+            chat_history_days: default_chat_history_days(),
             notifications: NotificationSettings::default(),
         }
     }
@@ -250,6 +254,12 @@ fn apply_factory_patch(fac: &mut FactorySettings, f: &Value) {
             fac.max_concurrent_agents = (n.floor() as u32).min(64);
         }
     }
+    if let Some(n) = f.get("chatHistoryDays").and_then(|v| v.as_f64()) {
+        // 0 = keep forever; otherwise a positive day count, clamped to a sane max.
+        if n >= 0.0 {
+            fac.chat_history_days = (n.floor() as u32).min(3650);
+        }
+    }
     if let Some(b) = f.get("stopAgentsOnExit").and_then(|v| v.as_bool()) {
         fac.stop_agents_on_exit = b;
     }
@@ -386,6 +396,34 @@ mod tests {
         let next = apply_patch(base, &patch);
         assert_eq!(next.max_scan_depth, 5);
         assert_eq!(next.factory.agent_command, "claude"); // untouched
+    }
+
+    #[test]
+    fn chat_history_days_default_is_30() {
+        assert_eq!(FactorySettings::default().chat_history_days, 30);
+        // Absent from JSON → default.
+        let cfg: AppConfig = serde_json::from_str(r#"{"factory":{}}"#).unwrap();
+        assert_eq!(cfg.factory.chat_history_days, 30);
+        // Present in JSON round-trips as camelCase.
+        let json = serde_json::to_string(&AppConfig::default()).unwrap();
+        assert!(json.contains("\"chatHistoryDays\""));
+    }
+
+    #[test]
+    fn apply_patch_sets_and_clamps_chat_history_days() {
+        let base = AppConfig::default();
+        // 0 is valid (keep forever).
+        let zero = apply_patch(base.clone(), &serde_json::json!({"factory":{"chatHistoryDays":0}}));
+        assert_eq!(zero.factory.chat_history_days, 0);
+        // A normal value.
+        let set = apply_patch(base.clone(), &serde_json::json!({"factory":{"chatHistoryDays":14}}));
+        assert_eq!(set.factory.chat_history_days, 14);
+        // Clamped to the 3650 max.
+        let big = apply_patch(base.clone(), &serde_json::json!({"factory":{"chatHistoryDays":99999}}));
+        assert_eq!(big.factory.chat_history_days, 3650);
+        // Negative is ignored (keeps default).
+        let neg = apply_patch(base, &serde_json::json!({"factory":{"chatHistoryDays":-5}}));
+        assert_eq!(neg.factory.chat_history_days, 30);
     }
 
     #[test]

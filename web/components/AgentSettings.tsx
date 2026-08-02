@@ -124,6 +124,18 @@ export function AgentSettings({
             onChange={(e) => set("maxConcurrentAgents", Number(e.target.value) || 1)}
           />
         </div>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="af-history">Keep chat history (days, 0 = forever)</Label>
+          <Input
+            id="af-history"
+            type="number"
+            min={0}
+            max={3650}
+            value={value.chatHistoryDays}
+            className="w-24"
+            onChange={(e) => set("chatHistoryDays", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+          />
+        </div>
         <label className="flex items-center justify-between" htmlFor="af-stop">
           <span className="text-sm leading-none font-medium select-none">Stop agents on exit</span>
           <Switch
