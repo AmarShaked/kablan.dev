@@ -12,7 +12,7 @@ import {
   Package,
 } from "lucide-react";
 import { api, type RunningServer, type ProjectSummary, type LogLine } from "../api.ts";
-import { useCommits, useGitlabOverview, useDiff } from "../queries.ts";
+import { useGitlabOverview, useDiff } from "../queries.ts";
 import type { Entry } from "../lib/entries.ts";
 import { GitlabSection } from "./GitlabSection.tsx";
 import { OpenMenu } from "./OpenMenu.tsx";
@@ -24,101 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { OpenTarget } from "../api.ts";
-
-function dayKey(d: Date) {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-}
-
-function levelClass(c: number) {
-  if (c === 0) return "bg-muted-foreground/15";
-  if (c <= 2) return "bg-emerald-500/30";
-  if (c <= 5) return "bg-emerald-500/55";
-  if (c <= 9) return "bg-emerald-500/75";
-  return "bg-emerald-500";
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Commit-activity heatmap — originally defined in the retired `ItemDrawer.tsx`, moved here
- * (its only remaining caller) rather than resurrecting that file. */
-function CommitHeatmap({ timestamps }: { timestamps: number[] }) {
-  const WEEKS = 26;
-  const counts = new Map<string, number>();
-  for (const ts of timestamps) {
-    const key = dayKey(new Date(ts * 1000));
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - start.getDay() - (WEEKS - 1) * 7);
-
-  const weeks: { date: Date; count: number; future: boolean }[][] = [];
-  for (let w = 0; w < WEEKS; w++) {
-    const col: { date: Date; count: number; future: boolean }[] = [];
-    for (let d = 0; d < 7; d++) {
-      const day = new Date(start);
-      day.setDate(start.getDate() + w * 7 + d);
-      col.push({ date: day, count: counts.get(dayKey(day)) ?? 0, future: day > today });
-    }
-    weeks.push(col);
-  }
-
-  // Label each month above the week where it first appears, but skip any month
-  // that occupies fewer than two columns here (e.g. the partial month at the
-  // start of the window) so labels don't crowd together.
-  const firstCol = new Map<number, number>();
-  const colCount = new Map<number, number>();
-  weeks.forEach((col, w) => {
-    const m = col[0].date.getMonth();
-    if (!firstCol.has(m)) firstCol.set(m, w);
-    colCount.set(m, (colCount.get(m) ?? 0) + 1);
-  });
-  const monthLabels = [...firstCol.entries()]
-    .filter(([m, w]) => (colCount.get(m) ?? 0) >= 2 && w <= WEEKS - 2)
-    .map(([m, w]) => ({ week: w, label: MONTHS[m] }));
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="flex gap-[3px] pl-[26px] text-[10px] text-muted-foreground">
-        {weeks.map((_, wi) => {
-          const label = monthLabels.find((m) => m.week === wi);
-          return (
-            <div key={wi} className="w-[14px] shrink-0 whitespace-nowrap">
-              {label ? label.label : ""}
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-[3px]">
-        <div className="mr-1 flex w-[22px] shrink-0 flex-col gap-[3px] text-[9px] text-muted-foreground">
-          {["", "Mon", "", "Wed", "", "Fri", ""].map((d, i) => (
-            <div key={i} className="h-[14px] leading-[14px]">
-              {d}
-            </div>
-          ))}
-        </div>
-        {weeks.map((col, wi) => (
-          <div key={wi} className="flex flex-col gap-[3px]">
-            {col.map((cell, di) => (
-              <div
-                key={di}
-                title={
-                  cell.future
-                    ? ""
-                    : `${cell.count} commit${cell.count === 1 ? "" : "s"} · ${cell.date.toDateString()}`
-                }
-                className={cn(
-                  "size-[14px] shrink-0 rounded-[3px]",
-                  cell.future ? "opacity-0" : levelClass(cell.count),
-                )}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** A plain label/value row — moved here from the retired `ItemDrawer.tsx` (its only remaining
  * caller). */
@@ -159,15 +64,15 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 /**
  * Inline details panel for the worktree cockpit (`Cockpit.tsx`) — a single scrolling column of
- * bordered cards (NOT a Sheet/tabs, per the mockup): `CommitHeatmap`/`Detail` above, plus
- * `OpenMenu`, `EnvTab`, `GitlabSection`, `LinearLink`, `useCommits`.
+ * bordered cards (NOT a Sheet/tabs, per the mockup): `Detail` above, plus `OpenMenu`, `EnvTab`,
+ * `GitlabSection`, `LinearLink`.
  *
  * `server`/`url`/`busy` and the dev-server callbacks are supplied by the caller (`Cockpit`) —
  * this component is purely presentational for the dev server.
  *
  * Guards gracefully when `entry.cwd` is null (a bare branch with no worktree yet): renders the
- * branch meta + commit history, but disables the dev-server and Env cards with a hint instead
- * of the usual controls.
+ * branch meta, but disables the dev-server and Env cards with a hint instead of the usual
+ * controls.
  *
  * `logs` (I3): the project's dev-server output, captured by `App`'s WS "log"-frame handler and
  * threaded down through `Cockpit` — rendered here via the pre-existing `LogsTab` (orphaned by
@@ -210,7 +115,6 @@ export function WorktreeDetails({
   // whose command is an install is an install-in-progress — surfaced distinctly from a dev server.
   const installing = running && (server?.command ?? "").includes("install");
 
-  const commits = useCommits(project, entry.branchName ?? undefined, entry.cwd ?? undefined, true);
   const diff = useDiff(project, undefined, entry.cwd ?? undefined, hasWorktree);
   const diffSummary = useMemo(
     () => (diff.data ? summarizeDiff(diff.data.diff) : null),
@@ -377,18 +281,6 @@ export function WorktreeDetails({
         ) : (
           <p className="text-xs text-muted-foreground">Start a session for this branch to run a dev server.</p>
         )}
-      </Card>
-
-      {/* Recent commits */}
-      <Card title="Recent commits">
-        {commits.isPending ? (
-          <Skeleton className="h-24 w-full rounded-md" />
-        ) : (
-          <CommitHeatmap timestamps={commits.data?.timestamps ?? []} />
-        )}
-        <p className="text-xs text-muted-foreground">
-          {(commits.data?.timestamps.length ?? 0).toLocaleString()} commits in the last 6 months
-        </p>
       </Card>
 
       {/* Working diff summary */}

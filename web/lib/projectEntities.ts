@@ -19,9 +19,22 @@ export interface BranchEntity {
   ts: number;
 }
 
+/** Agent statuses that mean a live/working session (mirrors HomeView's ACTIVE_STATUSES) —
+ * "done"/"failed"/"idle"/undefined are not live. */
+const LIVE_AGENT_STATUSES = new Set<AgentStatus>(["working", "awaitingInput"]);
+
+/** True when an agent is actively live on this branch (working or awaiting input). */
+export function isLiveAgentStatus(status?: AgentStatus): boolean {
+  return status !== undefined && LIVE_AGENT_STATUSES.has(status);
+}
+
 export interface FeatureGroup {
   feature: Feature;
   branches: BranchEntity[];
+  /** True when ANY member branch has a live/active agent session (working or awaiting input) —
+   * drives the small "active session" dot on the feature folder header. Always populated by
+   * `buildBranchEntities`; optional only so test fixtures can omit it. */
+  hasActiveSession?: boolean;
 }
 
 export interface BuildBranchEntitiesArgs {
@@ -92,10 +105,16 @@ export function buildBranchEntities({
   // activity — so a manual drag-and-drop reorder (persisted via reorderFeatureBranches)
   // sticks instead of being clobbered on the next render. The unfiled "Branches" list below
   // has no manual order to preserve, so it stays activity-sorted.
-  const featureGroups: FeatureGroup[] = factory.features.map((feature) => ({
-    feature,
-    branches: feature.branches.map((name) => byName.get(name)).filter((e): e is BranchEntity => !!e),
-  }));
+  const featureGroups: FeatureGroup[] = factory.features.map((feature) => {
+    const featureBranches = feature.branches
+      .map((name) => byName.get(name))
+      .filter((e): e is BranchEntity => !!e);
+    return {
+      feature,
+      branches: featureBranches,
+      hasActiveSession: featureBranches.some((b) => isLiveAgentStatus(b.agentStatus)),
+    };
+  });
   const unfiled = sortByTsDesc(all.filter((e) => !e.featureId));
 
   return { featureGroups, unfiled, all: sortByTsDesc(all) };

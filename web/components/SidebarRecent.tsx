@@ -593,7 +593,7 @@ export function SidebarRecent({
           ) : featureGroups.length === 0 ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">No features.</p>
           ) : (
-            visibleFeatureGroups.map(({ feature, branches }, featureIdx) => {
+            visibleFeatureGroups.map(({ feature, branches, hasActiveSession }, featureIdx) => {
               const isExpanded = expanded.has(feature.id);
               const isFileTarget = dropTarget?.kind === "file" && dropTarget.featureId === feature.id;
               const folderDropBefore = dropTarget?.kind === "feature" && dropTarget.index === featureIdx;
@@ -630,6 +630,13 @@ export function SidebarRecent({
                     >
                       {feature.name}
                     </button>
+                    {hasActiveSession && (
+                      <span
+                        className="size-1.5 shrink-0 rounded-full bg-emerald-500"
+                        title="Active session"
+                        aria-label="Active session"
+                      />
+                    )}
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {branches.length} branch{branches.length === 1 ? "" : "es"}
                     </span>

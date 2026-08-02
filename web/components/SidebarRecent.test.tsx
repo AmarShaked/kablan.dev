@@ -163,6 +163,30 @@ describe("SidebarRecent", () => {
     expect(screen.getByText("No branches yet.")).toBeInTheDocument();
   });
 
+  it("shows an 'Active session' dot on a feature folder with a live member session", () => {
+    const featureGroups: FeatureGroup[] = [
+      {
+        feature: { id: "f1", name: "Feature One", branches: ["feat/one"] },
+        branches: [branchEntity({ name: "feat/one", agentStatus: "working" })],
+        hasActiveSession: true,
+      },
+    ];
+    renderComponent({ featureGroups, unfiled: [] });
+    expect(screen.getByLabelText("Active session")).toBeInTheDocument();
+  });
+
+  it("does not show an 'Active session' dot when no member has a live session", () => {
+    const featureGroups: FeatureGroup[] = [
+      {
+        feature: { id: "f1", name: "Feature One", branches: ["feat/one"] },
+        branches: [branchEntity({ name: "feat/one" })],
+        hasActiveSession: false,
+      },
+    ];
+    renderComponent({ featureGroups, unfiled: [] });
+    expect(screen.queryByLabelText("Active session")).not.toBeInTheDocument();
+  });
+
   it('caps rendered branch rows at 10 in the Branches group', () => {
     const manyBranches = Array.from({ length: 15 }, (_, i) =>
       branchEntity({ name: `branch-${i}`, ts: 100 - i }),

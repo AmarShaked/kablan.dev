@@ -163,6 +163,39 @@ describe("buildBranchEntities", () => {
     expect(unfiled.map((e) => e.name)).toEqual(["main"]);
   });
 
+  it("sets hasActiveSession=true when a member branch has a live agent status", () => {
+    const features: Feature[] = [
+      { id: "f1", name: "Live", branches: ["feat/working"] },
+      { id: "f2", name: "Awaiting", branches: ["feat/awaiting"] },
+      { id: "f3", name: "Idle", branches: ["feat/done", "feat/none"] },
+    ];
+    const statusFor = (b: string) =>
+      b === "feat/working"
+        ? ("working" as const)
+        : b === "feat/awaiting"
+          ? ("awaitingInput" as const)
+          : b === "feat/done"
+            ? ("done" as const)
+            : undefined;
+    const { featureGroups } = buildBranchEntities({
+      branches: [
+        branch({ name: "feat/working" }),
+        branch({ name: "feat/awaiting" }),
+        branch({ name: "feat/done" }),
+        branch({ name: "feat/none" }),
+      ],
+      worktrees: [],
+      factory: factory({ features }),
+      statusFor,
+      isServerRunning: noServer,
+    });
+    const byId = new Map(featureGroups.map((g) => [g.feature.id, g]));
+    // "working" and "awaitingInput" count as live; "done"/undefined do not.
+    expect(byId.get("f1")!.hasActiveSession).toBe(true);
+    expect(byId.get("f2")!.hasActiveSession).toBe(true);
+    expect(byId.get("f3")!.hasActiveSession).toBe(false);
+  });
+
   it("keeps a feature's branches in stored order even when activity order differs", () => {
     const features: Feature[] = [{ id: "f1", name: "Feature One", branches: ["feat/z", "feat/a"] }];
     const { featureGroups } = buildBranchEntities({

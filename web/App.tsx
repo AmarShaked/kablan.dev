@@ -325,7 +325,10 @@ function AppContent() {
     if (!selected) return;
     try {
       const res = await api.fetchRemote(selected);
-      toast.success(res.output || "Fetched.", { duration: 5000 });
+      // Show only the first non-empty line of git's output (e.g. "Already up to date." /
+      // "Fast-forwarded main.") — the full multi-line listing of every changed file is too noisy.
+      const summary = res.output?.split("\n").find((l) => l.trim())?.trim();
+      toast.success(summary || "Fetched.", { duration: 5000 });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: qk.branches(selected) }),
         queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) }),

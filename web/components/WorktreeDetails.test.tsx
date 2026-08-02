@@ -19,7 +19,6 @@ vi.mock("../api.ts", async (importOriginal) => {
 });
 
 vi.mock("../queries.ts", () => ({
-  useCommits: () => ({ data: { timestamps: [1, 2, 3] }, isPending: false }),
   useDiff: () => ({ data: { diff: "" }, isPending: false }),
   useGitlabOverview: () => ({ data: undefined, isPending: false }),
   useWorktrees: () => ({ data: [], isPending: false }),
@@ -74,11 +73,6 @@ describe("WorktreeDetails", () => {
     expect(await screen.findByText("feat/one")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
     expect(screen.getByText("/wt/one")).toBeInTheDocument();
-  });
-
-  it("renders commit history from useCommits", () => {
-    renderDetails();
-    expect(screen.getByText(/3 commits in the last 6 months/)).toBeInTheDocument();
   });
 
   it("calls onStartServer when Start server is clicked (not running)", async () => {
