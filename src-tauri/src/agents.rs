@@ -14,6 +14,127 @@ use std::os::unix::process::CommandExt;
 
 const MAX_EVENTS: usize = 5000;
 
+/// Read-only tools NOT gated behind the human approval flow (mirrors vibe-kanban's
+/// allowlist, tied to @anthropic-ai/claude-code's control protocol). Every OTHER tool
+/// matches this negative-lookahead regex and routes to the "tool_approval" callback.
+const SUPERVISED_PRETOOL_MATCHER: &str = "^(?!(Glob|Grep|NotebookRead|Read|Task|TodoWrite)$).*";
+
+/// Callback id our PreToolUse hooks route to; the CLI echoes it back on hook_callback.
+const TOOL_APPROVAL_CALLBACK_ID: &str = "tool_approval";
+
+/// Canonical denial-message prefix, byte-for-byte matching the Claude Code CLI (copied
+/// from vibe-kanban's client.rs). The user's reason is appended after it.
+const TOOL_DENY_PREFIX: &str = "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said: ";
+
+/// A tool call awaiting the human Approve/Deny gate. Maps a generated `approval_id`
+/// (the ws/HTTP handle) back to the CLI's original control_request `request_id` so the
+/// control_response we eventually write is correlated by the CLI.
+#[derive(Clone)]
+struct PendingApproval {
+    /// The CLI's `can_use_tool` control_request `request_id` we must echo back.
+    request_id: String,
+    tool_name: String,
+    input: Value,
+    created_at: i64,
+}
+
+/// The wire shape of a pending approval, shared by the `agent-approval` ws frame and the
+/// `get_branch_agent` backfill: `{ id, toolName, input, createdAt }`.
+fn approval_view(id: &str, tool_name: &str, input: &Value, created_at: i64) -> Value {
+    json!({ "id": id, "toolName": tool_name, "input": input, "createdAt": created_at })
+}
+
+/// PreToolUse hooks for supervised mode: gate every non-read-only tool through the
+/// "tool_approval" callback (which returns "ask", making the CLI emit the real
+/// `can_use_tool` request). Carried in the post-spawn `initialize` handshake.
+pub fn supervised_hooks() -> Value {
+    json!({
+        "PreToolUse": [
+            { "matcher": SUPERVISED_PRETOOL_MATCHER, "hookCallbackIds": [TOOL_APPROVAL_CALLBACK_ID] }
+        ]
+    })
+}
+
+/// `initialize` control_request (SDK → CLI): registers the PreToolUse hooks.
+pub fn build_initialize_request(request_id: &str, hooks: Value) -> Value {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": { "subtype": "initialize", "hooks": hooks },
+    })
+}
+
+/// `set_permission_mode` control_request (SDK → CLI). We send "default" after launching the
+/// CLI in bypassPermissions, so it stops auto-prompting and defers to our hooks instead.
+pub fn build_set_permission_mode_request(request_id: &str, mode: &str) -> Value {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": { "subtype": "set_permission_mode", "mode": mode },
+    })
+}
+
+/// control_response to a `hook_callback` (SDK → CLI): return "ask", which makes the CLI
+/// follow up with the real `can_use_tool` control_request — the human gate.
+pub fn build_hook_ask_response(orig_request_id: &str) -> Value {
+    json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": orig_request_id,
+            "response": {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": "Forwarding to canusetool service"
+                }
+            }
+        }
+    })
+}
+
+/// control_response allowing a `can_use_tool` request, echoing the original input unchanged.
+pub fn build_allow_response(orig_request_id: &str, input: &Value) -> Value {
+    json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": orig_request_id,
+            "response": { "behavior": "allow", "updatedInput": input }
+        }
+    })
+}
+
+/// control_response denying a `can_use_tool` request. `reason` is the user's note, appended
+/// to the canonical CLI denial prefix. `interrupt: false` lets the turn continue.
+pub fn build_deny_response(orig_request_id: &str, reason: &str) -> Value {
+    json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": orig_request_id,
+            "response": {
+                "behavior": "deny",
+                "message": format!("{TOOL_DENY_PREFIX}{reason}"),
+                "interrupt": false
+            }
+        }
+    })
+}
+
+/// Parse a `can_use_tool` control_request into `(orig_request_id, tool_name, input)`.
+/// Returns None for any other message shape.
+pub fn parse_can_use_tool(raw: &Value) -> Option<(String, String, Value)> {
+    let request = raw.get("request")?;
+    if request.get("subtype")?.as_str()? != "can_use_tool" {
+        return None;
+    }
+    let request_id = raw.get("request_id")?.as_str()?.to_string();
+    let tool_name = request.get("tool_name")?.as_str()?.to_string();
+    let input = request.get("input").cloned().unwrap_or(Value::Null);
+    Some((request_id, tool_name, input))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentStatus {
@@ -103,12 +224,18 @@ struct AgentRecord {
     events: Vec<Value>,
     stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
     generation: u64,
+    /// Tool calls awaiting the human Approve/Deny gate (supervised mode), keyed by approval_id.
+    pending: HashMap<String, PendingApproval>,
 }
 
 pub struct Agents {
     registry: Mutex<HashMap<String, AgentRecord>>,
     tx: broadcast::Sender<String>,
     gen: AtomicU64,
+    /// Monotonic source for control_request `request_id`s (handshake).
+    req_seq: AtomicU64,
+    /// Monotonic source for `approval_id`s (the human-gate handle).
+    approval_seq: AtomicU64,
 }
 
 fn now_ms() -> i64 {
@@ -118,14 +245,25 @@ fn now_ms() -> i64 {
 /// Build the argv (program + flags) for launching an owned agent process.
 /// Pure and unit-tested: verifies the spike-confirmed flag set.
 pub fn build_agent_argv(cfg: &crate::config::FactorySettings, resume: Option<&str>) -> Vec<String> {
+    let supervised = cfg.permission_mode == "supervised";
     let mut a: Vec<String> = vec![
         cfg.agent_command.clone(),
         "--print".into(), "--verbose".into(),
         "--output-format".into(), "stream-json".into(),
         "--input-format".into(), "stream-json".into(),
         "--include-partial-messages".into(),
-        "--permission-mode".into(), cfg.permission_mode.clone(),
     ];
+    if supervised {
+        // Supervised: per-tool Approve/Deny over the stdio control protocol. We launch the CLI
+        // in bypassPermissions (so its own prompt flow never stalls a tool call) and route the
+        // approval decision entirely through the PreToolUse hooks + can_use_tool handshake that
+        // `start()` sends after spawn. `--replay-user-messages` mirrors vibe-kanban.
+        a.push("--permission-prompt-tool".into()); a.push("stdio".into());
+        a.push("--permission-mode".into()); a.push("bypassPermissions".into());
+        a.push("--replay-user-messages".into());
+    } else {
+        a.push("--permission-mode".into()); a.push(cfg.permission_mode.clone());
+    }
     if !cfg.agent_model.trim().is_empty() { a.push("--model".into()); a.push(cfg.agent_model.clone()); }
     if let Some(sid) = resume { a.push("--resume".into()); a.push(sid.to_string()); }
     a
@@ -134,12 +272,29 @@ pub fn build_agent_argv(cfg: &crate::config::FactorySettings, resume: Option<&st
 impl Agents {
     pub fn new() -> Arc<Self> {
         let (tx, _rx) = broadcast::channel(4096);
-        Arc::new(Agents { registry: Mutex::new(HashMap::new()), tx, gen: AtomicU64::new(0) })
+        Arc::new(Agents {
+            registry: Mutex::new(HashMap::new()),
+            tx,
+            gen: AtomicU64::new(0),
+            req_seq: AtomicU64::new(0),
+            approval_seq: AtomicU64::new(0),
+        })
     }
+    fn next_req_id(&self) -> String { format!("req-{}", self.req_seq.fetch_add(1, Ordering::SeqCst) + 1) }
+    fn next_approval_id(&self) -> String { format!("appr-{}", self.approval_seq.fetch_add(1, Ordering::SeqCst) + 1) }
     pub fn subscribe(&self) -> broadcast::Receiver<String> { self.tx.subscribe() }
     pub fn get(&self, key: &str) -> Option<AgentView> { self.registry.lock().unwrap().get(key).map(|r| r.view.clone()) }
     pub fn get_all(&self) -> Vec<AgentView> { self.registry.lock().unwrap().values().map(|r| r.view.clone()).collect() }
     pub fn events(&self, key: &str) -> Vec<Value> { self.registry.lock().unwrap().get(key).map(|r| r.events.clone()).unwrap_or_default() }
+    /// Snapshot of the key's pending approvals (oldest first), each in the ws-frame `approval`
+    /// shape, so a reconnecting client can re-render the outstanding gates.
+    pub fn pending_approvals(&self, key: &str) -> Vec<Value> {
+        let reg = self.registry.lock().unwrap();
+        let Some(r) = reg.get(key) else { return vec![] };
+        let mut items: Vec<(&String, &PendingApproval)> = r.pending.iter().collect();
+        items.sort_by_key(|(_, p)| p.created_at);
+        items.into_iter().map(|(id, p)| approval_view(id, &p.tool_name, &p.input, p.created_at)).collect()
+    }
     pub fn running_count(&self) -> usize {
         self.registry.lock().unwrap().values().filter(|r| r.view.pid.is_some()).count()
     }
@@ -156,7 +311,7 @@ impl Agents {
         // "working". It flips to Working when a message is sent (see `send`) or real turn output
         // arrives. This prevents the cockpit showing "thinking…" the instant you Start.
         let view = AgentView { key: key.into(), status: AgentStatus::Idle, session_id: None, pid: None, started_at: now_ms(), exit_code: None };
-        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation });
+        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation, pending: HashMap::new() });
 
         let mut cmd = Command::new(&argv[0]);
         cmd.args(&argv[1..]).current_dir(cwd)
@@ -181,13 +336,47 @@ impl Agents {
         }
         self.emit_status(key);
 
+        // Supervised handshake: if launched with the stdio permission-prompt tool, complete the
+        // control-protocol handshake on stdin BEFORE any user message — (a) `initialize` carrying
+        // the PreToolUse hooks that gate non-read-only tools, then (b) `set_permission_mode`
+        // "default" (we started in bypassPermissions only to silence the CLI's own prompts).
+        // Detected from argv so start()'s signature is unchanged. These writes go to the record's
+        // stdin we just installed above.
+        if argv.iter().any(|a| a == "--permission-prompt-tool") {
+            let init = build_initialize_request(&self.next_req_id(), supervised_hooks());
+            self.write_stdin_value(key, &init);
+            let spm = build_set_permission_mode_request(&self.next_req_id(), "default");
+            self.write_stdin_value(key, &spm);
+        }
+
         if let Some(out) = child.stdout.take() {
             let me = Arc::clone(self); let k = key.to_string();
             std::thread::spawn(move || {
                 let rdr = BufReader::new(out);
                 for line in rdr.lines().map_while(Result::ok) {
-                    let Some(ev) = parse_event(&line) else { continue };
                     let raw: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
+                    let msg_type = raw.get("type").and_then(|s| s.as_str()).unwrap_or("");
+
+                    // Control-protocol frames (supervised mode) are never surfaced as agent-events.
+                    if msg_type == "control_response" {
+                        // The CLI's ack of OUR initialize/set_permission_mode requests — consume silently.
+                        continue;
+                    }
+                    if msg_type == "control_request" {
+                        // Generation guard: a newer start() on this key owns the current stdin now, so
+                        // this dying process must not drive an approval on the new agent's pipe.
+                        {
+                            let reg = me.registry.lock().unwrap();
+                            match reg.get(&k) {
+                                Some(r) if r.generation == generation => {}
+                                _ => break,
+                            }
+                        }
+                        me.handle_incoming_control(&k, &raw);
+                        continue;
+                    }
+
+                    let Some(ev) = parse_event(&line) else { continue };
                     let mut status_changed = false;
                     {
                         let mut reg = me.registry.lock().unwrap();
@@ -297,6 +486,94 @@ impl Agents {
         }
     }
 
+    /// Write a JSON control frame to the agent's stdin, following `send`'s locking discipline:
+    /// clone the per-agent stdin Arc under a brief registry lock, then drop it before the blocking
+    /// IO. Returns whether the write+flush succeeded.
+    fn write_stdin_value(&self, key: &str, v: &Value) -> bool {
+        let stdin_arc = {
+            let reg = self.registry.lock().unwrap();
+            let Some(r) = reg.get(key) else { return false };
+            Arc::clone(&r.stdin)
+        };
+        let line = v.to_string();
+        let mut guard = stdin_arc.lock().unwrap();
+        match guard.as_mut() {
+            Some(stdin) => writeln!(stdin, "{line}").is_ok() && stdin.flush().is_ok(),
+            None => false,
+        }
+    }
+
+    /// Handle an incoming `control_request` from the CLI (supervised mode). Never blocks the reader:
+    /// - `hook_callback` (callback_id "tool_approval") → immediately reply "ask", which makes the
+    ///   CLI emit the real `can_use_tool` request.
+    /// - `can_use_tool` → THE HUMAN GATE: store a PendingApproval and broadcast an `agent-approval`
+    ///   frame. The CLI naturally waits for our control_response (written later by resolve_approval).
+    fn handle_incoming_control(&self, key: &str, raw: &Value) {
+        let subtype = raw.get("request").and_then(|r| r.get("subtype")).and_then(|s| s.as_str()).unwrap_or("");
+        match subtype {
+            "hook_callback" => {
+                let callback_id = raw
+                    .get("request")
+                    .and_then(|r| r.get("callback_id"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("");
+                if callback_id == TOOL_APPROVAL_CALLBACK_ID {
+                    let orig = raw.get("request_id").and_then(|s| s.as_str()).unwrap_or("");
+                    let resp = build_hook_ask_response(orig);
+                    self.write_stdin_value(key, &resp);
+                }
+            }
+            "can_use_tool" => {
+                let Some((request_id, tool_name, input)) = parse_can_use_tool(raw) else { return };
+                let approval_id = self.next_approval_id();
+                let created_at = now_ms();
+                {
+                    let mut reg = self.registry.lock().unwrap();
+                    let Some(r) = reg.get_mut(key) else { return };
+                    r.pending.insert(
+                        approval_id.clone(),
+                        PendingApproval { request_id, tool_name: tool_name.clone(), input: input.clone(), created_at },
+                    );
+                }
+                let _ = self.tx.send(json!({
+                    "type": "agent-approval",
+                    "key": key,
+                    "approval": approval_view(&approval_id, &tool_name, &input, created_at),
+                }).to_string());
+            }
+            _ => {}
+        }
+    }
+
+    /// Resolve a pending approval: write the correlated `control_response` to the agent's stdin
+    /// (allow → echo original input; deny → canonical denial message + the user's `reason`), remove
+    /// it from pending, and broadcast `agent-approval-resolved`. Returns false if the approval_id
+    /// was unknown for the key; otherwise the result of the stdin write.
+    pub fn resolve_approval(&self, key: &str, approval_id: &str, decision: &str, reason: Option<&str>) -> bool {
+        let pending = {
+            let mut reg = self.registry.lock().unwrap();
+            let Some(r) = reg.get_mut(key) else { return false };
+            match r.pending.remove(approval_id) {
+                Some(p) => p,
+                None => return false,
+            }
+        };
+        let deny = decision == "deny";
+        let response = if deny {
+            build_deny_response(&pending.request_id, reason.unwrap_or(""))
+        } else {
+            build_allow_response(&pending.request_id, &pending.input)
+        };
+        let ok = self.write_stdin_value(key, &response);
+        let _ = self.tx.send(json!({
+            "type": "agent-approval-resolved",
+            "key": key,
+            "approvalId": approval_id,
+            "decision": if deny { "deny" } else { "allow" },
+        }).to_string());
+        ok
+    }
+
     pub fn stop(&self, key: &str) -> bool {
         let pid = { let reg = self.registry.lock().unwrap();
             match reg.get(key) { Some(r) if r.view.pid.is_some() => r.view.pid.unwrap(), _ => return false } };
@@ -367,6 +644,108 @@ mod tests {
     fn wait_until<F: Fn() -> bool>(f: F) -> bool {
         for _ in 0..100 { if f() { return true; } std::thread::sleep(Duration::from_millis(50)); }
         false
+    }
+
+    fn has_pair(argv: &[String], flag: &str, val: &str) -> bool {
+        argv.windows(2).any(|w| w[0] == flag && w[1] == val)
+    }
+
+    #[test]
+    fn build_argv_supervised_uses_prompt_tool_and_bypass() {
+        let mut cfg = crate::config::FactorySettings::default();
+        cfg.agent_command = "claude".into();
+        cfg.permission_mode = "supervised".into();
+        let argv = build_agent_argv(&cfg, None);
+        // Supervised launches with the stdio prompt tool + bypassPermissions (NOT "supervised"),
+        // and replays user messages.
+        assert!(has_pair(&argv, "--permission-prompt-tool", "stdio"), "{argv:?}");
+        assert!(has_pair(&argv, "--permission-mode", "bypassPermissions"), "{argv:?}");
+        assert!(argv.iter().any(|a| a == "--replay-user-messages"), "{argv:?}");
+        assert!(!argv.iter().any(|a| a == "supervised"), "must not pass raw supervised: {argv:?}");
+    }
+
+    #[test]
+    fn build_argv_non_supervised_unchanged() {
+        let mut cfg = crate::config::FactorySettings::default();
+        cfg.agent_command = "claude".into();
+        cfg.permission_mode = "acceptEdits".into();
+        let argv = build_agent_argv(&cfg, None);
+        assert!(has_pair(&argv, "--permission-mode", "acceptEdits"), "{argv:?}");
+        assert!(!argv.iter().any(|a| a == "--permission-prompt-tool"), "{argv:?}");
+        assert!(!argv.iter().any(|a| a == "--replay-user-messages"), "{argv:?}");
+    }
+
+    #[test]
+    fn can_use_tool_parses_to_pending_and_builds_control_responses() {
+        // A can_use_tool control_request as the CLI would emit it.
+        let raw: Value = serde_json::from_str(
+            r#"{"type":"control_request","request_id":"req-cli-7","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls -la"},"tool_use_id":"toolu_1"}}"#,
+        ).unwrap();
+        let (request_id, tool_name, input) = parse_can_use_tool(&raw).unwrap();
+        assert_eq!(request_id, "req-cli-7");
+        assert_eq!(tool_name, "Bash");
+        assert_eq!(input, json!({"command":"ls -la"}));
+
+        // Allow: echoes the original input as updatedInput, keyed by the original request_id.
+        let allow = build_allow_response(&request_id, &input);
+        assert_eq!(allow["type"], "control_response");
+        assert_eq!(allow["response"]["subtype"], "success");
+        assert_eq!(allow["response"]["request_id"], "req-cli-7");
+        assert_eq!(allow["response"]["response"]["behavior"], "allow");
+        assert_eq!(allow["response"]["response"]["updatedInput"], json!({"command":"ls -la"}));
+
+        // Deny: canonical prefix + reason, interrupt false.
+        let deny = build_deny_response(&request_id, "not right now");
+        assert_eq!(deny["response"]["subtype"], "success");
+        assert_eq!(deny["response"]["request_id"], "req-cli-7");
+        assert_eq!(deny["response"]["response"]["behavior"], "deny");
+        assert_eq!(deny["response"]["response"]["interrupt"], false);
+        let msg = deny["response"]["response"]["message"].as_str().unwrap();
+        assert!(msg.starts_with("The user doesn't want to proceed with this tool use."), "{msg}");
+        assert!(msg.ends_with("not right now"), "{msg}");
+    }
+
+    #[test]
+    fn hook_callback_produces_ask_control_response() {
+        let ask = build_hook_ask_response("req-cli-42");
+        assert_eq!(ask["type"], "control_response");
+        assert_eq!(ask["response"]["subtype"], "success");
+        assert_eq!(ask["response"]["request_id"], "req-cli-42");
+        let hso = &ask["response"]["response"]["hookSpecificOutput"];
+        assert_eq!(hso["hookEventName"], "PreToolUse");
+        assert_eq!(hso["permissionDecision"], "ask");
+    }
+
+    #[test]
+    fn initialize_and_set_permission_mode_shapes() {
+        let init = build_initialize_request("req-1", supervised_hooks());
+        assert_eq!(init["type"], "control_request");
+        assert_eq!(init["request_id"], "req-1");
+        assert_eq!(init["request"]["subtype"], "initialize");
+        let hook = &init["request"]["hooks"]["PreToolUse"][0];
+        let matcher = hook["matcher"].as_str().unwrap();
+        // Read-only allowlist is NOT gated; everything else routes to tool_approval.
+        assert!(matcher.contains("Glob|Grep|NotebookRead|Read|Task|TodoWrite"), "{matcher}");
+        assert_eq!(hook["hookCallbackIds"][0], "tool_approval");
+
+        let spm = build_set_permission_mode_request("req-2", "default");
+        assert_eq!(spm["request"]["subtype"], "set_permission_mode");
+        assert_eq!(spm["request"]["mode"], "default");
+    }
+
+    #[test]
+    fn parse_can_use_tool_rejects_other_frames() {
+        let hook: Value = serde_json::from_str(
+            r#"{"type":"control_request","request_id":"r","request":{"subtype":"hook_callback","callback_id":"tool_approval","input":{}}}"#,
+        ).unwrap();
+        assert!(parse_can_use_tool(&hook).is_none());
+    }
+
+    #[test]
+    fn resolve_approval_unknown_key_is_false() {
+        let agents = Agents::new();
+        assert!(!agents.resolve_approval("no::such", "appr-1", "allow", None));
+        assert!(agents.pending_approvals("no::such").is_empty());
     }
 
     #[test]

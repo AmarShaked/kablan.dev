@@ -233,7 +233,7 @@ fn apply_factory_patch(fac: &mut FactorySettings, f: &Value) {
         fac.agent_model = s.trim().to_string();
     }
     if let Some(s) = f.get("permissionMode").and_then(|v| v.as_str()) {
-        if ["default", "acceptEdits", "auto", "bypassPermissions"].contains(&s) {
+        if ["default", "acceptEdits", "auto", "bypassPermissions", "supervised"].contains(&s) {
             fac.permission_mode = s.to_string();
         }
     }
@@ -436,7 +436,10 @@ mod tests {
         let base = AppConfig::default();
         let bad = apply_patch(base.clone(), &serde_json::json!({"factory":{"permissionMode":"plan"}}));
         assert_eq!(bad.factory.permission_mode, "acceptEdits"); // unchanged (rejected)
-        let ok = apply_patch(base, &serde_json::json!({"factory":{"permissionMode":"auto"}}));
+        let ok = apply_patch(base.clone(), &serde_json::json!({"factory":{"permissionMode":"auto"}}));
         assert_eq!(ok.factory.permission_mode, "auto");
+        // "supervised" is accepted (drives the per-tool Approve/Deny control-protocol flow).
+        let sup = apply_patch(base, &serde_json::json!({"factory":{"permissionMode":"supervised"}}));
+        assert_eq!(sup.factory.permission_mode, "supervised");
     }
 }

@@ -6,7 +6,7 @@ export interface NotificationSettings {
 export interface FactorySettings {
   agentCommand: string;
   agentModel: string;
-  permissionMode: "default" | "acceptEdits" | "auto" | "bypassPermissions";
+  permissionMode: "default" | "acceptEdits" | "auto" | "bypassPermissions" | "supervised";
   defaultBaseBranch: string;
   worktreeRoot: string;
   branchPattern: string;
@@ -121,6 +121,14 @@ export interface AgentView {
   pid: number | null;
   startedAt: number;
   exitCode: number | null;
+}
+/// A pending per-tool approval (supervised permission mode). Mirrors the `approval` object in the
+/// `agent-approval` ws frame and the `approvals` array from `getAgent`.
+export interface AgentApproval {
+  id: string;
+  toolName: string;
+  input: unknown;
+  createdAt: number;
 }
 export interface Feature {
   id: string;
@@ -378,8 +386,21 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ branch }),
       }),
+    // Resolve a supervised per-tool approval. `decision` is "allow" or "deny"; `reason` is an
+    // optional note surfaced to the agent on deny.
+    resolveApproval: (
+      name: string,
+      branch: string,
+      approvalId: string,
+      decision: "allow" | "deny",
+      reason?: string,
+    ) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/approval`, {
+        method: "POST",
+        body: JSON.stringify(reason !== undefined ? { branch, approvalId, decision, reason } : { branch, approvalId, decision }),
+      }),
     getAgent: (name: string, branch: string) =>
-      req<{ agent: AgentView | null; events: unknown[] }>(
+      req<{ agent: AgentView | null; events: unknown[]; approvals: AgentApproval[] }>(
         `/api/projects/${encodeURIComponent(name)}/factory/agent?branch=${encodeURIComponent(branch)}`,
       ),
   },

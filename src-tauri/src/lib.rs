@@ -96,6 +96,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
         .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
+        .route("/api/projects/:name/factory/agent/approval", post(post_branch_agent_approval))
         .route("/api/projects/:name/factory/agent", get(get_branch_agent))
         .route("/api/projects/:name/worktrees", post(post_worktree))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
@@ -676,6 +677,28 @@ async fn post_branch_agent_stop(State(st): State<AppState>, Path(name): Path<Str
     Ok(Json(json!({ "ok": ok })))
 }
 
+/// `POST .../factory/agent/approval` — resolve a pending per-tool approval (supervised mode).
+/// Body: `{ branch, approvalId, decision: "allow"|"deny", reason? }`. Writes the correlated
+/// control_response to the agent over stdio and returns `{ ok }` (false if the approval was
+/// unknown / the agent's stdin was gone).
+async fn post_branch_agent_approval(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let approval_id = match b.get("approvalId").and_then(|v| v.as_str()).map(str::trim) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return Err(bad("approvalId is required")),
+    };
+    let decision = match b.get("decision").and_then(|v| v.as_str()) {
+        Some(d @ ("allow" | "deny")) => d.to_string(),
+        _ => return Err(bad("decision must be \"allow\" or \"deny\"")),
+    };
+    let reason = b.get("reason").and_then(|v| v.as_str()).map(str::to_string);
+    let key = branch_agent_key(&name, &branch);
+    let ok = st.agents.resolve_approval(&key, &approval_id, &decision, reason.as_deref());
+    Ok(Json(json!({ "ok": ok })))
+}
+
 async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
     projects::project_path_from_name(&name).map_err(bad)?;
     let branch = match q.get("branch").filter(|s| !s.is_empty()) {
@@ -715,7 +738,10 @@ async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, 
         .await;
     }
 
-    Ok(Json(json!({ "agent": agent, "events": events })))
+    // Backfill outstanding per-tool approvals (supervised mode) so a reconnecting client
+    // re-renders the open Approve/Deny gates instead of losing them.
+    let approvals = st.agents.pending_approvals(&key);
+    Ok(Json(json!({ "agent": agent, "events": events, "approvals": approvals })))
 }
 
 async fn get_inbox(State(st): State<AppState>) -> ApiResult {
