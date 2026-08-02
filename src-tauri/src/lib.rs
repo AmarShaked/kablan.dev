@@ -90,6 +90,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/features/:fid/unfile", post(post_unfile_branch))
         .route("/api/projects/:name/factory/features/:fid/reorder", post(post_reorder_feature_branches))
         .route("/api/projects/:name/factory/features/reorder", post(post_reorder_features))
+        .route("/api/projects/:name/factory/branch/title", post(post_branch_title))
         .route("/api/projects/:name/factory/session", post(post_new_session))
         .route("/api/projects/:name/factory/agent/start", post(post_branch_agent_start))
         .route("/api/projects/:name/factory/agent/message", post(post_branch_agent_message))
@@ -334,6 +335,30 @@ async fn post_unfile_branch(Path((name, fid)): Path<(String, String)>, body: Byt
         let path = factory_store_path();
         let mut file = factory::load_file(&path);
         factory::unfile_branch(&mut file, &key, &fid, &branch)?;
+        factory::save_file(&path, &file)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// `POST .../factory/branch/title` — set (or clear) a branch's friendly display title.
+/// Body: `{ branch, title }`. An empty/whitespace `title` clears it back to the raw branch
+/// name (the branch itself is never renamed — the title is display-only metadata).
+async fn post_branch_title(Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = b.get("branch").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if branch.is_empty() {
+        return Err(bad("branch is required".to_string()));
+    }
+    let title = b.get("title").and_then(|v| v.as_str()).map(str::to_string);
+    let key = name.clone();
+    blocking(move || {
+        let path = factory_store_path();
+        let mut file = factory::load_file(&path);
+        factory::set_branch_title(&mut file, &key, &branch, title);
         factory::save_file(&path, &file)?;
         Ok::<_, String>(())
     })

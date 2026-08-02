@@ -28,7 +28,19 @@ type RightTab = "details" | "environment" | "logs";
  * creates the working copy server-side if missing, then starts the agent — and invalidates the
  * factory + worktrees queries so this re-resolves as live on the next render.
  */
-function CockpitHeader({ branch, onBack, right }: { branch: string; onBack: () => void; right?: ReactNode }) {
+function CockpitHeader({
+  branch,
+  title,
+  onBack,
+  right,
+}: {
+  branch: string;
+  /** Friendly display title for this branch, if the user set one — shown as the header title
+   * with the raw git branch name demoted to a muted secondary line. */
+  title?: string;
+  onBack: () => void;
+  right?: ReactNode;
+}) {
   return (
     <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
       <button
@@ -39,7 +51,14 @@ function CockpitHeader({ branch, onBack, right }: { branch: string; onBack: () =
       >
         <ChevronLeft className="size-4" />
       </button>
-      <span className="min-w-0 truncate font-mono font-medium text-foreground">{branch}</span>
+      {title ? (
+        <div className="flex min-w-0 flex-col overflow-hidden" title={branch}>
+          <span className="truncate font-medium text-foreground">{title}</span>
+          <span className="truncate font-mono text-[11px] leading-tight text-muted-foreground">{branch}</span>
+        </div>
+      ) : (
+        <span className="min-w-0 truncate font-mono font-medium text-foreground">{branch}</span>
+      )}
       {right && <div className="ml-auto shrink-0">{right}</div>}
     </div>
   );
@@ -214,7 +233,7 @@ export function Cockpit({
   if (!hasWorktree) {
     return (
       <>
-        <CockpitHeader branch={branch} onBack={onBack} />
+        <CockpitHeader branch={branch} title={branchState?.title?.trim() || undefined} onBack={onBack} />
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-sm text-muted-foreground">
           <p>No working copy yet for this branch.</p>
           <div className="flex flex-col gap-2">
@@ -251,6 +270,7 @@ export function Cockpit({
     <>
       <CockpitHeader
         branch={branch}
+        title={branchState?.title?.trim() || undefined}
         onBack={onBack}
         right={
           <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as RightTab)}>

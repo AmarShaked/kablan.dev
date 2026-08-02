@@ -46,8 +46,10 @@ function fireDragAt(type: "dragover" | "drop", node: Element, dataTransfer: Data
 }
 
 function branchEntity(overrides: Partial<BranchEntity> = {}): BranchEntity {
+  const name = overrides.name ?? "main";
   return {
-    name: "main",
+    name,
+    displayName: overrides.title ?? name,
     hasWorktree: false,
     serverRunning: false,
     isCurrent: false,
@@ -64,6 +66,7 @@ function renderComponent(overrides: Partial<Parameters<typeof SidebarRecent>[0]>
     onOpenBranch: vi.fn(),
     onFileBranch: vi.fn(),
     onUnfileBranch: vi.fn(),
+    onRenameBranch: vi.fn(),
     onReorderFeatureBranches: vi.fn(),
     onReorderFeatures: vi.fn(),
     onNewFeature: vi.fn(),
@@ -245,6 +248,49 @@ describe("SidebarRecent", () => {
       await userEvent.click(screen.getByLabelText(/remove feat\/one from its feature/i));
       await userEvent.click(screen.getByText("Remove from feature"));
       expect(props.onUnfileBranch).toHaveBeenCalledWith("f1", "feat/one");
+    });
+  });
+
+  describe("display title (rename)", () => {
+    it("shows a branch's display title as the primary label, with the git branch name as a secondary line", () => {
+      renderComponent({
+        unfiled: [branchEntity({ name: "feat/xyz-123", title: "Nice Feature" })],
+      });
+      expect(screen.getByText("Nice Feature")).toBeInTheDocument();
+      // The raw git branch name is still shown (secondary line) so it stays discoverable.
+      expect(screen.getByText("feat/xyz-123")).toBeInTheDocument();
+    });
+
+    it("renaming a branch commits the new title via onRenameBranch on Enter", async () => {
+      const props = renderComponent({ unfiled: [branchEntity({ name: "main" })] });
+      await userEvent.click(screen.getByLabelText(/branch options/i));
+      await userEvent.click(screen.getByText("Rename"));
+      const input = screen.getByLabelText(/rename main/i);
+      await userEvent.clear(input);
+      await userEvent.type(input, "My Title");
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(props.onRenameBranch).toHaveBeenCalledWith("main", "My Title");
+    });
+
+    it("clearing the title (empty value) calls onRenameBranch with an empty string", async () => {
+      const props = renderComponent({ unfiled: [branchEntity({ name: "main", title: "Old Title" })] });
+      // A titled branch is filed-or-not; here unfiled with no features => "Options for main".
+      await userEvent.click(screen.getByLabelText(/branch options/i));
+      await userEvent.click(screen.getByText("Rename"));
+      const input = screen.getByLabelText(/rename main/i);
+      await userEvent.clear(input);
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(props.onRenameBranch).toHaveBeenCalledWith("main", "");
+    });
+
+    it("Escape cancels a rename without calling onRenameBranch", async () => {
+      const props = renderComponent({ unfiled: [branchEntity({ name: "main" })] });
+      await userEvent.click(screen.getByLabelText(/branch options/i));
+      await userEvent.click(screen.getByText("Rename"));
+      const input = screen.getByLabelText(/rename main/i);
+      await userEvent.type(input, "Discarded");
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(props.onRenameBranch).not.toHaveBeenCalled();
     });
   });
 

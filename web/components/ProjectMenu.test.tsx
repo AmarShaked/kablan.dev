@@ -39,8 +39,10 @@ const projects: ProjectSummary[] = [
 ];
 
 function branchEntity(overrides: Partial<BranchEntity> = {}): BranchEntity {
+  const name = overrides.name ?? "main";
   return {
-    name: "main",
+    name,
+    displayName: overrides.title ?? name,
     hasWorktree: false,
     serverRunning: false,
     isCurrent: false,

@@ -130,6 +130,9 @@ export interface BranchState {
   worktreePath?: string;
   agentSessionId?: string;
   createdAt: number;
+  /** Friendly display title shown in the sidebar/cockpit instead of the raw git branch name.
+   * Does NOT rename the branch — the branch name stays the key. */
+  title?: string;
 }
 export interface FactoryOverview {
   features: Feature[];
@@ -319,6 +322,14 @@ export const api = {
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/features/reorder`, {
         method: "POST",
         body: JSON.stringify({ order }),
+      }),
+
+    // Sets (or clears, with an empty string) a branch's friendly DISPLAY TITLE — shown in the
+    // sidebar/cockpit instead of the raw git branch name. Never renames the branch itself.
+    setBranchTitle: (name: string, branch: string, title: string) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/branch/title`, {
+        method: "POST",
+        body: JSON.stringify({ branch, title }),
       }),
 
     // "New session" flow: the user picks only a base branch to branch off — Kablan generates

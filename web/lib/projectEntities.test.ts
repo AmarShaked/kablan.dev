@@ -220,6 +220,43 @@ describe("buildBranchEntities", () => {
     expect(unfiled.map((e) => e.name)).toEqual(["new", "old"]);
   });
 
+  it("populates title + displayName from factory.branchState[name].title", () => {
+    const { all } = buildBranchEntities({
+      branches: [branch({ name: "feat/xyz" }), branch({ name: "feat/plain" })],
+      worktrees: [],
+      factory: factory({
+        branchState: {
+          "feat/xyz": { createdAt: 1, title: "Nice Feature" },
+          "feat/plain": { createdAt: 1 },
+        },
+      }),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+    });
+    const titled = all.find((e) => e.name === "feat/xyz")!;
+    expect(titled.title).toBe("Nice Feature");
+    expect(titled.displayName).toBe("Nice Feature");
+    // name stays the real git branch name (load-bearing for keys/openBranch/git ops).
+    expect(titled.name).toBe("feat/xyz");
+
+    const plain = all.find((e) => e.name === "feat/plain")!;
+    expect(plain.title).toBeUndefined();
+    expect(plain.displayName).toBe("feat/plain");
+  });
+
+  it("treats a whitespace-only stored title as no title (falls back to the branch name)", () => {
+    const { all } = buildBranchEntities({
+      branches: [branch({ name: "feat/ws" })],
+      worktrees: [],
+      factory: factory({ branchState: { "feat/ws": { createdAt: 1, title: "   " } } }),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+    });
+    const e = all.find((x) => x.name === "feat/ws")!;
+    expect(e.title).toBeUndefined();
+    expect(e.displayName).toBe("feat/ws");
+  });
+
   it("sets featureId on branch entities filed into a feature, leaving it undefined for unfiled ones", () => {
     const features: Feature[] = [{ id: "f1", name: "Feature One", branches: ["feat/a"] }];
     const { all } = buildBranchEntities({

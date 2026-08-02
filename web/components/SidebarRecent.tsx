@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw, Boxes, Folder, GitBranch, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Boxes, Folder, GitBranch, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -138,24 +138,35 @@ function GroupLabel({
   );
 }
 
-/** File/unfile affordance for one branch row: a "＋" for an unfiled branch (choose a feature to
- * file it into) or a "···" for a filed one (remove it from its feature). Hidden entirely when
- * there's nothing useful to offer (no features exist yet, and the branch isn't filed). Built
- * from Popover rather than the shadcn DropdownMenu primitive, matching `OpenMenu`'s pattern
- * elsewhere in the cockpit. */
+/** Per-row overflow menu: always offers "Rename" (set a friendly display title without renaming
+ * the git branch); plus "Remove from feature" for a filed branch, or a "File into" feature list
+ * for an unfiled one when features exist. The trigger's "＋" icon (unfiled, features available)
+ * hints filing; otherwise a "···". Built from Popover rather than the shadcn DropdownMenu
+ * primitive, matching `OpenMenu`'s pattern elsewhere in the cockpit. */
 function FileMenu({
   entity,
   features,
   onFileBranch,
   onUnfileBranch,
+  onRename,
 }: {
   entity: BranchEntity;
   features: { id: string; name: string }[];
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
+  /** Begins inline rename of this row (reveals the title input). */
+  onRename: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  if (!entity.featureId && features.length === 0) return null;
+  const canFile = !entity.featureId && features.length > 0;
+  // The trigger keeps its original filing/unfiling aria-label when that action is available (so
+  // the "File …"/"Remove …" affordances stay discoverable); an unfiled branch with no features
+  // to file into now still shows the menu (for Rename) under a neutral label.
+  const triggerLabel = entity.featureId
+    ? `Remove ${entity.name} from its feature`
+    : canFile
+      ? `File ${entity.name} into a feature`
+      : "Branch options";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -163,16 +174,27 @@ function FileMenu({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
-          aria-label={entity.featureId ? `Remove ${entity.name} from its feature` : `File ${entity.name} into a feature`}
+          aria-label={triggerLabel}
           className={cn(
             "shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100",
             open && "opacity-100",
           )}
         >
-          {entity.featureId ? <MoreHorizontal className="size-3.5" /> : <Plus className="size-3.5" />}
+          {canFile ? <Plus className="size-3.5" /> : <MoreHorizontal className="size-3.5" />}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-48 p-1" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => {
+            onRename();
+            setOpen(false);
+          }}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+        >
+          <Pencil className="size-3.5 shrink-0 text-muted-foreground" />
+          Rename
+        </button>
         {entity.featureId ? (
           <button
             type="button"
@@ -185,24 +207,26 @@ function FileMenu({
             Remove from feature
           </button>
         ) : (
-          <>
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              File into
-            </div>
-            {features.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => {
-                  onFileBranch(f.id, entity.name);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
-              >
-                {f.name}
-              </button>
-            ))}
-          </>
+          canFile && (
+            <>
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                File into
+              </div>
+              {features.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    onFileBranch(f.id, entity.name);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+                >
+                  {f.name}
+                </button>
+              ))}
+            </>
+          )
         )}
       </PopoverContent>
     </Popover>
@@ -240,6 +264,7 @@ function BranchRow({
   onOpenBranch,
   onFileBranch,
   onUnfileBranch,
+  onRenameBranch,
   onDragStart,
   onDragEnd,
   onRowDragOver,
@@ -255,6 +280,8 @@ function BranchRow({
   onOpenBranch: (name: string) => void;
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
+  /** Commits a friendly display title for this branch (empty string clears it). */
+  onRenameBranch: (branch: string, title: string) => void;
   /** Native HTML5 drag-and-drop wiring (see the module doc comment at the top of this file for
    * the overall design) — all four are always provided by the parent, fully bound to this row's
    * identity/position, so `BranchRow` itself stays presentational. */
@@ -270,13 +297,35 @@ function BranchRow({
   dropAfter?: boolean;
 }) {
   const time = relativeLabel(entity.ts);
+  // Inline rename: a title input replaces the label. Prefilled with the current title, or the
+  // raw branch name as a starting point when there's no title yet. Enter or blur commits;
+  // Escape cancels. An empty/whitespace value clears the title (server falls back to the name).
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState("");
+  const startRename = () => {
+    setDraft(entity.title ?? entity.name);
+    setRenaming(true);
+  };
+  const commitRename = () => {
+    if (!renaming) return;
+    setRenaming(false);
+    const next = draft.trim();
+    // Only round-trip to the server when it actually changed (avoids a redundant write when the
+    // user opens rename and blurs without editing).
+    if (next !== (entity.title ?? "")) onRenameBranch(entity.name, next);
+  };
+  const cancelRename = () => setRenaming(false);
+
   return (
     <div
       role="button"
       tabIndex={0}
-      draggable
-      onClick={() => onOpenBranch(entity.name)}
+      draggable={!renaming}
+      onClick={() => {
+        if (!renaming) onOpenBranch(entity.name);
+      }}
       onKeyDown={(e) => {
+        if (renaming) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onOpenBranch(entity.name);
@@ -302,16 +351,55 @@ function BranchRow({
           aria-label="Dev server running"
         />
       )}
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate font-mono text-xs",
-          entity.isCurrent && "font-semibold text-foreground",
-        )}
-      >
-        {entity.name}
-      </span>
-      {time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}
-      <FileMenu entity={entity} features={features} onFileBranch={onFileBranch} onUnfileBranch={onUnfileBranch} />
+      {renaming ? (
+        <input
+          autoFocus
+          value={draft}
+          aria-label={`Rename ${entity.name}`}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitRename();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancelRename();
+            }
+          }}
+          placeholder={entity.name}
+          className="min-w-0 flex-1 rounded border border-input bg-background px-1 py-0.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden" title={entity.name}>
+          <span
+            className={cn(
+              "truncate text-xs",
+              !entity.title && "font-mono",
+              entity.isCurrent && "font-semibold text-foreground",
+            )}
+          >
+            {entity.displayName}
+          </span>
+          {entity.title && (
+            <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
+              {entity.name}
+            </span>
+          )}
+        </div>
+      )}
+      {!renaming && time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}
+      {!renaming && (
+        <FileMenu
+          entity={entity}
+          features={features}
+          onFileBranch={onFileBranch}
+          onUnfileBranch={onUnfileBranch}
+          onRename={startRename}
+        />
+      )}
     </div>
   );
 }
@@ -322,6 +410,9 @@ export interface SidebarRecentProps {
   onOpenBranch: (name: string) => void;
   onFileBranch: (featureId: string, branch: string) => void;
   onUnfileBranch: (featureId: string, branch: string) => void;
+  /** Sets (or clears, with an empty string) a branch's friendly display title — does not rename
+   * the git branch. */
+  onRenameBranch: (branch: string, title: string) => void;
   /** Persists a drag-and-drop reorder of one feature's branches — `branches` is the feature's
    * full new order (a permutation of its current branches; see `reorderIds` in `dnd.ts`). */
   onReorderFeatureBranches: (featureId: string, branches: string[]) => void;
@@ -352,6 +443,7 @@ export function SidebarRecent({
   onOpenBranch,
   onFileBranch,
   onUnfileBranch,
+  onRenameBranch,
   onReorderFeatureBranches,
   onReorderFeatures,
   onNewFeature,
@@ -670,6 +762,7 @@ export function SidebarRecent({
                               onOpenBranch={onOpenBranch}
                               onFileBranch={onFileBranch}
                               onUnfileBranch={onUnfileBranch}
+                              onRenameBranch={onRenameBranch}
                               onDragStart={(e) => handleBranchDragStart(e, entity)}
                               onDragEnd={clearDrag}
                               onRowDragOver={(e) => handleBranchRowDragOver(e, feature.id, idx)}
@@ -735,6 +828,7 @@ export function SidebarRecent({
                   onOpenBranch={onOpenBranch}
                   onFileBranch={onFileBranch}
                   onUnfileBranch={onUnfileBranch}
+                  onRenameBranch={onRenameBranch}
                   onDragStart={(e) => handleBranchDragStart(e, entity)}
                   onDragEnd={clearDrag}
                   onRowDragOver={(e) => handleBranchRowDragOver(e, undefined, 0)}

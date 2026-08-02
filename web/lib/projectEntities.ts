@@ -5,6 +5,12 @@ import type { Branch, Worktree, Feature, FactoryOverview, AgentStatus } from "..
  * agent/server state). Replaces the old feature/taskForce/worktree/branch `ProjectEntity` union. */
 export interface BranchEntity {
   name: string;
+  /** Friendly display title from `factory.branchState[name].title`, if the user set one — shown
+   * in the sidebar/cockpit in place of the raw branch name. Does NOT rename the git branch. */
+  title?: string;
+  /** What to render for this branch: its `title` if set, else the raw git branch `name`. `name`
+   * stays the real branch name everywhere it's load-bearing (keys, openBranch, git ops). */
+  displayName: string;
   /** The feature this branch is filed into, if any — a branch belongs to at most one feature
    * (enforced server-side by `file_branch`). */
   featureId?: string;
@@ -87,8 +93,11 @@ export function buildBranchEntities({
     const agentStatus = statusFor(b.name);
     const lastCommitTs = wt?.lastCommitTs ?? b.lastCommitTs ?? null;
     const ts = agentStatus === "working" ? Number.MAX_SAFE_INTEGER : lastCommitTs || state?.createdAt || 0;
+    const title = state?.title?.trim() || undefined;
     return {
       name: b.name,
+      title,
+      displayName: title || b.name,
       featureId: featureIdByBranch.get(b.name),
       worktreePath,
       hasWorktree: !!worktreePath,

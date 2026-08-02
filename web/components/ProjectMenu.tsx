@@ -78,6 +78,16 @@ export function ProjectMenu({
     }
   };
 
+  const renameBranch = async (branch: string, title: string) => {
+    if (!selected) return;
+    try {
+      await api.factory.setBranchTitle(selected, branch, title);
+      await invalidateFactory();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
   const reorderFeatureBranches = async (featureId: string, branches: string[]) => {
     if (!selected) return;
     try {
@@ -117,6 +127,7 @@ export function ProjectMenu({
           onOpenBranch={onOpenBranch}
           onFileBranch={fileBranch}
           onUnfileBranch={unfileBranch}
+          onRenameBranch={renameBranch}
           onReorderFeatureBranches={reorderFeatureBranches}
           onReorderFeatures={reorderFeatures}
           onNewFeature={() => setNewFeatureOpen(true)}

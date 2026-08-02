@@ -53,6 +53,10 @@ pub struct BranchState {
     #[serde(default)]
     pub agent_session_id: Option<String>,
     pub created_at: i64,
+    /// Friendly display title shown in the sidebar/cockpit instead of the raw git
+    /// branch name. Does NOT rename the branch — the branch name remains the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -155,6 +159,7 @@ fn migrate(file: &mut FactoryFile) {
                         worktree_path: if tf.worktree_path.is_empty() { None } else { Some(tf.worktree_path) },
                         agent_session_id: tf.agent_session_id,
                         created_at: tf.created_at,
+                        title: None,
                     },
                 );
             }
@@ -245,6 +250,7 @@ pub fn set_branch_worktree(file: &mut FactoryFile, project: &str, branch: &str, 
         worktree_path: None,
         agent_session_id: None,
         created_at: now_secs(),
+        title: None,
     });
     entry.worktree_path = Some(path.to_string());
 }
@@ -258,8 +264,28 @@ pub fn set_branch_session(file: &mut FactoryFile, project: &str, branch: &str, s
         worktree_path: None,
         agent_session_id: None,
         created_at: now_secs(),
+        title: None,
     });
     entry.agent_session_id = Some(sid.to_string());
+}
+
+/// Upsert the friendly display title for `branch` under `project`. An empty or
+/// whitespace-only `title` clears it back to `None` (the sidebar then falls back
+/// to the raw branch name). Creates the branch's state entry if this is its first
+/// record. Never renames the git branch — `branch` stays the key.
+pub fn set_branch_title(file: &mut FactoryFile, project: &str, branch: &str, title: Option<String>) {
+    let normalized = title.and_then(|t| {
+        let t = t.trim();
+        if t.is_empty() { None } else { Some(t.to_string()) }
+    });
+    let pf = file.projects.entry(project.to_string()).or_default();
+    let entry = pf.branch_state.entry(branch.to_string()).or_insert_with(|| BranchState {
+        worktree_path: None,
+        agent_session_id: None,
+        created_at: now_secs(),
+        title: None,
+    });
+    entry.title = normalized;
 }
 
 /// Look up the stored state (working-copy path + agent session id) for
@@ -524,6 +550,38 @@ mod tests {
         let st = get_branch_state(&file, "p", "feat/a").unwrap();
         assert!(st.worktree_path.is_none());
         assert_eq!(st.agent_session_id.as_deref(), Some("sess-1"));
+    }
+
+    #[test]
+    fn set_branch_title_set_and_clear_roundtrip() {
+        let path = std::env::temp_dir().join(format!("kablan-factory-title-{}.json", now_secs()));
+        let mut file = FactoryFile::default();
+        // Set a title on a fresh branch (creates the entry).
+        set_branch_title(&mut file, "p", "feat/a", Some("Nice Feature".to_string()));
+        assert_eq!(get_branch_state(&file, "p", "feat/a").unwrap().title.as_deref(), Some("Nice Feature"));
+        save_file(&path, &file).unwrap();
+
+        // Survives a save/load round-trip.
+        let reloaded = load_file(&path);
+        assert_eq!(
+            get_branch_state(&reloaded, "p", "feat/a").unwrap().title.as_deref(),
+            Some("Nice Feature")
+        );
+
+        // Clearing with an empty/whitespace string resets it to None.
+        let mut file2 = reloaded;
+        set_branch_title(&mut file2, "p", "feat/a", Some("   ".to_string()));
+        assert!(get_branch_state(&file2, "p", "feat/a").unwrap().title.is_none());
+        save_file(&path, &file2).unwrap();
+        let reloaded2 = load_file(&path);
+        assert!(get_branch_state(&reloaded2, "p", "feat/a").unwrap().title.is_none());
+        // A cleared title serializes away entirely (skip_serializing_if).
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(!raw.contains("title"));
+
+        // Passing None also clears (and upserts on a brand-new branch as None).
+        set_branch_title(&mut file2, "p", "feat/b", None);
+        assert!(get_branch_state(&file2, "p", "feat/b").unwrap().title.is_none());
     }
 
     #[test]
