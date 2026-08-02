@@ -69,8 +69,9 @@ function Card({ title, actions, children }: { title: string; actions?: React.Rea
 
 /**
  * Inline details panel for the worktree cockpit (`Cockpit.tsx`) — a single scrolling column of
- * bordered cards (NOT a Sheet/tabs, per the mockup): `Detail` above, plus `OpenMenu`, `EnvTab`,
- * `GitlabSection`, `LinearLink`.
+ * bordered cards (NOT a Sheet/tabs, per the mockup): `Detail` above, plus `OpenMenu`, `EnvTab`.
+ * The GitLab (`GitlabSection`) and Linear (`LinearLink`) integrations live under the dedicated
+ * `view === "integrations"` tab, which lazy-fetches their data only while active.
  *
  * `server`/`url`/`busy` and the dev-server callbacks are supplied by the caller (`Cockpit`) —
  * this component is purely presentational for the dev server.
@@ -112,7 +113,7 @@ export function WorktreeDetails({
   logs?: LogLine[];
   /** Which right-pane view to render — driven by the cockpit header's tabs. Details is the
    * cards column; environment/logs each fill the pane with their single editor/stream. */
-  view?: "details" | "environment" | "logs";
+  view?: "details" | "environment" | "integrations" | "logs";
 }) {
   const hasWorktree = !!entry.cwd;
   const running = server?.status === "running" || server?.status === "starting";
@@ -132,7 +133,9 @@ export function WorktreeDetails({
     () => (diff.data ? summarizeDiff(diff.data.diff) : null),
     [diff.data],
   );
-  const gitlab = useGitlabOverview(project);
+  // Lazy: only fetch GitLab (and, since GitlabSection only mounts inside the integrations
+  // branch, its own internal queries) when the Integrations tab is actually active.
+  const gitlab = useGitlabOverview(project, view === "integrations");
   const glConnected = gitlab.data?.connected ?? false;
 
   // Env needs a concrete working directory — mirrors ItemDrawer's `canEnv` (minus the
@@ -183,6 +186,34 @@ export function WorktreeDetails({
         ) : (
           <p className="text-sm text-muted-foreground">Start a session for this branch to see dev-server logs.</p>
         )}
+      </div>
+    );
+  }
+
+  if (view === "integrations") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto custom-scroll p-4">
+        {/* GitLab */}
+        <Card title="GitLab">
+          {gitlab.isPending ? (
+            <Skeleton className="h-6 w-2/3 rounded-md" />
+          ) : glConnected ? (
+            <GitlabSection key={entry.id} project={project} branch={entry.branchName} defaultTarget={entry.baseBranch ?? "main"} />
+          ) : (
+            <p className="text-xs text-muted-foreground">GitLab isn't connected for this project.</p>
+          )}
+        </Card>
+
+        {/* Linear */}
+        <Card title="Linear">
+          {entry.linearId && linearWorkspace ? (
+            <div className="flex">
+              <LinearLink id={entry.linearId} workspace={linearWorkspace} />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No linked Linear issue.</p>
+          )}
+        </Card>
       </div>
     );
   }
@@ -239,7 +270,6 @@ export function WorktreeDetails({
               </button>
             }
           />
-          {entry.linearId && linearWorkspace && <LinearLink id={entry.linearId} workspace={linearWorkspace} />}
         </div>
       </Card>
 
@@ -355,13 +385,6 @@ export function WorktreeDetails({
           </p>
         )}
       </Card>
-
-      {/* GitLab */}
-      {glConnected && (
-        <Card title="GitLab">
-          <GitlabSection key={entry.id} project={project} branch={entry.branchName} defaultTarget={entry.baseBranch ?? "main"} />
-        </Card>
-      )}
     </div>
   );
 }

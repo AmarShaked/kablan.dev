@@ -21,14 +21,15 @@ vi.mock("../api.ts", async (importOriginal) => {
 // `useDiff` is a spy so tests can assert the args it's called with (e.g. the
 // `against` base branch when the "vs <base>" toggle is active) and drive its
 // `refetch`. `vi.hoisted` makes the spies available inside the hoisted factory.
-const { useDiffMock, refetchSpy } = vi.hoisted(() => ({
+const { useDiffMock, refetchSpy, useGitlabOverviewMock } = vi.hoisted(() => ({
   useDiffMock: vi.fn(),
   refetchSpy: vi.fn(),
+  useGitlabOverviewMock: vi.fn(),
 }));
 
 vi.mock("../queries.ts", () => ({
   useDiff: useDiffMock,
-  useGitlabOverview: () => ({ data: undefined, isPending: false }),
+  useGitlabOverview: useGitlabOverviewMock,
   useWorktrees: () => ({ data: [], isPending: false }),
 }));
 
@@ -36,6 +37,8 @@ beforeEach(() => {
   useDiffMock.mockReset();
   refetchSpy.mockReset();
   useDiffMock.mockReturnValue({ data: { diff: "" }, isPending: false, isFetching: false, refetch: refetchSpy });
+  useGitlabOverviewMock.mockReset();
+  useGitlabOverviewMock.mockReturnValue({ data: undefined, isPending: false });
 });
 
 const entry: Entry = {
@@ -184,5 +187,41 @@ describe("WorktreeDetails", () => {
     renderDetails({ entry: { ...entry, cwd: null }, view: "logs", logs: [{ ts: 0, stream: "stdout", text: "stale" }] });
     expect(screen.getByText(/start a session for this branch to see dev-server logs/i)).toBeInTheDocument();
     expect(screen.queryByText("stale")).not.toBeInTheDocument();
+  });
+
+  it("renders the GitLab section in the integrations view when connected", () => {
+    useGitlabOverviewMock.mockReturnValue({
+      data: { connected: true, mrs: [], pipelines: [], host: "gitlab.com", project: "acme/app", error: null },
+      isPending: false,
+    });
+    renderDetails({ view: "integrations" });
+    // The project header links out to the GitLab project.
+    expect(screen.getByText("acme/app")).toBeInTheDocument();
+  });
+
+  it("shows a not-connected hint in the integrations view when GitLab is off", () => {
+    useGitlabOverviewMock.mockReturnValue({ data: { connected: false }, isPending: false });
+    renderDetails({ view: "integrations" });
+    expect(screen.getByText(/gitlab isn't connected for this project/i)).toBeInTheDocument();
+  });
+
+  it("does NOT render the GitLab card in the details view (it moved to Integrations)", () => {
+    useGitlabOverviewMock.mockReturnValue({
+      data: { connected: true, mrs: [], pipelines: [], host: "gitlab.com", project: "acme/app", error: null },
+      isPending: false,
+    });
+    renderDetails({ view: "details" });
+    expect(screen.queryByText("acme/app")).not.toBeInTheDocument();
+  });
+
+  it("shows the linked Linear issue in the integrations view", () => {
+    renderDetails({ entry: { ...entry, linearId: "FE-3146" }, view: "integrations", linearWorkspace: "acme" });
+    const link = screen.getByRole("link", { name: /fe-3146/i });
+    expect(link).toHaveAttribute("href", "https://linear.app/acme/issue/FE-3146");
+  });
+
+  it("shows a no-linked-issue hint in the integrations view without a Linear id", () => {
+    renderDetails({ view: "integrations" });
+    expect(screen.getByText(/no linked linear issue/i)).toBeInTheDocument();
   });
 });

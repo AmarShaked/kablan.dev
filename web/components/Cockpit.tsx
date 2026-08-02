@@ -16,7 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauri } from "../lib/version.ts";
 
 /** The right-pane views selectable from the cockpit header's tabs. */
-type RightTab = "details" | "environment" | "logs";
+type RightTab = "details" | "environment" | "integrations" | "logs";
 
 /**
  * The unified cockpit for a single branch — chat (left) + details (right) once it has a working
@@ -294,6 +294,7 @@ export function Cockpit({
             <TabsList variant="line" className="h-8">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="environment">Environment</TabsTrigger>
+              <TabsTrigger value="integrations">Integrations</TabsTrigger>
               {isTauri && <TabsTrigger value="logs">Logs</TabsTrigger>}
             </TabsList>
           </Tabs>

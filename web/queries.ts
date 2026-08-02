@@ -72,11 +72,11 @@ export function useFiles(name: string, cwd?: string) {
   });
 }
 
-export function useGitlabOverview(name: string) {
+export function useGitlabOverview(name: string, enabled = true) {
   return useQuery({
     queryKey: ["gitlab-overview", name] as const,
     queryFn: () => api.gitlab.overview(name),
-    enabled: isTauri && !!name,
+    enabled: enabled && isTauri && !!name,
     staleTime: 60_000,
   });
 }
