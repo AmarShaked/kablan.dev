@@ -111,6 +111,52 @@ describe("WorktreeDetails", () => {
     expect(refetchSpy).toHaveBeenCalled();
   });
 
+  it("renders the parsed per-file diff — file names plus colored added/removed lines", () => {
+    const sample = [
+      "diff --git a/src/foo.ts b/src/foo.ts",
+      "index 111..222 100644",
+      "--- a/src/foo.ts",
+      "+++ b/src/foo.ts",
+      "@@ -1,3 +1,3 @@",
+      " context line",
+      "-old removed line",
+      "+new added line",
+      " trailing",
+      "diff --git a/README.md b/README.md",
+      "index 333..444 100644",
+      "--- a/README.md",
+      "+++ b/README.md",
+      "@@ -1 +1 @@",
+      "-docs before",
+      "+docs after",
+      "",
+    ].join("\n");
+    useDiffMock.mockReturnValue({
+      data: { diff: sample },
+      isPending: false,
+      isFetching: false,
+      refetch: refetchSpy,
+    });
+    renderDetails();
+    // Both files' basenames render in their headers.
+    expect(screen.getByText("foo.ts")).toBeInTheDocument();
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+    // Added/removed line bodies render, colored via the success/destructive classes.
+    const added = screen.getByText("new added line");
+    expect(added).toBeInTheDocument();
+    expect(added.parentElement?.className).toContain("text-success");
+    const removed = screen.getByText("old removed line");
+    expect(removed).toBeInTheDocument();
+    expect(removed.parentElement?.className).toContain("text-destructive");
+  });
+
+  it("shows the empty-state (no viewer) when the diff string is empty", () => {
+    // beforeEach already mocks an empty diff.
+    renderDetails();
+    expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
+    expect(screen.queryByText("foo.ts")).not.toBeInTheDocument();
+  });
+
   it("calls onStartServer when Start server is clicked (not running)", async () => {
     const props = renderDetails();
     await userEvent.click(screen.getByRole("button", { name: /start server/i }));

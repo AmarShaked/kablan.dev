@@ -15,6 +15,7 @@ import { api, type RunningServer, type ProjectSummary, type LogLine } from "../a
 import { useGitlabOverview, useDiff } from "../queries.ts";
 import type { Entry } from "../lib/entries.ts";
 import { GitlabSection } from "./GitlabSection.tsx";
+import { UnifiedDiffView } from "./UnifiedDiffView.tsx";
 import { OpenMenu } from "./OpenMenu.tsx";
 import { EnvTab } from "./EnvTab.tsx";
 import { LinearLink } from "./LinearLink.tsx";
@@ -36,9 +37,8 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-/** Turns a unified diff into a one-line "+N -M across F files" summary. Good enough for a
- * summary card — the full diff isn't rendered here (no diff viewer exists elsewhere yet either;
- * see `useDiff` in `../queries.ts`, previously unused). */
+/** Turns a unified diff into a one-line "+N -M across F files" summary shown in the card header,
+ * beside the mode toggle. The full per-file diff is rendered below it by `UnifiedDiffView`. */
 function summarizeDiff(diff: string): { files: number; added: number; removed: number } {
   let files = 0;
   let added = 0;
@@ -325,7 +325,7 @@ export function WorktreeDetails({
         )}
       </Card>
 
-      {/* Working diff summary */}
+      {/* Working diff */}
       <Card
         title="Working diff"
         actions={
@@ -374,14 +374,25 @@ export function WorktreeDetails({
         ) : diff.isPending ? (
           <Skeleton className="h-6 w-2/3 rounded-md" />
         ) : diffSummary && diffSummary.files > 0 ? (
-          <p className="font-mono text-xs">
-            {diffSummary.files} file{diffSummary.files === 1 ? "" : "s"} changed ·{" "}
-            <span className="text-[var(--success)]">+{diffSummary.added}</span>{" "}
-            <span className="text-destructive">-{diffSummary.removed}</span>
-          </p>
+          <>
+            <p className="font-mono text-xs">
+              {diffSummary.files} file{diffSummary.files === 1 ? "" : "s"} changed ·{" "}
+              <span className="text-[var(--success)]">+{diffSummary.added}</span>{" "}
+              <span className="text-destructive">-{diffSummary.removed}</span>
+            </p>
+            {/* The parsed per-file diff. Caps its own height and scrolls internally so a huge diff
+             * doesn't swallow the whole details column. */}
+            <div className="max-h-[70vh] overflow-y-auto custom-scroll">
+              <UnifiedDiffView diff={diff.data?.diff ?? ""} />
+            </div>
+          </>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {diffMode === "base" ? `No changes vs ${baseBranch}.` : "No uncommitted changes."}
+            {diffMode === "base"
+              ? `No changes vs ${baseBranch}.`
+              : "No uncommitted changes — this branch's committed work shows under “vs " +
+                baseBranch +
+                "”."}
           </p>
         )}
       </Card>
