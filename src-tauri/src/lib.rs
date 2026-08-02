@@ -401,9 +401,19 @@ async fn start_branch_agent(
     branch: &str,
     copy_node_modules: bool,
     copy_env: bool,
+    model: Option<String>,
 ) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
-    let cfg = config::load();
+    let mut cfg = config::load();
+    // Per-branch model override (from the cockpit's model dropdown). Empty string = "Default"
+    // (use the configured/global model). Applied by overriding the factory model for THIS start
+    // only — `agents.start` stops any running agent first, so changing the model restarts the
+    // agent, resuming its persisted session id to keep the conversation.
+    if let Some(m) = model {
+        if !m.trim().is_empty() {
+            cfg.factory.agent_model = m.trim().to_string();
+        }
+    }
     // TODO: running_count() is a soft cap — it's checked-then-acted-on without
     // holding a lock across the check and the later `agents.start()` call, so
     // concurrent starts can race past the limit (small TOCTOU window).
@@ -462,7 +472,8 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     // already-seeded worktree (copy_session_extras is idempotent).
     let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(true);
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
-    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env).await?;
+    let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 

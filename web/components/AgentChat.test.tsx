@@ -80,21 +80,37 @@ describe("AgentChat", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
+  it("restarts a running agent with the chosen model when the Model dropdown changes", async () => {
+    const { onStart } = renderChat([workingStatus]);
+    await userEvent.selectOptions(screen.getByLabelText("Model"), "opus");
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith({ model: "opus" }));
+  });
+
+  it("appends the thinking keyword to the sent message but keeps the visible bubble clean", async () => {
+    const { onMessage } = renderChat([workingStatus]);
+    await userEvent.selectOptions(screen.getByLabelText("Thinking"), "hard");
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "do it");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(onMessage).toHaveBeenCalledWith("do it\n\nthink hard");
+    expect(screen.getByText("do it")).toBeInTheDocument(); // bubble shows what the user typed
+  });
+
   it("shows a thinking indicator while the agent status is working", () => {
     renderChat([workingStatus]);
-    expect(screen.getByText(/thinking/i)).toBeInTheDocument();
+    expect(screen.getByText("thinking…")).toBeInTheDocument();
   });
 
   it("does not show a thinking indicator when the agent isn't working", () => {
     renderChat([]);
-    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
   });
 
   // Regression: a freshly-started agent (status "idle") must NOT look busy before the user
   // has sent anything — no "thinking…", but the composer is enabled and Stop is available.
   it("a freshly started (idle) agent is quiet but chattable", () => {
     renderChat([idleStatus]);
-    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/message the agent/i)).toBeEnabled();
     expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
   });

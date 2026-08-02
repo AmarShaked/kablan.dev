@@ -21,6 +21,31 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
+/** Model options for the composer dropdown. Empty value = "Default" (use the configured/global
+ * model — no `--model` flag). The others are Claude Code's model aliases. */
+const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Default" },
+  { value: "opus", label: "Opus" },
+  { value: "sonnet", label: "Sonnet" },
+  { value: "haiku", label: "Haiku" },
+];
+
+/** "Performance" = thinking budget, applied by appending Claude Code's magic keyword to the
+ * outgoing message (higher keyword → larger budget). "off" appends nothing. */
+const THINKING_KEYWORD = {
+  off: "",
+  think: "think",
+  hard: "think hard",
+  ultra: "ultrathink",
+} as const;
+
+const THINKING_OPTIONS: { value: keyof typeof THINKING_KEYWORD; label: string }[] = [
+  { value: "off", label: "Thinking: off" },
+  { value: "think", label: "Think" },
+  { value: "hard", label: "Think hard" },
+  { value: "ultra", label: "Ultrathink" },
+];
+
 /** True while the agent process is alive and able to receive a message — including `idle`
  * (freshly started, no turn yet) so the composer stays enabled and the Stop button shows.
  * Only `working` drives the "thinking…" row. */
@@ -323,7 +348,9 @@ export function AgentChat({
   agentKey: string;
   title?: string;
   canChat?: boolean;
-  onStart: () => Promise<unknown>;
+  /** Starts (or, for an already-running agent, restarts) the agent. `opts.model` applies a
+   * per-branch model override — restarting resumes the persisted session so context is kept. */
+  onStart: (opts?: { model?: string }) => Promise<unknown>;
   onMessage: (text: string) => Promise<unknown>;
   onStop: () => Promise<unknown>;
   onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[] }>;
@@ -343,6 +370,11 @@ export function AgentChat({
   const [backfillStatus, setBackfillStatus] = useState<AgentStatus | undefined>(undefined);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // Per-session agent parameters, set from the dropdowns under the composer. `model` is a launch
+  // arg (changing it restarts the agent, resuming its session); `thinking` is applied per-message
+  // by appending Claude Code's thinking-budget keyword to the outgoing text (no restart).
+  const [model, setModel] = useState("");
+  const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   // Backfill the transcript from the server once, if nothing has streamed in live yet.
@@ -414,14 +446,19 @@ export function AgentChat({
   const sendText = async (value: string): Promise<boolean> => {
     const t = value.trim();
     if (!t) return false;
+    // The bubble shows exactly what the user typed; the thinking keyword is appended only to what
+    // the agent receives (so a "Think hard" setting doesn't visibly clutter the transcript).
+    const keyword = THINKING_KEYWORD[thinking];
+    const outgoing = keyword ? `${t}\n\n${keyword}` : t;
     setTimeline((prev) => [...prev, { kind: "you", text: t }]);
     setBusy(true);
     try {
       // Auto-start the agent on the first message so the user can just type — no explicit Start
       // click. `running` is false until an agent process is alive for this branch; onStart()
-      // resolves once the process is spawned (stdin ready), then we deliver the message.
-      if (!running) await onStart();
-      await onMessage(t);
+      // resolves once the process is spawned (stdin ready), then we deliver the message. The
+      // selected model is applied at launch.
+      if (!running) await onStart({ model });
+      await onMessage(outgoing);
       return true;
     } catch (err) {
       toast.error(String(err));
@@ -435,6 +472,21 @@ export function AgentChat({
   };
   const sendChoice = async (label: string) => {
     await sendText(label);
+  };
+
+  // Changing the model restarts a running agent with the new `--model` (resuming its session so
+  // context is kept); for a not-yet-started agent it just records the choice for the next start.
+  const changeModel = async (next: string) => {
+    setModel(next);
+    if (!running) return;
+    setBusy(true);
+    try {
+      await onStart({ model: next });
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Composer is enabled whenever the branch can host an agent — the first message auto-starts it
@@ -537,8 +589,35 @@ export function AgentChat({
             <Send className="size-3.5" />
           </Button>
         </div>
-        {/* Agent status indicator under the input (Claude-Code-style footer); Stop when running. */}
+        {/* Composer footer (Claude-Code-style): per-session model + thinking controls on the left,
+            Stop + agent status on the right. */}
         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <select
+            aria-label="Model"
+            value={model}
+            disabled={!chatEnabled || busy}
+            onChange={(e) => changeModel(e.target.value)}
+            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
+          >
+            {MODEL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Thinking"
+            value={thinking}
+            disabled={!chatEnabled}
+            onChange={(e) => setThinking(e.target.value as keyof typeof THINKING_KEYWORD)}
+            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
+          >
+            {THINKING_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           {running && (
             <button
               type="button"

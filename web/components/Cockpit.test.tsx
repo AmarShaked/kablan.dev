@@ -212,7 +212,7 @@ describe("Cockpit", () => {
       fireEvent.change(box, { target: { value: "kick off" } });
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() => {
-        expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one");
+        expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one", { model: "" });
         expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off");
       });
     });

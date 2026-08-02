@@ -26,7 +26,7 @@ describe("factory types", () => {
 
   it("api.factory exposes branch-keyed calls (branch never a path segment)", () => {
     expectTypeOf<typeof api.factory.agentStart>().parameters.toEqualTypeOf<
-      [string, string, { copyNodeModules?: boolean; copyEnv?: boolean }?]
+      [string, string, { copyNodeModules?: boolean; copyEnv?: boolean; model?: string }?]
     >();
     expectTypeOf<typeof api.factory.agentMessage>().parameters.toEqualTypeOf<[string, string, string]>();
     expectTypeOf<typeof api.factory.agentStop>().parameters.toEqualTypeOf<[string, string]>();
