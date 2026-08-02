@@ -33,6 +33,18 @@ describe("useAgentStream", () => {
     expect(result.current.agentFor("p::t1").events).toHaveLength(2);
   });
 
+  it("retains user/tool_result events so the renderer can fold results onto tool lines", () => {
+    const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
+    act(() =>
+      result.current.ingest({
+        type: "agent-event",
+        key: "p::t1",
+        event: { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: "ok" }] } },
+      }),
+    );
+    expect(result.current.agentFor("p::t1").events).toHaveLength(1);
+  });
+
   it("tracks pending approvals per key: adds on agent-approval, removes on resolved", () => {
     const { result } = renderHook(() => useAgentStream(), { wrapper: wrap });
     const appr = { id: "appr-1", toolName: "Bash", input: { command: "ls" }, createdAt: 1 };

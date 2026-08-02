@@ -197,6 +197,72 @@ describe("AgentChat", () => {
     ).toBeInTheDocument();
   });
 
+  // ---- Phase 1: enriched transcript (markdown, todos, tool results, plan, MCP notice) ----
+
+  const ev = (event: unknown) => ({ type: "agent-event", key: "proj::wt:/wt/one", event });
+  const assistant = (content: unknown[]) => ev({ type: "assistant", message: { role: "assistant", content } });
+  const toolResult = (id: string, content: unknown, isError = false) =>
+    ev({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] } });
+
+  it("renders assistant markdown: a ## heading becomes an <h2> and a fenced block renders code", () => {
+    renderChat([assistant([{ type: "text", text: "## Big Heading\n\n```js\nconst answer = 42;\n```" }])]);
+    expect(screen.getByRole("heading", { level: 2, name: /big heading/i })).toBeInTheDocument();
+    // rehype-highlight tokenizes the fenced block — the `const` keyword becomes its own span.
+    expect(screen.getByText("const")).toBeInTheDocument();
+  });
+
+  it("renders a TodoWrite tool_use as a checklist showing each item's text", () => {
+    renderChat([
+      assistant([
+        {
+          type: "tool_use",
+          id: "td1",
+          name: "TodoWrite",
+          input: {
+            todos: [
+              { content: "First task", status: "completed" },
+              { content: "Second task", status: "in_progress" },
+            ],
+          },
+        },
+      ]),
+    ]);
+    expect(screen.getByText("Todos")).toBeInTheDocument();
+    expect(screen.getByText("First task")).toBeInTheDocument();
+    expect(screen.getByText("Second task")).toBeInTheDocument();
+  });
+
+  it("shows a success dot for a completed tool call and reveals its result on click", async () => {
+    renderChat([
+      assistant([{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/a/x.ts" } }]),
+      toolResult("r1", "file body here"),
+    ]);
+    expect(screen.getByTitle("success")).toBeInTheDocument();
+    // Terse by default — the result is hidden until the line is expanded.
+    expect(screen.queryByText("file body here")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("Read x.ts"));
+    expect(screen.getByText("file body here")).toBeInTheDocument();
+  });
+
+  it("shows a 'not available' notice for an errored mcp__ tool_result", async () => {
+    renderChat([
+      assistant([{ type: "tool_use", id: "m1", name: "mcp__claude_ai__search", input: {} }]),
+      toolResult("m1", "server not connected", true),
+    ]);
+    expect(screen.getByTitle("error")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("mcp__claude_ai__search"));
+    expect(screen.getByText(/isn't available in this agent/i)).toBeInTheDocument();
+  });
+
+  it("renders an ExitPlanMode tool_use as a Plan card with its markdown", () => {
+    renderChat([
+      assistant([{ type: "tool_use", id: "p1", name: "ExitPlanMode", input: { plan: "## My Plan\n\nStep one" } }]),
+    ]);
+    // Card title (a <div>) — disambiguated from the Permission dropdown's "Plan" <option>.
+    expect(screen.getByText("Plan", { selector: "div" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /my plan/i })).toBeInTheDocument();
+  });
+
   it("seeds the transcript from onBackfill when nothing has streamed live yet", async () => {
     const onBackfill = vi.fn().mockResolvedValue({
       agent: { key: "proj::wt:/wt/one", status: "awaitingInput", sessionId: "s1", pid: 1, startedAt: 0, exitCode: null },

@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { Square, Send, ChevronDown, ChevronRight, X } from "lucide-react";
+import {
+  Square,
+  Send,
+  ChevronDown,
+  ChevronRight,
+  X,
+  Check,
+  Circle,
+  CircleDot,
+} from "lucide-react";
 import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
+import { Markdown } from "./Markdown.tsx";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -95,53 +105,77 @@ function toolSummary(name: string, input: unknown): string {
   }
 }
 
-/** Renders a small subset of inline markdown as React nodes: `**bold**` → semibold, and
- * `` `code` `` → a mono chip. Everything else is plain text (JSX-escaped). Used so assistant text
- * like "**Metronome** — …" reads as formatted text instead of printing literal asterisks. */
-function renderInline(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
-  let last = 0;
-  let k = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index));
-    if (m[1] !== undefined) {
-      nodes.push(
-        <strong key={k++} className="font-semibold text-foreground">
-          {m[1]}
-        </strong>,
-      );
-    } else {
-      nodes.push(
-        <code key={k++} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-          {m[2]}
-        </code>,
-      );
-    }
-    last = re.lastIndex;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
+/** A single todo item from a `TodoWrite` tool call. `status` is Claude Code's lifecycle enum;
+ * `activeForm` is the present-tense label shown while in progress (unused for now — we render
+ * `content`). */
+type TodoItem = { content: string; status?: string; activeForm?: string };
 
 /** A single flattened transcript row, after unpacking each stream event into its display pieces.
- * The renderer coalesces consecutive `tool` prims into one collapsible group; everything else
- * renders inline. Tool *results* (the raw `user` events) never become prims — they're the bulk of
- * the noise, and the `tool` line already says what ran. */
+ * The renderer coalesces consecutive plain `tool` prims into one collapsible group; the rich
+ * variants (`todo`, `plan`) and everything else render inline. Tool *results* no longer vanish —
+ * they're folded onto their originating `tool` prim (by `tool_use_id`) as `resultText`/`isError`,
+ * revealed on demand rather than dumped inline. */
 type Prim =
   | { t: "you"; key: string; text: string; images?: string[] }
   | { t: "text"; key: string; text: string }
-  | { t: "tool"; key: string; label: string }
+  | {
+      t: "tool";
+      key: string;
+      id?: string;
+      name: string;
+      label: string;
+      input: unknown;
+      resultText?: string;
+      isError?: boolean;
+    }
+  | { t: "todo"; key: string; todos: TodoItem[] }
+  | { t: "plan"; key: string; plan: string }
   | { t: "result"; key: string; label: string }
   | { t: "error"; key: string; text: string };
 
+/** Flattens a tool_result's `content` (a string, or an array of `{type:"text",text}` blocks) into
+ * one display string. Non-text blocks (images, etc.) are noted but not rendered. */
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  return "";
+}
+
+/** Walks the timeline once, collecting every tool_result (keyed by its `tool_use_id`) from the
+ * `user` events, so `flattenTimeline` can fold each result onto the `tool` prim it belongs to. */
+function collectToolResults(timeline: TimelineItem[]): Map<string, { content: string; isError: boolean }> {
+  const map = new Map<string, { content: string; isError: boolean }>();
+  for (const item of timeline) {
+    if (item.kind !== "agent") continue;
+    const e = item.event as Record<string, any> | null;
+    if (!e || typeof e !== "object" || e.type !== "user") continue;
+    const content = Array.isArray(e.message?.content) ? e.message.content : [];
+    for (const block of content) {
+      if (block?.type === "tool_result" && block.tool_use_id) {
+        map.set(String(block.tool_use_id), {
+          content: toolResultText(block.content),
+          isError: block.is_error === true,
+        });
+      }
+    }
+  }
+  return map;
+}
+
 /** Unpacks the ordered timeline into a flat list of display prims — one `you` bubble per sent
- * message, and per agent event its assistant text bubbles + tool lines (a result → a divider, a
- * spawn_error/stderr → an error line). Everything else (init/hook/stream_event, tool results) is
- * dropped as noise. */
+ * message, and per agent event its assistant text bubbles + tool lines. `TodoWrite`/`ExitPlanMode`
+ * become rich `todo`/`plan` prims; other tools become `tool` prims with their matching result
+ * (by `tool_use_id`) folded in. A `result` → a divider, a spawn_error/stderr → an error line.
+ * Everything else (init/hook/stream_event, and the raw `user` tool_result events themselves once
+ * harvested) is dropped as noise. */
 function flattenTimeline(timeline: TimelineItem[]): Prim[] {
   const out: Prim[] = [];
+  const results = collectToolResults(timeline);
   timeline.forEach((item, i) => {
     if (item.kind === "you") {
       out.push({ t: "you", key: `you-${i}`, text: item.text, images: item.images });
@@ -156,7 +190,25 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
           if (block?.type === "text" && block.text) {
             out.push({ t: "text", key: `t-${i}-${b}`, text: block.text });
           } else if (block?.type === "tool_use") {
-            out.push({ t: "tool", key: `u-${i}-${b}`, label: toolSummary(block.name, block.input) });
+            const key = `u-${i}-${b}`;
+            if (block.name === "TodoWrite") {
+              const todos = Array.isArray(block.input?.todos) ? (block.input.todos as TodoItem[]) : [];
+              out.push({ t: "todo", key, todos });
+            } else if (block.name === "ExitPlanMode") {
+              out.push({ t: "plan", key, plan: String(block.input?.plan ?? "") });
+            } else {
+              const res = block.id ? results.get(String(block.id)) : undefined;
+              out.push({
+                t: "tool",
+                key,
+                id: block.id,
+                name: block.name,
+                label: toolSummary(block.name, block.input),
+                input: block.input,
+                resultText: res?.content,
+                isError: res?.isError,
+              });
+            }
           }
         });
         break;
@@ -174,26 +226,117 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
           out.push({ t: "error", key: `s-${i}`, text: e.message ?? e.text ?? "Agent error" });
         }
         break;
-      // "user" (tool results), "stream_event", other system subtypes → noise, skipped.
+      // "user" (tool results — already harvested by collectToolResults), "stream_event", other
+      // system subtypes → noise, skipped here.
     }
   });
   return out;
 }
 
-/** One compact "⏺ Read file.ts" tool line. */
-function ToolLine({ label }: { label: string }) {
-  return (
-    <div className="flex max-w-full items-center gap-1.5 font-mono text-xs text-muted-foreground">
+/** The renderable slice of a `tool` prim — the label, plus the folded-in result used for the
+ * status dot and the reveal panel. */
+type ToolPrimData = {
+  key: string;
+  name: string;
+  label: string;
+  resultText?: string;
+  isError?: boolean;
+};
+
+/** A small status dot for a tool line: green = succeeded (result present, not an error),
+ * red = errored, hollow = still pending (no result folded in yet). */
+function ToolStatusDot({ hasResult, isError }: { hasResult: boolean; isError?: boolean }) {
+  const cls = !hasResult
+    ? "border border-muted-foreground/60 bg-transparent"
+    : isError
+      ? "bg-destructive"
+      : "bg-success";
+  const title = !hasResult ? "pending" : isError ? "error" : "success";
+  return <span aria-hidden title={title} className={`size-1.5 shrink-0 rounded-full ${cls}`} />;
+}
+
+const MCP_NAME_RE = /^mcp__/;
+/** Result text is clamped to this many chars in the reveal; longer output gets a show-more toggle. */
+const RESULT_CLAMP = 2000;
+
+/** One compact "⏺ Read file.ts" tool line with a status dot. When it has a folded-in result (or is
+ * an error) the whole row toggles a reveal panel: a scrollable mono `<pre>` of the result text,
+ * clamped with a show-more for very long output. An MCP tool that errored (name `mcp__…`) shows a
+ * clear "not available in this agent" notice instead of the raw dead-end error. */
+function ToolLine({ tool }: { tool: ToolPrimData }) {
+  const [open, setOpen] = useState(false);
+  const [full, setFull] = useState(false);
+  const hasResult = tool.resultText != null || tool.isError === true;
+  const revealable = hasResult;
+  const isMcpError = tool.isError === true && MCP_NAME_RE.test(tool.name);
+  const text = tool.resultText ?? "";
+  const clamped = !full && text.length > RESULT_CLAMP;
+  const shown = clamped ? `${text.slice(0, RESULT_CLAMP)}…` : text;
+
+  const row = (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <ToolStatusDot hasResult={tool.resultText != null || tool.isError === true} isError={tool.isError} />
       <span className="shrink-0 text-primary">⏺</span>
-      <span className="truncate">{label}</span>
+      <span className="truncate">{tool.label}</span>
+    </span>
+  );
+
+  return (
+    <div className="flex max-w-full flex-col">
+      {revealable ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex max-w-full items-center gap-1 rounded px-0.5 py-0.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {open ? (
+            <ChevronDown className="size-3 shrink-0 opacity-60" />
+          ) : (
+            <ChevronRight className="size-3 shrink-0 opacity-60" />
+          )}
+          {row}
+        </button>
+      ) : (
+        <div className="flex max-w-full items-center gap-1 px-0.5 py-0.5 font-mono text-xs text-muted-foreground">
+          <span className="size-3 shrink-0" />
+          {row}
+        </div>
+      )}
+      {open && revealable && (
+        <div className="mt-0.5 ml-[15px] flex flex-col gap-1">
+          {isMcpError ? (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+              ⚠ MCP tool {tool.name} isn't available in this agent (server not connected).
+            </div>
+          ) : (
+            <>
+              <pre
+                className={`max-h-64 overflow-auto rounded ${tool.isError ? "bg-destructive/10 text-destructive" : "bg-muted/60 text-muted-foreground"} custom-scroll px-2 py-1.5 font-mono text-[11px] leading-snug whitespace-pre-wrap`}
+              >
+                {shown || "(no output)"}
+              </pre>
+              {text.length > RESULT_CLAMP && (
+                <button
+                  type="button"
+                  onClick={() => setFull((f) => !f)}
+                  className="self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  {full ? "Show less" : "Show more"}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /** A run of ≥2 consecutive tool calls, collapsed into one row ("N tool calls") that expands to
- * reveal the individual `⏺` lines under a hairline rail. Always starts collapsed — the count is
- * usually all you want; expand to inspect what the agent touched. */
-function ToolGroup({ tools }: { tools: Array<{ key: string; label: string }> }) {
+ * reveal the individual `⏺` lines under a hairline rail — each of which is itself independently
+ * revealable (see `ToolLine`). Always starts collapsed — the count is usually all you want. */
+function ToolGroup({ tools }: { tools: ToolPrimData[] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex max-w-full flex-col self-start">
@@ -214,10 +357,66 @@ function ToolGroup({ tools }: { tools: Array<{ key: string; label: string }> }) 
       {open && (
         <div className="mt-1 ml-[9px] flex flex-col gap-0.5 border-l border-border pl-3">
           {tools.map((t) => (
-            <ToolLine key={t.key} label={t.label} />
+            <ToolLine key={t.key} tool={t} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The icon for a todo item's lifecycle status. */
+function todoIcon(status?: string) {
+  switch ((status ?? "").toLowerCase()) {
+    case "completed":
+      return <Check aria-hidden className="size-3.5 text-success" />;
+    case "in_progress":
+      return <CircleDot aria-hidden className="size-3.5 text-primary" />;
+    case "cancelled":
+      return <Circle aria-hidden className="size-3.5 text-muted-foreground/60" />;
+    default:
+      return <Circle aria-hidden className="size-3.5 text-muted-foreground" />;
+  }
+}
+
+/** A compact checklist rendered in place of the plain "⏺ TodoWrite" line — one row per todo with a
+ * status icon (check / spinner-dot / circle) and its text (struck through when cancelled). Stays in
+ * the transcript flow as its own rich entry (never swallowed into a "N tool calls" group). */
+function TodoList({ todos }: { todos: TodoItem[] }) {
+  return (
+    <div className="flex max-w-[85%] flex-col gap-1 self-start rounded-lg border border-border bg-card/60 px-3 py-2 text-sm">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Check className="size-3.5" /> Todos
+      </div>
+      <ul className="flex flex-col gap-1">
+        {todos.map((todo, i) => {
+          const cancelled = (todo.status ?? "").toLowerCase() === "cancelled";
+          const completed = (todo.status ?? "").toLowerCase() === "completed";
+          return (
+            <li key={`${todo.content}-${i}`} className="flex items-start gap-2">
+              <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
+                {todoIcon(todo.status)}
+              </span>
+              <span
+                className={`leading-5 break-words ${cancelled ? "text-muted-foreground/60 line-through" : completed ? "text-muted-foreground" : "text-foreground"}`}
+              >
+                {todo.content}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** A titled "Plan" card for an `ExitPlanMode` tool call — renders the agent's proposed plan
+ * (markdown) via `<Markdown>`. Non-groupable rich entry like `TodoList`. */
+function PlanCard({ plan }: { plan: string }) {
+  return (
+    <div className="flex w-full max-w-[85%] flex-col gap-1.5 self-start rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+      <div className="text-xs font-semibold uppercase tracking-wide text-primary">Plan</div>
+      <Markdown>{plan}</Markdown>
     </div>
   );
 }
@@ -226,20 +425,20 @@ function ToolGroup({ tools }: { tools: Array<{ key: string; label: string }> }) 
  * collapsible `ToolGroup`; a lone tool call stays a plain inline line. */
 function renderPrims(prims: Prim[]): ReactNode[] {
   const nodes: ReactNode[] = [];
-  let run: Array<{ key: string; label: string }> = [];
+  let run: ToolPrimData[] = [];
   const flush = () => {
     if (run.length === 0) return;
     const group = run;
     run = [];
     if (group.length === 1) {
-      nodes.push(<ToolLine key={group[0].key} label={group[0].label} />);
+      nodes.push(<ToolLine key={group[0].key} tool={group[0]} />);
     } else {
       nodes.push(<ToolGroup key={`g-${group[0].key}`} tools={group} />);
     }
   };
   for (const p of prims) {
     if (p.t === "tool") {
-      run.push({ key: p.key, label: p.label });
+      run.push({ key: p.key, name: p.name, label: p.label, resultText: p.resultText, isError: p.isError });
       continue;
     }
     flush();
@@ -270,13 +469,16 @@ function renderPrims(prims: Prim[]): ReactNode[] {
         break;
       case "text":
         nodes.push(
-          <div
-            key={p.key}
-            className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2 text-sm whitespace-pre-wrap"
-          >
-            {renderInline(p.text)}
+          <div key={p.key} className="max-w-[85%] self-start rounded-lg bg-accent/60 px-3 py-2">
+            <Markdown>{p.text}</Markdown>
           </div>,
         );
+        break;
+      case "todo":
+        nodes.push(<TodoList key={p.key} todos={p.todos} />);
+        break;
+      case "plan":
+        nodes.push(<PlanCard key={p.key} plan={p.plan} />);
         break;
       case "result":
         nodes.push(
