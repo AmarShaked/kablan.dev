@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -205,8 +205,11 @@ describe("Cockpit", () => {
 
     it("auto-starts (factory.agentStart) then sends when the composer is used on a not-running agent", async () => {
       renderWithSeed([]); // no agent running yet
+      // Typing is driven via fireEvent.change: the composer lives inside a react-resizable-panels
+      // panel, and userEvent.type's per-key path silently no-ops there under jsdom (real browsers
+      // are unaffected). fireEvent.change fires the same onChange the component listens to.
       const box = screen.getByPlaceholderText(/message the agent/i);
-      await userEvent.type(box, "kick off");
+      fireEvent.change(box, { target: { value: "kick off" } });
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() => {
         expect(api.factory.agentStart).toHaveBeenCalledWith("proj", "feat/one");
@@ -223,9 +226,11 @@ describe("Cockpit", () => {
     it("sends the composer text via factory.agentMessage(project, branch, text)", async () => {
       renderWithSeed([workingStatus]);
       const box = screen.getByPlaceholderText(/message the agent/i);
-      await userEvent.type(box, "do the thing");
+      fireEvent.change(box, { target: { value: "do the thing" } }); // see auto-starts test re: fireEvent
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
-      expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing");
+      await vi.waitFor(() =>
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing"),
+      );
     });
 
     it("backfills via factory.getAgent(project, branch)", async () => {

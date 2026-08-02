@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, Play } from "lucide-react";
@@ -10,7 +11,12 @@ import { findServerUrl } from "../lib/serverUrl.ts";
 import { AgentChat } from "./AgentChat.tsx";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import { Button } from "@/components/ui/button";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauri } from "../lib/version.ts";
+
+/** The right-pane views selectable from the cockpit header's tabs. */
+type RightTab = "details" | "environment" | "logs";
 
 /**
  * The unified cockpit for a single branch — chat (left) + details (right) once it has a working
@@ -22,7 +28,7 @@ import { isTauri } from "../lib/version.ts";
  * creates the working copy server-side if missing, then starts the agent — and invalidates the
  * factory + worktrees queries so this re-resolves as live on the next render.
  */
-function CockpitHeader({ branch, onBack }: { branch: string; onBack: () => void }) {
+function CockpitHeader({ branch, onBack, right }: { branch: string; onBack: () => void; right?: ReactNode }) {
   return (
     <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
       <button
@@ -34,6 +40,7 @@ function CockpitHeader({ branch, onBack }: { branch: string; onBack: () => void 
         <ChevronLeft className="size-4" />
       </button>
       <span className="min-w-0 truncate font-mono font-medium text-foreground">{branch}</span>
+      {right && <div className="ml-auto shrink-0">{right}</div>}
     </div>
   );
 }
@@ -198,6 +205,10 @@ export function Cockpit({
   const stopAgent = () => api.factory.agentStop(project, branch);
   const backfillAgent = () => api.factory.getAgent(project, branch);
 
+  // Which right-pane view the header tabs show. "logs" is dev-server-only, so it's Tauri-gated
+  // alongside the rest of the server UI (the browser build has no processes).
+  const [rightTab, setRightTab] = useState<RightTab>("details");
+
   if (!hasWorktree) {
     return (
       <>
@@ -236,38 +247,57 @@ export function Cockpit({
 
   return (
     <>
-      <CockpitHeader branch={branch} onBack={onBack} />
+      <CockpitHeader
+        branch={branch}
+        onBack={onBack}
+        right={
+          <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as RightTab)}>
+            <TabsList variant="line" className="h-8">
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="environment">Environment</TabsTrigger>
+              {isTauri && <TabsTrigger value="logs">Logs</TabsTrigger>}
+            </TabsList>
+          </Tabs>
+        }
+      />
 
-      <div className="flex min-h-0 flex-1">
-        {/* Left pane: agent chat */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border">
-          <AgentChat
-            project={project}
-            agentKey={agentKey}
-            onStart={startAgent}
-            onMessage={messageAgent}
-            onStop={stopAgent}
-            onBackfill={backfillAgent}
-          />
-        </div>
+      {/* Resizable split: agent chat (left) + the tab-selected detail view (right). `autoSaveId`
+          persists the user's drag across sessions (react-resizable-panels writes to localStorage). */}
+      <ResizablePanelGroup direction="horizontal" autoSaveId="cockpit-split" className="min-h-0 flex-1">
+        <ResizablePanel defaultSize={62} minSize={35}>
+          <div className="flex h-full min-h-0 min-w-0 flex-col">
+            <AgentChat
+              project={project}
+              agentKey={agentKey}
+              onStart={startAgent}
+              onMessage={messageAgent}
+              onStop={stopAgent}
+              onBackfill={backfillAgent}
+            />
+          </div>
+        </ResizablePanel>
 
-        {/* Right pane: details */}
-        <div className="w-[360px] shrink-0">
-          <WorktreeDetails
-            project={project}
-            entry={entry}
-            server={server}
-            url={url}
-            busy={serverBusy}
-            onStartServer={startServer}
-            onStopServer={stopServer}
-            onInstall={installDeps}
-            onRefreshServer={refreshServer}
-            linearWorkspace={linearWorkspace}
-            logs={cwd ? logs[cwd] ?? [] : []}
-          />
-        </div>
-      </div>
+        <ResizableHandle withHandle />
+
+        <ResizablePanel defaultSize={38} minSize={22}>
+          <div className="flex h-full min-h-0 flex-col">
+            <WorktreeDetails
+              project={project}
+              entry={entry}
+              server={server}
+              url={url}
+              busy={serverBusy}
+              onStartServer={startServer}
+              onStopServer={stopServer}
+              onInstall={installDeps}
+              onRefreshServer={refreshServer}
+              linearWorkspace={linearWorkspace}
+              logs={cwd ? logs[cwd] ?? [] : []}
+              view={rightTab}
+            />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </>
   );
 }

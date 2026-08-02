@@ -186,6 +186,7 @@ export function WorktreeDetails({
   onRefreshServer,
   linearWorkspace = "",
   logs = [],
+  view = "details",
 }: {
   project: string;
   entry: Entry;
@@ -199,6 +200,9 @@ export function WorktreeDetails({
   onRefreshServer?: () => void;
   linearWorkspace?: string;
   logs?: LogLine[];
+  /** Which right-pane view to render — driven by the cockpit header's tabs. Details is the
+   * cards column; environment/logs each fill the pane with their single editor/stream. */
+  view?: "details" | "environment" | "logs";
 }) {
   const hasWorktree = !!entry.cwd;
   const running = server?.status === "running" || server?.status === "starting";
@@ -241,8 +245,34 @@ export function WorktreeDetails({
     }
   };
 
+  if (view === "environment") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scroll p-4">
+        {canEnv ? (
+          <EnvTab key={entry.id} project={envProject} server={server} defaultCwd={entry.cwd ?? undefined} lockDirectory />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Start a session for this branch (or check it out) to edit its environment.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (view === "logs") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+        {hasWorktree ? (
+          <LogsTab project={envProject} server={server} logs={logs} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Start a session for this branch to see dev-server logs.</p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto custom-scroll p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto custom-scroll p-4">
       {/* Overview */}
       <Card title="Overview">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -349,16 +379,6 @@ export function WorktreeDetails({
         )}
       </Card>
 
-      {/* Logs — the dev server's stdout/stderr, live-streamed via App's WS "log" frames plus
-          whatever `api.getLogs` already had on record. Servers are keyed per working-copy cwd
-          (see `server/processes.ts`), so `logs` and `server` here are both already scoped to this
-          entry's cwd by the caller (`Cockpit`). */}
-      {hasWorktree && (
-        <Card title="Logs">
-          <LogsTab project={envProject} server={server} logs={logs} />
-        </Card>
-      )}
-
       {/* Recent commits */}
       <Card title="Recent commits">
         {commits.isPending ? (
@@ -385,17 +405,6 @@ export function WorktreeDetails({
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">No uncommitted changes.</p>
-        )}
-      </Card>
-
-      {/* Env */}
-      <Card title="Environment">
-        {canEnv ? (
-          <EnvTab key={entry.id} project={envProject} server={server} defaultCwd={entry.cwd ?? undefined} lockDirectory />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Start a session for this branch (or check it out) to edit its environment.
-          </p>
         )}
       </Card>
 
