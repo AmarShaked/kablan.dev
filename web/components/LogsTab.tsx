@@ -72,8 +72,8 @@ export function LogsTab({
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-        <div>
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm">
             <StatusDot status={server?.status} />
             {server ? STATUS_LABEL[server.status] ?? server.status : "No server started"}
@@ -83,12 +83,15 @@ export function LogsTab({
             )}
           </div>
           {server && (
-            <div className="mt-1 text-xs font-mono text-muted-foreground">
+            <div
+              className="mt-1 truncate text-xs font-mono text-muted-foreground"
+              title={`${server.command} @ ${server.cwd}`}
+            >
               {server.command} <span className="opacity-60">@ {server.cwd}</span>
             </div>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           {running ? (
             <Button variant="destructive" size="sm" onClick={stop} disabled={busy}>
               <Square className="size-3.5" /> Stop
