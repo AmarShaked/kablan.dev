@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import type { Entry } from "../lib/entries.ts";
-import type { RunningServer } from "../api.ts";
+import { api, type RunningServer } from "../api.ts";
 
 vi.mock("../api.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api.ts")>();
@@ -14,6 +14,7 @@ vi.mock("../api.ts", async (importOriginal) => {
       ...actual.api,
       getEnv: vi.fn().mockResolvedValue([]),
       openIn: vi.fn().mockResolvedValue({ ok: true }),
+      pullBranch: vi.fn().mockResolvedValue({ output: "Already up to date." }),
     },
   };
 });
@@ -155,6 +156,17 @@ describe("WorktreeDetails", () => {
     renderDetails();
     expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
     expect(screen.queryByText("foo.ts")).not.toBeInTheDocument();
+  });
+
+  it("shows a Pull button for a branch that tracks a remote, and pulls it on click", async () => {
+    renderDetails({ entry: { ...entry, upstream: "origin/feat/one" } });
+    await userEvent.click(screen.getByRole("button", { name: /^pull$/i }));
+    expect(api.pullBranch).toHaveBeenCalledWith("proj", "feat/one", "/wt/one");
+  });
+
+  it("hides the Pull button when the branch has no upstream", () => {
+    renderDetails({ entry: { ...entry, upstream: null } });
+    expect(screen.queryByRole("button", { name: /^pull$/i })).not.toBeInTheDocument();
   });
 
   it("calls onStartServer when Start server is clicked (not running)", async () => {

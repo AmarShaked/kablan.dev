@@ -12,9 +12,11 @@ import {
   Package,
   ChevronDown,
   AlertTriangle,
+  ArrowDownToLine,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, type RunningServer, type ProjectSummary, type LogLine } from "../api.ts";
-import { useGitlabOverview, useDiff } from "../queries.ts";
+import { useGitlabOverview, useDiff, qk } from "../queries.ts";
 import type { Entry } from "../lib/entries.ts";
 import { GitlabSection } from "./GitlabSection.tsx";
 import { UnifiedDiffView } from "./UnifiedDiffView.tsx";
@@ -179,6 +181,28 @@ export function WorktreeDetails({
     }
   };
 
+  // Pull THIS branch from its upstream — fast-forwards the branch ref (works whether or not it's
+  // the checked-out branch; the backend fetches the refspec for a non-current branch). Shows only
+  // when the branch tracks a remote. Toasts just the git summary line (per the quiet-toast rule)
+  // and refreshes branches/worktrees so the ↓behind count updates.
+  const queryClient = useQueryClient();
+  const [pulling, setPulling] = useState(false);
+  const pull = async () => {
+    setPulling(true);
+    try {
+      const { output } = await api.pullBranch(project, entry.branchName ?? entry.name, entry.cwd ?? undefined);
+      toast.success(output.split("\n").find((l) => l.trim())?.trim() ?? "Pulled.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.branches(project) }),
+        queryClient.invalidateQueries({ queryKey: qk.worktrees(project) }),
+      ]);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setPulling(false);
+    }
+  };
+
   if (view === "environment") {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scroll p-4">
@@ -285,6 +309,11 @@ export function WorktreeDetails({
               </button>
             }
           />
+          {entry.upstream && (
+            <Button size="xs" variant="outline" disabled={pulling} onClick={pull}>
+              <ArrowDownToLine className="size-3.5" /> {pulling ? "Pulling…" : "Pull"}
+            </Button>
+          )}
         </div>
       </Card>
 
