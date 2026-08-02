@@ -7,7 +7,6 @@ import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentDot } from "./AgentDot.tsx";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { parseChoices } from "../lib/parseChoices.ts";
 
 /** One entry in the chat's local timeline: either the user's own sent message (never echoed
  * back by the stream — it goes straight to stdin) or a raw agent stream-json event. `images` are
@@ -35,6 +34,15 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: "opus", label: "Opus" },
   { value: "sonnet", label: "Sonnet" },
   { value: "haiku", label: "Haiku" },
+];
+
+/** Permission-mode options for the composer dropdown. Applied as a launch arg (`--permission-mode`)
+ * per-branch, mirroring the model override: changing it restarts the agent (resuming its session).
+ * "Bypass" (bypassPermissions) lets tool calls auto-proceed instead of stalling on prompts. */
+const PERMISSION_OPTIONS: { value: string; label: string }[] = [
+  { value: "acceptEdits", label: "Accept edits" },
+  { value: "plan", label: "Plan" },
+  { value: "bypassPermissions", label: "Bypass" },
 ];
 
 /** "Performance" = thinking budget, applied by appending Claude Code's magic keyword to the
@@ -87,8 +95,8 @@ function toolSummary(name: string, input: unknown): string {
 }
 
 /** Renders a small subset of inline markdown as React nodes: `**bold**` → semibold, and
- * `` `code` `` → a mono chip. Everything else is plain text (JSX-escaped). Used so option labels
- * like "**Metronome** — …" read as formatted text instead of printing literal asterisks. */
+ * `` `code` `` → a mono chip. Everything else is plain text (JSX-escaped). Used so assistant text
+ * like "**Metronome** — …" reads as formatted text instead of printing literal asterisks. */
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
@@ -114,17 +122,6 @@ function renderInline(text: string): ReactNode[] {
   }
   if (last < text.length) nodes.push(text.slice(last));
   return nodes;
-}
-
-/** Splits an option label into a bold title + a description, so the picker can render each choice
- * as a title/description card (like the question dialog). Prefers a leading `**bold**` as the
- * title; otherwise splits on the first em/en dash; otherwise the whole label is the title. */
-function splitChoice(label: string): { title: string; desc: string } {
-  const bold = /^\s*\*\*(.+?)\*\*\s*(?:[—–-]\s*)?(.*)$/.exec(label);
-  if (bold) return { title: bold[1].trim(), desc: bold[2].trim() };
-  const dash = /^(.+?)\s+[—–]\s+(.+)$/.exec(label);
-  if (dash) return { title: dash[1].trim(), desc: dash[2].trim() };
-  return { title: label.trim(), desc: "" };
 }
 
 /** A single flattened transcript row, after unpacking each stream event into its display pieces.
@@ -305,22 +302,6 @@ function renderPrims(prims: Prim[]): ReactNode[] {
   return nodes;
 }
 
-/** Extracts the text of the most recent `agent` timeline item that's an assistant text message,
- * so the Choose drawer can offer its options as chips. Returns null when there's no such message
- * yet (nothing to parse, or the agent's latest turn was tool-only). */
-function lastAssistantText(timeline: TimelineItem[]): string | null {
-  for (let i = timeline.length - 1; i >= 0; i--) {
-    const item = timeline[i];
-    if (item.kind !== "agent") continue;
-    const ev = item.event as Record<string, any> | null;
-    if (!ev || typeof ev !== "object" || ev.type !== "assistant") continue;
-    const content = Array.isArray(ev.message?.content) ? ev.message.content : [];
-    const texts = content.filter((b: any) => b?.type === "text" && typeof b.text === "string");
-    if (texts.length) return texts.map((b: any) => b.text).join("\n");
-  }
-  return null;
-}
-
 /** Small animated "thinking…" row shown at the end of the transcript while the agent is
  * working — a lightweight stand-in for the raw stream_event deltas we deliberately don't
  * re-enable. Uses Tailwind's motion-safe: variant so it's inert under prefers-reduced-motion. */
@@ -369,9 +350,10 @@ export function AgentChat({
   agentKey: string;
   title?: string;
   canChat?: boolean;
-  /** Starts (or, for an already-running agent, restarts) the agent. `opts.model` applies a
-   * per-branch model override — restarting resumes the persisted session so context is kept. */
-  onStart: (opts?: { model?: string }) => Promise<unknown>;
+  /** Starts (or, for an already-running agent, restarts) the agent. `opts.model` /
+   * `opts.permissionMode` apply per-branch launch overrides — restarting resumes the persisted
+   * session so context is kept. */
+  onStart: (opts?: { model?: string; permissionMode?: string }) => Promise<unknown>;
   onMessage: (text: string, images?: { mediaType: string; data: string }[]) => Promise<unknown>;
   onStop: () => Promise<unknown>;
   onBackfill?: () => Promise<{ agent: AgentView | null; events: unknown[] }>;
@@ -391,10 +373,12 @@ export function AgentChat({
   const [backfillStatus, setBackfillStatus] = useState<AgentStatus | undefined>(undefined);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  // Per-session agent parameters, set from the dropdowns under the composer. `model` is a launch
-  // arg (changing it restarts the agent, resuming its session); `thinking` is applied per-message
-  // by appending Claude Code's thinking-budget keyword to the outgoing text (no restart).
+  // Per-session agent parameters, set from the dropdowns under the composer. `model` and
+  // `permissionMode` are launch args (changing either restarts the agent, resuming its session);
+  // `thinking` is applied per-message by appending Claude Code's thinking-budget keyword to the
+  // outgoing text (no restart).
   const [model, setModel] = useState("");
+  const [permissionMode, setPermissionMode] = useState("acceptEdits");
   const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
   // Images pasted into the composer, staged until the next send (rendered as removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -462,18 +446,6 @@ export function AgentChat({
     setTimeline((prev) => [...prev, ...newItems]);
   }, [events]);
 
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const choices = useMemo(() => {
-    const t = lastAssistantText(timeline);
-    return t ? parseChoices(t) : [];
-  }, [timeline]);
-  // Re-open the picker whenever a *new* set of options arrives, so a manual dismiss (✕) only
-  // hides the current set — the next question's options aren't suppressed by it.
-  const choicesSig = choices.map((c) => c.label).join(" ");
-  useEffect(() => {
-    if (choicesSig) setDrawerOpen(true);
-  }, [choicesSig]);
-
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -489,9 +461,9 @@ export function AgentChat({
       setBusy(false);
     }
   };
-  // Shared send path for both the free-text composer and Choose-drawer chips: append the
-  // user's own "You" bubble to the timeline immediately (independent of whatever the agent
-  // does next), then forward it to the agent. Returns whether the send succeeded.
+  // Send path for the free-text composer: append the user's own "You" bubble to the timeline
+  // immediately (independent of whatever the agent does next), then forward it to the agent.
+  // Returns whether the send succeeded.
   const sendText = async (value: string): Promise<boolean> => {
     const t = value.trim();
     const imgs = attachments;
@@ -507,8 +479,8 @@ export function AgentChat({
       // Auto-start the agent on the first message so the user can just type — no explicit Start
       // click. `running` is false until an agent process is alive for this branch; onStart()
       // resolves once the process is spawned (stdin ready), then we deliver the message. The
-      // selected model is applied at launch.
-      if (!running) await onStart({ model });
+      // selected model / permission mode are applied at launch.
+      if (!running) await onStart({ model, permissionMode });
       await onMessage(
         outgoing,
         imgs.map((a) => ({ mediaType: a.mediaType, data: a.data })),
@@ -524,9 +496,6 @@ export function AgentChat({
   const send = async () => {
     if (await sendText(text)) setText("");
   };
-  const sendChoice = async (label: string) => {
-    await sendText(label);
-  };
 
   // Changing the model restarts a running agent with the new `--model` (resuming its session so
   // context is kept); for a not-yet-started agent it just records the choice for the next start.
@@ -535,7 +504,22 @@ export function AgentChat({
     if (!running) return;
     setBusy(true);
     try {
-      await onStart({ model: next });
+      await onStart({ model: next, permissionMode });
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Changing the permission mode restarts a running agent with the new `--permission-mode`
+  // (resuming its session); for a not-yet-started agent it just records the choice for next start.
+  const changePermission = async (next: string) => {
+    setPermissionMode(next);
+    if (!running) return;
+    setBusy(true);
+    try {
+      await onStart({ model, permissionMode: next });
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -561,68 +545,6 @@ export function AgentChat({
         )}
         {status === "working" && <ThinkingRow />}
       </div>
-
-      {choices.length > 0 && !drawerOpen && (
-        <div className="border-t border-border p-3">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Show options"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ChevronRight className="size-3.5" />
-            {choices.length} option{choices.length === 1 ? "" : "s"}
-          </button>
-        </div>
-      )}
-
-      {choices.length > 0 && drawerOpen && (
-        <div className="border-t border-border p-3 pb-0">
-          <div className="mb-2 flex items-center gap-2 px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Choose
-            <span className="ml-auto font-normal normal-case tracking-normal">
-              {choices.length} option{choices.length === 1 ? "" : "s"}
-            </span>
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(false)}
-              aria-label="Hide options"
-              className="-mr-0.5 rounded p-0.5 transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <ChevronDown className="size-3.5" />
-            </button>
-          </div>
-          <div className="flex max-h-[40vh] flex-col gap-1.5 overflow-y-auto custom-scroll">
-            {choices.map((choice, i) => {
-              const { title, desc } = splitChoice(choice.label);
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={!chatEnabled || busy}
-                  onClick={() => sendChoice(choice.label)}
-                  className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-foreground">{renderInline(title)}</span>
-                    {desc && (
-                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-                        {renderInline(desc)}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="mt-px flex size-5 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-[11px] font-medium text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
-                  >
-                    {i + 1}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="border-t border-border p-3">
         {attachments.length > 0 && (
@@ -670,8 +592,8 @@ export function AgentChat({
             <Send className="size-3.5" />
           </Button>
         </div>
-        {/* Composer footer (Claude-Code-style): per-session model + thinking controls on the left,
-            Stop + agent status on the right. */}
+        {/* Composer footer (Claude-Code-style): per-session model + permission + thinking controls
+            on the left, Stop + agent status on the right. */}
         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
           <select
             aria-label="Model"
@@ -681,6 +603,19 @@ export function AgentChat({
             className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
           >
             {MODEL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Permission"
+            value={permissionMode}
+            disabled={!chatEnabled || busy}
+            onChange={(e) => changePermission(e.target.value)}
+            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
+          >
+            {PERMISSION_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

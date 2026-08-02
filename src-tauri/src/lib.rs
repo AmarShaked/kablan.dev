@@ -402,6 +402,7 @@ async fn start_branch_agent(
     copy_node_modules: bool,
     copy_env: bool,
     model: Option<String>,
+    permission_mode: Option<String>,
 ) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
     let mut cfg = config::load();
@@ -412,6 +413,14 @@ async fn start_branch_agent(
     if let Some(m) = model {
         if !m.trim().is_empty() {
             cfg.factory.agent_model = m.trim().to_string();
+        }
+    }
+    // Per-branch permission-mode override (from the cockpit's Permission dropdown), applied the
+    // same way as the model override. `build_agent_argv` emits `--permission-mode <mode>`, so a
+    // Bypass selection lets tool calls auto-proceed instead of stalling on prompts.
+    if let Some(pm) = permission_mode {
+        if !pm.trim().is_empty() {
+            cfg.factory.permission_mode = pm.trim().to_string();
         }
     }
     // TODO: running_count() is a soft cap — it's checked-then-acted-on without
@@ -473,7 +482,8 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(true);
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
     let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
-    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model).await?;
+    let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 

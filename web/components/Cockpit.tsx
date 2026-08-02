@@ -200,7 +200,8 @@ export function Cockpit({
     }
   };
 
-  const startAgent = (opts?: { model?: string }) => api.factory.agentStart(project, branch, { model: opts?.model });
+  const startAgent = (opts?: { model?: string; permissionMode?: string }) =>
+    api.factory.agentStart(project, branch, { model: opts?.model, permissionMode: opts?.permissionMode });
   const messageAgent = (text: string, images?: { mediaType: string; data: string }[]) =>
     api.factory.agentMessage(project, branch, text, images);
   const stopAgent = () => api.factory.agentStop(project, branch);

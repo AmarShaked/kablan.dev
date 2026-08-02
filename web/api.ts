@@ -344,7 +344,7 @@ export const api = {
     agentStart: (
       name: string,
       branch: string,
-      opts: { copyNodeModules?: boolean; copyEnv?: boolean; model?: string } = {},
+      opts: { copyNodeModules?: boolean; copyEnv?: boolean; model?: string; permissionMode?: string } = {},
     ) =>
       req<AgentView>(`/api/projects/${encodeURIComponent(name)}/factory/agent/start`, {
         method: "POST",

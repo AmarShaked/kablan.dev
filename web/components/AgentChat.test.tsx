@@ -83,7 +83,15 @@ describe("AgentChat", () => {
   it("restarts a running agent with the chosen model when the Model dropdown changes", async () => {
     const { onStart } = renderChat([workingStatus]);
     await userEvent.selectOptions(screen.getByLabelText("Model"), "opus");
-    await waitFor(() => expect(onStart).toHaveBeenCalledWith({ model: "opus" }));
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ model: "opus" })));
+  });
+
+  it("restarts a running agent with the chosen permission mode when the Permission dropdown changes", async () => {
+    const { onStart } = renderChat([workingStatus]);
+    await userEvent.selectOptions(screen.getByLabelText("Permission"), "bypassPermissions");
+    await waitFor(() =>
+      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ permissionMode: "bypassPermissions" })),
+    );
   });
 
   it("appends the thinking keyword to the sent message but keeps the visible bubble clean", async () => {
@@ -124,27 +132,6 @@ describe("AgentChat", () => {
   it("disables the composer when canChat is false", () => {
     renderChat([], { canChat: false });
     expect(screen.getByPlaceholderText(/start a session to chat/i)).toBeDisabled();
-  });
-
-  it("shows parsed choices as chips and sends the clicked chip via onMessage", async () => {
-    const choiceEvent = {
-      type: "agent-event",
-      key: "proj::wt:/wt/one",
-      event: {
-        type: "assistant",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "How should we proceed?\n1. Add tests\n2. Ship as-is" }],
-        },
-      },
-    };
-    const { onMessage } = renderChat([workingStatus, choiceEvent]);
-
-    expect(screen.getByText(/choose/i)).toBeInTheDocument();
-    const chip = screen.getByRole("button", { name: "Add tests" });
-    await userEvent.click(chip);
-
-    expect(onMessage).toHaveBeenCalledWith("Add tests", []);
   });
 
   function pasteImage(box: HTMLElement, type = "image/png") {
