@@ -1,12 +1,26 @@
 import { useEffect } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
 import { Cockpit } from "./Cockpit.tsx";
 import { api } from "../api.ts";
 import type { Worktree, Branch, FactoryOverview } from "../api.ts";
+
+// `isTauri` gates the linear-workspace fetch and the GitLab-hosts query. jsdom is non-Tauri, so it
+// reads false by default (matching the browser build); a getter lets a single test flip it on to
+// exercise the Linear-configured path without disturbing the others.
+const versionState = vi.hoisted(() => ({ isTauri: false }));
+vi.mock("../lib/version.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/version.ts")>();
+  return {
+    ...actual,
+    get isTauri() {
+      return versionState.isTauri;
+    },
+  };
+});
 
 vi.mock("../api.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api.ts")>();
@@ -33,6 +47,9 @@ vi.mock("../api.ts", async (importOriginal) => {
 let branchesData: Branch[] = [];
 let worktreesData: Worktree[] = [];
 let factoryData: FactoryOverview = { features: [], branchState: {} };
+// App-wide configured GitLab hosts — the cheap signal driving Integrations-tab visibility. Default
+// empty (GitLab not set up); a test sets a host to prove the tab appears from GitLab alone.
+let gitlabHostsData: { hosts: string[] } | undefined = { hosts: [] };
 
 vi.mock("../queries.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../queries.ts")>();
@@ -44,6 +61,7 @@ vi.mock("../queries.ts", async (importOriginal) => {
     useCommits: () => ({ data: { timestamps: [] }, isPending: false }),
     useDiff: () => ({ data: { diff: "" }, isPending: false }),
     useGitlabOverview: () => ({ data: undefined, isPending: false }),
+    useGitlabHosts: () => ({ data: gitlabHostsData, isPending: false }),
   };
 });
 
@@ -107,6 +125,13 @@ const idleStatus = {
   key: "proj::branch:feat/one",
   agent: { key: "proj::branch:feat/one", status: "idle", sessionId: null, pid: 123, startedAt: 0, exitCode: null },
 };
+
+afterEach(() => {
+  // Reset the cross-test knobs so visibility state never bleeds between cases.
+  versionState.isTauri = false;
+  gitlabHostsData = { hosts: [] };
+  (api.getConfig as ReturnType<typeof vi.fn>).mockResolvedValue({ linearWorkspace: "" });
+});
 
 describe("Cockpit", () => {
   it("shows the branch name in the header (no project prefix)", () => {
@@ -182,6 +207,35 @@ describe("Cockpit", () => {
 
     expect(screen.queryByText(/no working copy yet/i)).not.toBeInTheDocument();
     expect(screen.getByText("/wt/two")).toBeInTheDocument();
+  });
+
+  it("hides the Integrations tab when neither Linear nor GitLab is configured", () => {
+    branchesData = [{ ...bareBranch, name: "feat/one" }];
+    worktreesData = [filedWorktree];
+    factoryData = { features: [], branchState: {} };
+    gitlabHostsData = { hosts: [] };
+    renderCockpit("proj", "feat/one");
+    expect(screen.queryByRole("tab", { name: /integrations/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the Integrations tab when a GitLab host is configured (no Linear needed)", () => {
+    branchesData = [{ ...bareBranch, name: "feat/one" }];
+    worktreesData = [filedWorktree];
+    factoryData = { features: [], branchState: {} };
+    gitlabHostsData = { hosts: ["gitlab.com"] };
+    renderCockpit("proj", "feat/one");
+    expect(screen.getByRole("tab", { name: /integrations/i })).toBeInTheDocument();
+  });
+
+  it("shows the Integrations tab when a Linear workspace is configured (no GitLab host)", async () => {
+    versionState.isTauri = true; // enables the linear-workspace config fetch
+    (api.getConfig as ReturnType<typeof vi.fn>).mockResolvedValue({ linearWorkspace: "acme" });
+    branchesData = [{ ...bareBranch, name: "feat/one" }];
+    worktreesData = [filedWorktree];
+    factoryData = { features: [], branchState: {} };
+    gitlabHostsData = { hosts: [] };
+    renderCockpit("proj", "feat/one");
+    expect(await screen.findByRole("tab", { name: /integrations/i })).toBeInTheDocument();
   });
 
   describe("agent wiring (migrated from the task-force cockpit)", () => {

@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, Play } from "lucide-react";
 import { api, type RunningServer, type LogLine } from "../api.ts";
-import { useBranches, useWorktrees, useFactory, useFiles, qk } from "../queries.ts";
+import { useBranches, useWorktrees, useFactory, useFiles, useGitlabHosts, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
 import { findServerUrl } from "../lib/serverUrl.ts";
@@ -247,6 +247,18 @@ export function Cockpit({
   // alongside the rest of the server UI (the browser build has no processes).
   const [rightTab, setRightTab] = useState<RightTab>("details");
 
+  // Integrations-tab visibility is driven by CHEAP, app-level config signals — never by the heavy
+  // per-branch GitLab overview (that stays lazy, firing only once the tab is open). Linear counts
+  // when a workspace is configured; GitLab counts when any host is set up app-wide (the tab's own
+  // card still shows a "not connected" hint if this specific project isn't wired).
+  const gitlabConfigured = (useGitlabHosts().data?.hosts.length ?? 0) > 0;
+  const hasIntegrations = !!linearWorkspace || gitlabConfigured;
+  // Safety: if the Integrations tab vanishes (config changed) while it's selected, don't strand the
+  // pane on a hidden tab — fall back to Details.
+  useEffect(() => {
+    if (!hasIntegrations && rightTab === "integrations") setRightTab("details");
+  }, [hasIntegrations, rightTab]);
+
   if (!hasWorktree) {
     return (
       <>
@@ -294,7 +306,7 @@ export function Cockpit({
             <TabsList variant="line" className="h-8">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="environment">Environment</TabsTrigger>
-              <TabsTrigger value="integrations">Integrations</TabsTrigger>
+              {hasIntegrations && <TabsTrigger value="integrations">Integrations</TabsTrigger>}
               {isTauri && <TabsTrigger value="logs">Logs</TabsTrigger>}
             </TabsList>
           </Tabs>

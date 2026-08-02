@@ -81,6 +81,18 @@ export function useGitlabOverview(name: string, enabled = true) {
   });
 }
 
+/** App-wide list of configured GitLab hosts — the CHEAP "is GitLab set up at all?" signal, used
+ * to decide tab visibility WITHOUT the heavy per-branch `useGitlabOverview` fetch. Not
+ * project-scoped and cached aggressively (hosts change only from Settings). */
+export function useGitlabHosts() {
+  return useQuery({
+    queryKey: ["gitlab-hosts"] as const,
+    queryFn: () => api.gitlab.hosts(),
+    enabled: isTauri,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useFactory(name: string) {
   return useQuery({
     queryKey: ["factory", name] as const,
