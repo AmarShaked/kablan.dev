@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorktreeDetails } from "./WorktreeDetails.tsx";
 import type { Entry } from "../lib/entries.ts";
@@ -18,11 +18,25 @@ vi.mock("../api.ts", async (importOriginal) => {
   };
 });
 
+// `useDiff` is a spy so tests can assert the args it's called with (e.g. the
+// `against` base branch when the "vs <base>" toggle is active) and drive its
+// `refetch`. `vi.hoisted` makes the spies available inside the hoisted factory.
+const { useDiffMock, refetchSpy } = vi.hoisted(() => ({
+  useDiffMock: vi.fn(),
+  refetchSpy: vi.fn(),
+}));
+
 vi.mock("../queries.ts", () => ({
-  useDiff: () => ({ data: { diff: "" }, isPending: false }),
+  useDiff: useDiffMock,
   useGitlabOverview: () => ({ data: undefined, isPending: false }),
   useWorktrees: () => ({ data: [], isPending: false }),
 }));
+
+beforeEach(() => {
+  useDiffMock.mockReset();
+  refetchSpy.mockReset();
+  useDiffMock.mockReturnValue({ data: { diff: "" }, isPending: false, isFetching: false, refetch: refetchSpy });
+});
 
 const entry: Entry = {
   id: "wt:/wt/one",
@@ -73,6 +87,25 @@ describe("WorktreeDetails", () => {
     expect(await screen.findByText("feat/one")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
     expect(screen.getByText("/wt/one")).toBeInTheDocument();
+  });
+
+  it("defaults to the uncommitted (working-tree) diff — useDiff called without `against`", () => {
+    renderDetails();
+    const last = useDiffMock.mock.calls.at(-1);
+    expect(last?.[4]).toBeUndefined();
+  });
+
+  it("toggling to 'vs <base>' calls useDiff with the base branch as `against`", async () => {
+    renderDetails();
+    await userEvent.click(screen.getByRole("button", { name: /vs main/i }));
+    const last = useDiffMock.mock.calls.at(-1);
+    expect(last?.[4]).toBe("main");
+  });
+
+  it("Refresh button triggers the diff query's refetch", async () => {
+    renderDetails();
+    await userEvent.click(screen.getByRole("button", { name: /refresh diff/i }));
+    expect(refetchSpy).toHaveBeenCalled();
   });
 
   it("calls onStartServer when Start server is clicked (not running)", async () => {

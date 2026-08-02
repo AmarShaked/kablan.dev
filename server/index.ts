@@ -161,7 +161,8 @@ api.get("/projects/:name/diff", async (req, res) => {
       ? await resolveWorkdir(req.params.name, cwdParam)
       : projectPathFromName(req.params.name);
     const sha = typeof req.query.sha === "string" && req.query.sha ? req.query.sha : undefined;
-    res.json({ diff: await getDiff(dir, sha) });
+    const against = typeof req.query.against === "string" && req.query.against ? req.query.against : undefined;
+    res.json({ diff: await getDiff(dir, sha, against) });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }

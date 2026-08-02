@@ -523,8 +523,30 @@ pub fn list_commits(dir: &str, reff: Option<&str>, limit: u32) -> Vec<Commit> {
         .collect()
 }
 
-/// Unified diff. With `sha`, shows that commit; otherwise the working-tree changes vs HEAD.
-pub fn get_diff(dir: &str, sha: Option<&str>) -> String {
+/// A plain git ref name — rejects flag-shaped/metacharacter input so it can't be
+/// smuggled in as a git flag when spliced into a diff range. Mirrors
+/// `server/git.ts`'s `validRef`.
+fn valid_ref(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('-')
+        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
+}
+
+/// Unified diff. Precedence:
+/// - `against` (a base branch): the changes this branch introduced relative to
+///   its base — `git diff <base>...HEAD` (i.e. vs their merge-base). The base is
+///   validated as a plain ref and the range is followed by `--` so a flag-shaped
+///   base can't be parsed as a git flag; an invalid base yields an empty diff.
+/// - `sha`: that commit's changes.
+/// - neither: the working-tree changes vs HEAD.
+pub fn get_diff(dir: &str, sha: Option<&str>, against: Option<&str>) -> String {
+    if let Some(base) = against {
+        if !valid_ref(base) {
+            return String::new();
+        }
+        let range = format!("{base}...HEAD");
+        return git(dir, &["diff", "--no-color", &range, "--"]).unwrap_or_default();
+    }
     let args: Vec<&str> = match sha {
         Some(s) => vec!["show", "--no-color", "--stat", "--patch", s],
         None => vec!["diff", "--no-color", "HEAD"],
@@ -661,6 +683,35 @@ mod tests {
         let second = ensure_worktree_for_branch(&repo, &wt_root, "acme/app", "feature/existing").unwrap();
         assert_eq!(second.path, first.path);
         assert_eq!(second.branch.as_deref(), Some("feature/existing"));
+    }
+
+    #[test]
+    fn get_diff_against_base_shows_only_branch_changes() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        // Fork "feature" off main, commit there; advance main separately.
+        git(&d, &["checkout", "-qb", "feature"]).unwrap();
+        std::fs::write(repo.join("feature.txt"), "branch change\n").unwrap();
+        git(&d, &["add", "-A"]).unwrap();
+        git(&d, &["commit", "-qm", "feature work"]).unwrap();
+        git(&d, &["checkout", "-q", "main"]).unwrap();
+        std::fs::write(repo.join("main-only.txt"), "x\n").unwrap();
+        git(&d, &["add", "-A"]).unwrap();
+        git(&d, &["commit", "-qm", "main work"]).unwrap();
+        git(&d, &["checkout", "-q", "feature"]).unwrap();
+
+        let diff = get_diff(&d, None, Some("main"));
+        assert!(diff.contains("feature.txt"), "branch change should appear");
+        assert!(diff.contains("branch change"));
+        assert!(!diff.contains("main-only.txt"), "post-fork main work must not appear");
+    }
+
+    #[test]
+    fn get_diff_against_flag_shaped_base_is_rejected() {
+        let repo = init_repo();
+        let d = repo.to_string_lossy().to_string();
+        // A flag-shaped base must yield an empty diff, never be parsed as a git flag.
+        assert_eq!(get_diff(&d, None, Some("--output=/tmp/kablan-pwn")), "");
     }
 
     #[test]

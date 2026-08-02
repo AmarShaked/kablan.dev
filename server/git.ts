@@ -338,9 +338,30 @@ export async function listCommits(dir: string, ref?: string, limit = 50): Promis
   }
 }
 
-/** Unified diff. With `sha`, shows that commit; otherwise the working-tree changes vs HEAD. */
-export async function getDiff(dir: string, sha?: string): Promise<string> {
+/**
+ * A plain git ref name — rejects flag-shaped/metacharacter input so it can't be
+ * smuggled in as a git flag when spliced into a diff range. Mirrors `git.rs`'s
+ * `valid_ref`.
+ */
+function validRef(s: string): boolean {
+  return s.length > 0 && !s.startsWith("-") && /^[A-Za-z0-9._/-]+$/.test(s);
+}
+
+/**
+ * Unified diff. Precedence:
+ * - `against` (a base branch): the changes this branch introduced relative to its
+ *   base — `git diff <base>...HEAD` (i.e. vs their merge-base). The base is
+ *   validated as a plain ref and the range is followed by `--` so a flag-shaped
+ *   base can't be parsed as a git flag; an invalid base yields an empty diff.
+ * - `sha`: that commit's changes.
+ * - neither: the working-tree changes vs HEAD.
+ */
+export async function getDiff(dir: string, sha?: string, against?: string): Promise<string> {
   try {
+    if (against !== undefined) {
+      if (!validRef(against)) return "";
+      return await git(dir, ["diff", "--no-color", `${against}...HEAD`, "--"]);
+    }
     const args = sha
       ? ["show", "--no-color", "--stat", "--patch", sha]
       : ["diff", "--no-color", "HEAD"];

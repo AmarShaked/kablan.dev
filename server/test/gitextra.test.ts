@@ -124,4 +124,45 @@ describe("diff API", () => {
       await s.stop();
     }
   });
+
+  test("diff against a base branch shows what the branch introduced (merge-base..HEAD)", async () => {
+    const s = await startServer();
+    try {
+      const main = join(s.workspace, "repo");
+      await initRepo(main);
+      // Fork a branch off main, commit a change, and advance main separately so
+      // the merge-base is the fork point (the branch's own change is isolated).
+      await createBranch(main, "feature");
+      await checkout(main, "feature");
+      await commit(main, "feature work", { "feature.txt": "branch change\n" });
+      await checkout(main, "main");
+      await commit(main, "unrelated main work", { "main-only.txt": "x\n" });
+      await checkout(main, "feature");
+
+      const { status, json } = await s.api.get("/api/projects/repo/diff?against=main");
+      assert.equal(status, 200);
+      // The branch's own change is present…
+      assert.match(json.diff, /feature\.txt/);
+      assert.match(json.diff, /branch change/);
+      // …but main's post-fork work is NOT (that's the point of merge-base ...HEAD).
+      assert.doesNotMatch(json.diff, /main-only\.txt/);
+    } finally {
+      await s.stop();
+    }
+  });
+
+  test("diff against a flag-shaped base is rejected (empty diff), not run as a git flag", async () => {
+    const s = await startServer();
+    try {
+      const main = join(s.workspace, "repo");
+      await initRepo(main);
+      const { status, json } = await s.api.get(
+        `/api/projects/repo/diff?against=${encodeURIComponent("--output=/tmp/kablan-pwn")}`,
+      );
+      assert.equal(status, 200);
+      assert.equal(json.diff, "");
+    } finally {
+      await s.stop();
+    }
+  });
 });

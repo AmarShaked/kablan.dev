@@ -47,12 +47,17 @@ export function useLog(name: string, ref?: string, cwd?: string, enabled = true)
   });
 }
 
-export function useDiff(name: string, sha?: string, cwd?: string, enabled = true) {
+export function useDiff(name: string, sha?: string, cwd?: string, enabled = true, against?: string) {
   return useQuery({
-    queryKey: ["diff", name, cwd ?? "", sha ?? "working"] as const,
-    queryFn: () => api.getDiff(name, { sha, cwd }),
+    // The compare target (`against`) and `cwd` are part of the key so switching
+    // branches/targets refetches rather than showing a stale cached diff.
+    queryKey: ["diff", name, cwd ?? "", sha ?? "working", against ?? ""] as const,
+    queryFn: () => api.getDiff(name, { sha, cwd, against }),
     enabled: enabled && !!name,
-    staleTime: 15_000,
+    // The working diff reflects the live working tree, so never serve it stale:
+    // refetch on mount and whenever the user returns focus to the app.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

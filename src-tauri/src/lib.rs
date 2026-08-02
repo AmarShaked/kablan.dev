@@ -181,6 +181,7 @@ async fn get_log(Path(name): Path<String>, Query(q): Query<HashMap<String, Strin
 async fn get_diff(Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
     let cwd = q.get("cwd").filter(|s| !s.is_empty()).cloned();
     let sha = q.get("sha").filter(|s| !s.is_empty()).cloned();
+    let against = q.get("against").filter(|s| !s.is_empty()).cloned();
     let dir = match &cwd {
         Some(c) => {
             let n = name.clone();
@@ -189,7 +190,7 @@ async fn get_diff(Path(name): Path<String>, Query(q): Query<HashMap<String, Stri
         }
         None => projects::project_path_from_name(&name).map_err(bad)?,
     };
-    let diff = blocking(move || git::get_diff(&dir, sha.as_deref())).await;
+    let diff = blocking(move || git::get_diff(&dir, sha.as_deref(), against.as_deref())).await;
     Ok(Json(json!({ "diff": diff })))
 }
 

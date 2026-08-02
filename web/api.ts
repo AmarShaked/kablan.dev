@@ -241,10 +241,11 @@ export const api = {
       `/api/projects/${encodeURIComponent(name)}/log${qs ? `?${qs}` : ""}`,
     );
   },
-  getDiff: (name: string, opts: { sha?: string; cwd?: string } = {}) => {
+  getDiff: (name: string, opts: { sha?: string; cwd?: string; against?: string } = {}) => {
     const p = new URLSearchParams();
     if (opts.sha) p.set("sha", opts.sha);
     if (opts.cwd) p.set("cwd", opts.cwd);
+    if (opts.against) p.set("against", opts.against);
     const qs = p.toString();
     return req<{ diff: string }>(
       `/api/projects/${encodeURIComponent(name)}/diff${qs ? `?${qs}` : ""}`,

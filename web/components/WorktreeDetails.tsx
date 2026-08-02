@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   FolderTree,
@@ -52,11 +52,16 @@ function summarizeDiff(diff: string): { files: number; added: number; removed: n
   return { files, added, removed };
 }
 
-/** One bordered card, matching the vertically-scrolling-column layout from the mockup. */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/** One bordered card, matching the vertically-scrolling-column layout from the mockup.
+ * `actions`, when given, is rendered right-aligned in the header row (e.g. the Working
+ * diff card's mode toggle + Refresh button). */
+function Card({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+        {actions}
+      </div>
       {children}
     </div>
   );
@@ -115,7 +120,14 @@ export function WorktreeDetails({
   // whose command is an install is an install-in-progress — surfaced distinctly from a dev server.
   const installing = running && (server?.command ?? "").includes("install");
 
-  const diff = useDiff(project, undefined, entry.cwd ?? undefined, hasWorktree);
+  // Working-diff modes: "working" is the uncommitted working-tree diff; "base" is
+  // everything this branch introduced vs its source branch (`git diff <base>...HEAD`,
+  // handled server-side via the `against` param). Base defaults to "main" when the
+  // entry doesn't carry one.
+  const baseBranch = entry.baseBranch || "main";
+  const [diffMode, setDiffMode] = useState<"working" | "base">("working");
+  const against = diffMode === "base" ? baseBranch : undefined;
+  const diff = useDiff(project, undefined, entry.cwd ?? undefined, hasWorktree, against);
   const diffSummary = useMemo(
     () => (diff.data ? summarizeDiff(diff.data.diff) : null),
     [diff.data],
@@ -284,7 +296,49 @@ export function WorktreeDetails({
       </Card>
 
       {/* Working diff summary */}
-      <Card title="Working diff">
+      <Card
+        title="Working diff"
+        actions={
+          hasWorktree ? (
+            <div className="flex items-center gap-1">
+              <div className="flex overflow-hidden rounded-md border border-border">
+                <button
+                  onClick={() => setDiffMode("working")}
+                  aria-pressed={diffMode === "working"}
+                  className={cn(
+                    "px-2 py-0.5 text-xs transition-colors",
+                    diffMode === "working"
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50",
+                  )}
+                >
+                  Uncommitted
+                </button>
+                <button
+                  onClick={() => setDiffMode("base")}
+                  aria-pressed={diffMode === "base"}
+                  className={cn(
+                    "border-l border-border px-2 py-0.5 text-xs transition-colors",
+                    diffMode === "base"
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50",
+                  )}
+                >
+                  vs {baseBranch}
+                </button>
+              </div>
+              <button
+                onClick={() => diff.refetch()}
+                aria-label="Refresh diff"
+                title="Refresh diff"
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <RefreshCw className={cn("size-3.5", diff.isFetching && "animate-spin")} />
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
         {!hasWorktree ? (
           <p className="text-xs text-muted-foreground">Start a session for this branch to see its working diff.</p>
         ) : diff.isPending ? (
@@ -296,7 +350,9 @@ export function WorktreeDetails({
             <span className="text-destructive">-{diffSummary.removed}</span>
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">No uncommitted changes.</p>
+          <p className="text-xs text-muted-foreground">
+            {diffMode === "base" ? `No changes vs ${baseBranch}.` : "No uncommitted changes."}
+          </p>
         )}
       </Card>
 
