@@ -23,7 +23,7 @@ import { EnvTab } from "./EnvTab.tsx";
 import { LinearLink } from "./LinearLink.tsx";
 import { LogsTab } from "./LogsTab.tsx";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -317,15 +317,22 @@ export function WorktreeDetails({
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
+                      {/* Native <button> (not the shadcn <Button>): DropdownMenuTrigger `asChild`
+                          must attach a ref to anchor the menu, and this project's React-18 <Button>
+                          isn't a forwardRef component, so a ref never lands on it and the menu can't
+                          open. A native element accepts the ref — matching how OpenMenu/ProjectSwitcher
+                          wire their asChild triggers. */}
+                      <button
+                        type="button"
                         disabled={busy}
                         aria-label="Replace a dev server running on another branch"
-                        className="rounded-l-none border-l-0 px-2"
+                        className={cn(
+                          buttonVariants({ size: "sm", variant: "outline" }),
+                          "rounded-l-none border-l-0 px-2",
+                        )}
                       >
                         <ChevronDown className="size-3.5" />
-                      </Button>
+                      </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {otherRunningServers.map((s) => {
