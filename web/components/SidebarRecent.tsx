@@ -374,20 +374,30 @@ function BranchRow({
         />
       ) : (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden" title={entity.name}>
-          <span
-            className={cn(
-              "truncate text-xs",
-              !entity.title && "font-mono",
-              entity.isCurrent && "font-semibold text-foreground",
-            )}
-          >
-            {entity.displayName}
-          </span>
-          {entity.title && (
-            <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
-              {entity.name}
-            </span>
-          )}
+          {(() => {
+            // Only treat a title as "custom" (worth a second branch-name line) when it actually
+            // differs from the git branch name — a title equal to the name would just render the
+            // same string twice.
+            const hasCustomTitle = !!entity.title && entity.title !== entity.name;
+            return (
+              <>
+                <span
+                  className={cn(
+                    "truncate text-xs",
+                    !hasCustomTitle && "font-mono",
+                    entity.isCurrent && "font-semibold text-foreground",
+                  )}
+                >
+                  {entity.displayName}
+                </span>
+                {hasCustomTitle && (
+                  <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
+                    {entity.name}
+                  </span>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
       {!renaming && time && <span className="shrink-0 text-xs text-muted-foreground">{time}</span>}

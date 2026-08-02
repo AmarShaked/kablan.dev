@@ -69,7 +69,7 @@ function CockpitHeader({
       >
         <ChevronLeft className="size-4" />
       </button>
-      {title ? (
+      {title && title !== branch ? (
         <div className="flex min-w-0 flex-col overflow-hidden" title={branch}>
           <span className="truncate font-medium text-foreground">{title}</span>
           <span className="truncate font-mono text-[11px] leading-tight text-muted-foreground">{branch}</span>
