@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const PERMISSION_MODES = [
   { value: "default", label: "Ask (default)" },
   { value: "acceptEdits", label: "Accept edits" },
+  { value: "supervised", label: "Supervised — approve each tool" },
   { value: "auto", label: "Auto" },
   { value: "bypassPermissions", label: "Bypass all" },
 ] as const;

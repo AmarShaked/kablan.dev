@@ -24,7 +24,7 @@ export interface NewSessionDialogProps {
   /** Base-branch options — the caller's `useBranches(project)` data. */
   branches: Branch[];
   /** Called with the freshly-generated `session/<hex>` branch name once the session has started. */
-  onStarted: (branch: string) => void;
+  onStarted: (branch: string, message?: string) => void;
 }
 
 /** Default base branch: the repo's current branch, else "main" if that isn't in the list either
@@ -155,12 +155,13 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
     if (!baseBranch || busy) return;
     setBusy(true);
     try {
+      const firstMessage = message.trim() || undefined;
       const { branch } = await api.factory.startSession(project, baseBranch, {
-        message: message.trim() || undefined,
+        message: firstMessage,
         copyNodeModules,
         copyEnv,
       });
-      onStarted(branch);
+      onStarted(branch, firstMessage);
       reset();
       handleOpenChange(false);
     } catch (err) {

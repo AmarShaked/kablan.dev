@@ -1147,6 +1147,8 @@ export function AgentChat({
   title,
   canChat = true,
   files = [],
+  initialMessage,
+  defaultPermissionMode,
   onStart,
   onMessage,
   onStop,
@@ -1159,6 +1161,12 @@ export function AgentChat({
   agentKey: string;
   title?: string;
   canChat?: boolean;
+  /** The first message from the New-session flow (sent server-side, so it never streamed back as
+   * an event) — seeded as the opening "You" bubble so the transcript shows what kicked it off. */
+  initialMessage?: string;
+  /** The configured default permission mode (factory.permissionMode) — seeds the composer's
+   * Permission picker so it reflects the Settings default when it's one of the picker's options. */
+  defaultPermissionMode?: string;
   /** Repo-relative file paths for the @-file mention typeahead (from `useFiles`). Empty = no
    * mention menu; everything else in the composer still works. */
   files?: string[];
@@ -1212,7 +1220,9 @@ export function AgentChat({
   // `thinking` is applied per-message by appending Claude Code's thinking-budget keyword to the
   // outgoing text (no restart).
   const [model, setModel] = useState("");
-  const [permissionMode, setPermissionMode] = useState("acceptEdits");
+  const [permissionMode, setPermissionMode] = useState(() =>
+    PERMISSION_OPTIONS.some((o) => o.value === defaultPermissionMode) ? (defaultPermissionMode as string) : "acceptEdits",
+  );
   const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
   // Images pasted/dropped into the composer, staged until the next send (removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1320,7 +1330,9 @@ export function AgentChat({
   // as stream events — they go straight to stdin) with agent events, in send/arrival order.
   // Seeded from `events` on mount and grown as `events` grows (backfill resolving counts as
   // growth too), tracking how many have already been folded in via `processedRef`.
-  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [timeline, setTimeline] = useState<TimelineItem[]>(() =>
+    initialMessage && initialMessage.trim() ? [{ kind: "you", text: initialMessage.trim() }] : [],
+  );
   const processedRef = useRef(0);
   useEffect(() => {
     if (events.length <= processedRef.current) return;

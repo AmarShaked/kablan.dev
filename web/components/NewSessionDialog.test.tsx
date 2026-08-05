@@ -84,7 +84,7 @@ describe("NewSessionDialog", () => {
       copyNodeModules: true,
       copyEnv: true,
     });
-    await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalledWith("session/abc123"));
+    await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalledWith("session/abc123", "do the thing"));
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 

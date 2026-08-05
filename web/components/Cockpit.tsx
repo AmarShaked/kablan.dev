@@ -89,9 +89,13 @@ export function Cockpit({
   logs = {},
   onSeedLogs,
   onBack,
+  initialMessage,
 }: {
   project: string;
   branch: string;
+  /** First message from the New-session flow (already sent server-side) — passed to AgentChat so
+   * it seeds the opening "You" bubble. Only set right after creating this branch's session. */
+  initialMessage?: string;
   /** Live dev-server map keyed by working-copy `cwd` (owned by `App`, kept live via the WS
    * "hello"/status frames). Used to detect a dev server already running on a DIFFERENT branch of
    * this same project — only one branch can hold the project's port at a time, so this cockpit
@@ -140,11 +144,15 @@ export function Cockpit({
   const agentKey = branchKey(project, branch);
 
   const [linearWorkspace, setLinearWorkspace] = useState("");
+  const [defaultPermissionMode, setDefaultPermissionMode] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!isTauri) return;
     api
       .getConfig()
-      .then((c) => setLinearWorkspace(c.linearWorkspace))
+      .then((c) => {
+        setLinearWorkspace(c.linearWorkspace);
+        setDefaultPermissionMode(c.factory?.permissionMode);
+      })
       .catch(() => {});
   }, []);
 
@@ -382,6 +390,8 @@ export function Cockpit({
               project={project}
               agentKey={agentKey}
               files={files}
+              initialMessage={initialMessage}
+              defaultPermissionMode={defaultPermissionMode}
               onStart={startAgent}
               onMessage={messageAgent}
               onStop={stopAgent}

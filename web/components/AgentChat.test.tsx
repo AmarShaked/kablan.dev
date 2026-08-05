@@ -97,6 +97,22 @@ describe("AgentChat", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
+  it("seeds the New-session first message as the opening You bubble", () => {
+    renderChat([], { initialMessage: "kick things off" });
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByText("kick things off")).toBeInTheDocument();
+  });
+
+  it("defaults the Permission picker to the configured default when it's a valid option", () => {
+    renderChat([], { defaultPermissionMode: "bypassPermissions" });
+    expect(screen.getByLabelText("Permission")).toHaveValue("bypassPermissions");
+  });
+
+  it("falls back to acceptEdits when the configured default isn't a per-session option", () => {
+    renderChat([], { defaultPermissionMode: "auto" });
+    expect(screen.getByLabelText("Permission")).toHaveValue("acceptEdits");
+  });
+
   it("restarts a running agent with the chosen model when the Model dropdown changes", async () => {
     const { onStart } = renderChat([workingStatus]);
     await userEvent.selectOptions(screen.getByLabelText("Model"), "opus");
