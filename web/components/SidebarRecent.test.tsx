@@ -191,13 +191,13 @@ describe("SidebarRecent", () => {
     expect(screen.queryByLabelText("Active session")).not.toBeInTheDocument();
   });
 
-  it('caps rendered branch rows at 10 in the Branches group', () => {
-    const manyBranches = Array.from({ length: 15 }, (_, i) =>
+  it('caps rendered branch rows at 20 in the Branches group', () => {
+    const manyBranches = Array.from({ length: 25 }, (_, i) =>
       branchEntity({ name: `branch-${i}`, ts: 100 - i }),
     );
     renderComponent({ unfiled: manyBranches });
-    for (let i = 0; i < 10; i++) expect(screen.getByText(`branch-${i}`)).toBeInTheDocument();
-    for (let i = 10; i < 15; i++) expect(screen.queryByText(`branch-${i}`)).not.toBeInTheDocument();
+    for (let i = 0; i < 20; i++) expect(screen.getByText(`branch-${i}`)).toBeInTheDocument();
+    for (let i = 20; i < 25; i++) expect(screen.queryByText(`branch-${i}`)).not.toBeInTheDocument();
   });
 
   it("does not render a Fetch button when onFetch is omitted", () => {

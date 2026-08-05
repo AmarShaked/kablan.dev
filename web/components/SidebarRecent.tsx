@@ -35,7 +35,7 @@ function suppressDragImage(e: React.DragEvent<HTMLElement>) {
   }
 }
 
-const MAX_ROWS = 10;
+const MAX_ROWS = 20;
 const SKELETON_ROWS = 4;
 
 /**
