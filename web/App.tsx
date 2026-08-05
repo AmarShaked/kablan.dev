@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FolderGit2, X, Download, ArrowUpCircle } from "lucide-react";
@@ -34,7 +34,7 @@ import { HomeView } from "./components/HomeView.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { buildBranchEntities } from "./lib/projectEntities.ts";
-import { branchKey } from "./lib/agentKey.ts";
+import { branchKey, parseBranchKey } from "./lib/agentKey.ts";
 import { useInboxRead, isRead } from "./lib/inboxRead.ts";
 import { pickDefaultProject } from "./lib/pickDefaultProject.ts";
 import { useProjects, useFactory, useBranches, useWorktrees, useInbox, qk } from "./queries.ts";
@@ -89,9 +89,17 @@ function AppContent() {
   // Dev servers keyed by working-copy `cwd` (globally unique) — multiple working copies of the
   // same project can run at once. Fed by the WS hello/status frames below.
   const [servers, setServers] = useState<Record<string, RunningServer>>({});
+  // Mirror of `servers` for the WS handler (its closure captures a stale snapshot — it's set up
+  // once), so a stop frame (server record is null) can still resolve the owning branch.
+  const serversRef = useRef<Record<string, RunningServer>>({});
   // Dev-server output, keyed by working-copy `cwd` — fed by the WS "log" frames below and seeded
   // per-cwd from `api.getLogs` when a cockpit opens. Threaded into the cockpit's Dev server area.
   const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
+  // Last live-activity time per BRANCH NAME (ms), bumped on discrete activity frames (agent
+  // session start / working↔idle transitions, dev-server start/stop) so the sidebar can float a
+  // branch up on ANY recent activity, not just git commit time. Deliberately NOT bumped on the
+  // high-frequency `agent-event`/`log` frames (that would re-sort mid-stream and make rows jump).
+  const [lastActivity, setLastActivity] = useState<Record<string, number>>({});
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [tauriUpdate, setTauriUpdate] = useState<TauriUpdate | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -151,16 +159,23 @@ function AppContent() {
           // Servers are keyed by working-copy cwd (globally unique).
           const map: Record<string, RunningServer> = {};
           for (const s of msg.servers as RunningServer[]) map[s.cwd] = s;
+          serversRef.current = map;
           setServers(map);
         } else if (msg.type === "status") {
           const s = msg.server as RunningServer | null;
           const cwd = (msg.cwd as string) ?? s?.cwd;
+          // Resolve the owning branch BEFORE mutating: on a stop frame `s` is null, so read the
+          // last-known record for this cwd from the mirror (the handler closure is stale).
+          const serverBranch = s?.branch ?? (cwd ? serversRef.current[cwd]?.branch : undefined);
           setServers((prev) => {
             const next = { ...prev };
             if (s && cwd) next[cwd] = s;
             else if (cwd) delete next[cwd];
+            serversRef.current = next;
             return next;
           });
+          // Dev-server start/stop is branch activity — bump the owning branch so it floats up.
+          if (serverBranch) setLastActivity((prev) => ({ ...prev, [serverBranch]: Date.now() }));
           // Surface an abnormal exit so failures aren't silent. A clean stop
           // kills via signal (exitCode null), so this only fires on real crashes
           // (e.g. "command not found", a dev server that errored out). Name the
@@ -185,6 +200,14 @@ function AppContent() {
           });
         } else if (msg.type?.startsWith("agent-")) {
           ingest(msg);
+          // `agent-status` brackets discrete agent activity: session start + every working↔idle
+          // transition (i.e. a message being sent/answered). Bump the branch on those only — NOT
+          // on the far more frequent `agent-event` frames, which would re-sort the sidebar mid-
+          // stream and make rows jump.
+          if (msg.type === "agent-status" && typeof msg.key === "string") {
+            const parsed = parseBranchKey(msg.key);
+            if (parsed) setLastActivity((prev) => ({ ...prev, [parsed.branch]: Date.now() }));
+          }
         }
       };
       ws.onclose = () => {
@@ -332,6 +355,12 @@ function AppContent() {
     [snapshotStatuses, agentStreamVersion],
   );
 
+  // Dev-server start time (ms) for a working copy, and last live-activity time (ms) for a branch —
+  // fed into the entity builder so the sidebar floats a branch up on ANY recent activity, not just
+  // its last git commit.
+  const serverStartedAt = useCallback((cwd?: string) => (cwd ? servers[cwd]?.startedAt : undefined), [servers]);
+  const activityAt = useCallback((b: string) => lastActivity[b], [lastActivity]);
+
   const branchEntities = useMemo(
     () =>
       buildBranchEntities({
@@ -340,8 +369,18 @@ function AppContent() {
         factory: factoryQuery.data ?? { features: [], branchState: {} },
         statusFor,
         isServerRunning,
+        serverStartedAt,
+        activityAt,
       }),
-    [branchesQuery.data, worktreesQuery.data, factoryQuery.data, statusFor, isServerRunning],
+    [
+      branchesQuery.data,
+      worktreesQuery.data,
+      factoryQuery.data,
+      statusFor,
+      isServerRunning,
+      serverStartedAt,
+      activityAt,
+    ],
   );
 
   // Fetches all remotes for the selected project and invalidates branches/worktrees — the same

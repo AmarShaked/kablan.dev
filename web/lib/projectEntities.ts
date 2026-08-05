@@ -52,6 +52,11 @@ export interface BuildBranchEntitiesArgs {
   factory: FactoryOverview;
   statusFor: (branch: string) => AgentStatus | undefined;
   isServerRunning: (cwd?: string) => boolean;
+  /** Dev-server start time (ms) for a working copy — counts as recent activity for sort ordering. */
+  serverStartedAt?: (cwd?: string) => number | undefined;
+  /** Last live-activity time (ms) for a branch (agent session start / working↔idle / dev-server
+   * start-stop), so the sidebar floats a branch up on ANY recent activity, not just git commits. */
+  activityAt?: (branch: string) => number | undefined;
 }
 
 export interface BranchEntities {
@@ -83,7 +88,13 @@ export function buildBranchEntities({
   factory,
   statusFor,
   isServerRunning,
+  serverStartedAt,
+  activityAt,
 }: BuildBranchEntitiesArgs): BranchEntities {
+  // git `lastCommitTs` and factory `createdAt` are UNIX SECONDS; dev-server `startedAt` and the
+  // live-activity timestamps are `Date.now()` MILLISECONDS. Normalize the ms sources to seconds
+  // before combining, so the max (and SidebarRecent's relative labels) stay correct.
+  const toSec = (ms?: number) => (ms ? Math.floor(ms / 1000) : 0);
   const worktreeByBranch = new Map(
     worktrees.filter((w): w is Worktree & { branch: string } => !!w.branch).map((w) => [w.branch, w]),
   );
@@ -98,7 +109,16 @@ export function buildBranchEntities({
     const worktreePath = wt?.path ?? state?.worktreePath;
     const agentStatus = statusFor(b.name);
     const lastCommitTs = wt?.lastCommitTs ?? b.lastCommitTs ?? null;
-    const ts = agentStatus === "working" ? Number.MAX_SAFE_INTEGER : lastCommitTs || state?.createdAt || 0;
+    // Most-recent activity across every signal (all in SECONDS): git commit, session creation
+    // (factory createdAt — already seconds), a running dev server's start, and the live per-branch
+    // activity feed (chat / session / server transitions). A working agent still pins to the top.
+    const activityTs = Math.max(
+      lastCommitTs || 0,
+      state?.createdAt || 0,
+      toSec(serverStartedAt?.(worktreePath)),
+      toSec(activityAt?.(b.name)),
+    );
+    const ts = agentStatus === "working" ? Number.MAX_SAFE_INTEGER : activityTs;
     const title = state?.title?.trim() || undefined;
     return {
       name: b.name,

@@ -110,6 +110,69 @@ describe("buildBranchEntities", () => {
     expect(all[0].ts).toBe(Number.MAX_SAFE_INTEGER);
   });
 
+  it("floats a branch up on recent live activity (activityAt, ms) over a newer commit with none", () => {
+    // "a" has the newer COMMIT (200s) but no live activity; "b" has an older commit (100s) but
+    // recent activity. activityAt is MILLISECONDS — 250_000ms → 250s, which beats a's 200s.
+    const activityAt = (b: string) => (b === "b" ? 250_000 : undefined);
+    const { all } = buildBranchEntities({
+      branches: [branch({ name: "a", lastCommitTs: 200 }), branch({ name: "b", lastCommitTs: 100 })],
+      worktrees: [],
+      factory: factory(),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+      activityAt,
+    });
+    expect(all.map((e) => e.name)).toEqual(["b", "a"]);
+    // Normalized to seconds (250_000ms → 250s), not left in ms.
+    expect(all.find((e) => e.name === "b")!.ts).toBe(250);
+  });
+
+  it("counts a running dev server's start time (ms) as activity, normalized to seconds", () => {
+    const serverStartedAt = (cwd?: string) => (cwd === "/wt/b" ? 300_000 : undefined);
+    const { all } = buildBranchEntities({
+      branches: [branch({ name: "a", lastCommitTs: 200 }), branch({ name: "b", lastCommitTs: 100 })],
+      worktrees: [worktree({ path: "/wt/b", branch: "b", lastCommitTs: null })],
+      factory: factory(),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+      serverStartedAt,
+    });
+    expect(all.map((e) => e.name)).toEqual(["b", "a"]);
+    expect(all.find((e) => e.name === "b")!.ts).toBe(300);
+  });
+
+  it("keeps the working pin above a branch with more recent live activity", () => {
+    const statusFor = (b: string) => (b === "wk" ? ("working" as const) : undefined);
+    const activityAt = (b: string) => (b === "act" ? Date.now() : undefined);
+    const { all } = buildBranchEntities({
+      branches: [branch({ name: "wk", lastCommitTs: 1 }), branch({ name: "act", lastCommitTs: 1 })],
+      worktrees: [],
+      factory: factory(),
+      statusFor,
+      isServerRunning: noServer,
+      activityAt,
+    });
+    expect(all[0].name).toBe("wk");
+    expect(all[0].ts).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("keeps local-first ordering even when a remote-only branch has more recent activity", () => {
+    const activityAt = (b: string) => (b === "remote" ? Date.now() : undefined);
+    const { all } = buildBranchEntities({
+      branches: [
+        branch({ name: "local", lastCommitTs: 1, remoteOnly: false }),
+        branch({ name: "remote", lastCommitTs: 1, remoteOnly: true }),
+      ],
+      worktrees: [],
+      factory: factory(),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+      activityAt,
+    });
+    // The locally-present branch (older, no fresh activity) still ranks above the remote-only one.
+    expect(all.map((e) => e.name)).toEqual(["local", "remote"]);
+  });
+
   it("sets agentStatus from statusFor and marks isCurrent from the git branch", () => {
     const statusFor = (b: string) => (b === "feat/one" ? ("awaitingInput" as const) : undefined);
     const { all } = buildBranchEntities({
