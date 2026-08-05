@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, Play } from "lucide-react";
 import { api, type RunningServer, type LogLine } from "../api.ts";
-import { useBranches, useWorktrees, useFactory, useFiles, useGitlabHosts, qk } from "../queries.ts";
+import { useBranches, useWorktrees, useFactory, useFiles, useDeps, useGitlabHosts, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
 import { findServerUrl } from "../lib/serverUrl.ts";
@@ -169,6 +169,14 @@ export function Cockpit({
   // File list for the composer's @-file mention typeahead — scoped to this branch's working copy.
   const files = useFiles(project, cwd ?? undefined).data?.files ?? [];
 
+  // Dependency presence for this working copy — gates the dev-server Start guard. `depsMissing` is
+  // true ONLY for a Node project (has package.json) whose node_modules isn't there yet — e.g. right
+  // after "New session" while the background copy is still running, or when the user opted out of
+  // copying. useDeps keeps polling while node_modules is absent, so Start re-enables automatically
+  // once the copy (or "Install deps") lands it.
+  const deps = useDeps(project, cwd ?? undefined).data;
+  const depsMissing = !!deps && deps.hasPackageJson && !deps.hasNodeModules;
+
   const refreshServer = useCallback(async () => {
     if (!cwd) {
       setServer(null);
@@ -198,6 +206,12 @@ export function Cockpit({
 
   const startServer = async () => {
     if (!cwd) return;
+    // Belt-and-suspenders guard (the Start button is also disabled): a Node project with no
+    // node_modules would launch a dev server that fails confusingly, so block it here too.
+    if (depsMissing) {
+      toast.error("Install dependencies first — node_modules is missing for this branch.");
+      return;
+    }
     setServerBusy(true);
     try {
       const s = await api.startServer(project, { cwd, branch: entry.branchName });
@@ -258,6 +272,12 @@ export function Cockpit({
   // server's own expected-exit toast. Mirrors the plain `startServer` (same cwd/branch) otherwise.
   const replaceServer = async (otherCwd: string) => {
     if (!cwd) return;
+    // Same dep guard as startServer — taking over the port still starts a server here, which needs
+    // deps.
+    if (depsMissing) {
+      toast.error("Install dependencies first — node_modules is missing for this branch.");
+      return;
+    }
     setServerBusy(true);
     try {
       markIntentionalStop(otherCwd);
@@ -421,6 +441,7 @@ export function Cockpit({
               onStartServer={startServer}
               onStopServer={stopServer}
               onInstall={installDeps}
+              depsMissing={depsMissing}
               otherRunningServers={otherRunningServers}
               onReplaceServer={replaceServer}
               linearWorkspace={linearWorkspace}

@@ -72,6 +72,22 @@ export function useFiles(name: string, cwd?: string) {
   });
 }
 
+/** Dependency presence for a working copy — gates the dev-server Start guard (block Start when a
+ * Node project has no node_modules). While node_modules is still MISSING we poll (2s) so Start
+ * re-enables automatically once the New-session background copy — or an "Install deps" run — lands
+ * it; polling stops as soon as node_modules is present. `cwd` is part of the key so each working
+ * copy tracks its own deps. Tauri-only endpoint, so gate `enabled` on isTauri + a real cwd. */
+export function useDeps(name: string, cwd?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["deps", name, cwd ?? ""] as const,
+    queryFn: () => api.getDeps(name, cwd),
+    enabled: enabled && isTauri && !!name && !!cwd,
+    refetchOnWindowFocus: true,
+    // Keep re-checking only while node_modules is absent; once it's there, stop polling.
+    refetchInterval: (query) => (query.state.data?.hasNodeModules ? false : 2000),
+  });
+}
+
 export function useGitlabOverview(name: string, enabled = true) {
   return useQuery({
     queryKey: ["gitlab-overview", name] as const,

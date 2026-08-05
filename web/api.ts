@@ -270,6 +270,12 @@ export const api = {
     req<{ files: string[] }>(
       `/api/projects/${encodeURIComponent(name)}/files${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`,
     ),
+  // Dependency presence for a working copy — powers the UI guard that blocks starting a dev server
+  // before node_modules exists (e.g. while the New-session background copy is still running).
+  getDeps: (name: string, cwd?: string) =>
+    req<{ hasPackageJson: boolean; hasNodeModules: boolean }>(
+      `/api/projects/${encodeURIComponent(name)}/deps${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`,
+    ),
   openIn: (name: string, target: OpenTarget, opts: { cwd?: string; url?: string } = {}) =>
     req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/open`, {
       method: "POST",

@@ -175,6 +175,39 @@ describe("WorktreeDetails", () => {
     expect(props.onStartServer).toHaveBeenCalled();
   });
 
+  it("disables Start server and shows a deps hint when node_modules is missing", () => {
+    const props = renderDetails({ depsMissing: true, onInstall: vi.fn() });
+    expect(screen.getByRole("button", { name: /start server/i })).toBeDisabled();
+    expect(screen.getByText(/dependencies not installed — run install deps first/i)).toBeInTheDocument();
+    // Install deps stays enabled (it's the fix), and Start was never invoked.
+    expect(screen.getByRole("button", { name: /install deps/i })).toBeEnabled();
+    expect(props.onStartServer).not.toHaveBeenCalled();
+  });
+
+  it("enables Start server (no deps hint) when node_modules is present", () => {
+    renderDetails({ depsMissing: false });
+    expect(screen.getByRole("button", { name: /start server/i })).toBeEnabled();
+    expect(screen.queryByText(/dependencies not installed/i)).not.toBeInTheDocument();
+  });
+
+  it("disables the Replace caret too when deps are missing", () => {
+    const other: RunningServer = {
+      projectName: "proj",
+      cwd: "/wt/two",
+      command: "npm run dev",
+      branch: "feat/two",
+      pid: 2,
+      status: "running",
+      startedAt: 0,
+      exitCode: null,
+    };
+    renderDetails({ depsMissing: true, otherRunningServers: [other], onReplaceServer: vi.fn() });
+    expect(screen.getByRole("button", { name: /start server/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /replace a dev server running on another branch/i }),
+    ).toBeDisabled();
+  });
+
   it("calls onStopServer when Stop server is clicked (running)", async () => {
     const server: RunningServer = {
       projectName: "proj",

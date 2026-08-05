@@ -75,6 +75,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/log", get(get_log))
         .route("/api/projects/:name/diff", get(get_diff))
         .route("/api/projects/:name/files", get(get_files))
+        .route("/api/projects/:name/deps", get(get_deps))
         .route("/api/projects/:name/open", post(post_open))
         .route("/api/projects/:name/checkout", post(post_checkout))
         .route("/api/projects/:name/pull", post(post_pull))
@@ -210,6 +211,29 @@ async fn get_files(Path(name): Path<String>, Query(q): Query<HashMap<String, Str
     };
     let files = blocking(move || git::list_files(&dir)).await;
     Ok(Json(json!({ "files": files })))
+}
+
+/// `GET .../deps?cwd=<workingdir>` — reports dependency presence for a working copy so the UI can
+/// block starting a dev server before `node_modules` exists (e.g. right after "New session" while
+/// the background copy is still running, or when the user opted out of copying). Tauri-only — NOT
+/// mirrored in `server/` (not parity-relevant). `cwd` resolves through the same `resolve_workdir`
+/// guard the diff/files endpoints use (default = project main path).
+async fn get_deps(Path(name): Path<String>, Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    let cwd = q.get("cwd").filter(|s| !s.is_empty()).cloned();
+    let dir = match &cwd {
+        Some(c) => {
+            let n = name.clone();
+            let c = c.clone();
+            blocking(move || projects::resolve_workdir(&n, Some(&c))).await.map_err(bad)?
+        }
+        None => projects::project_path_from_name(&name).map_err(bad)?,
+    };
+    let (has_package_json, has_node_modules) = blocking(move || {
+        let root = std::path::Path::new(&dir);
+        (root.join("package.json").is_file(), root.join("node_modules").is_dir())
+    })
+    .await;
+    Ok(Json(json!({ "hasPackageJson": has_package_json, "hasNodeModules": has_node_modules })))
 }
 
 // --- GitLab ---

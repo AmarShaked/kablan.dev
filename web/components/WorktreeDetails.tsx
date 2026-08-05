@@ -106,6 +106,7 @@ export function WorktreeDetails({
   onStartServer,
   onStopServer,
   onInstall,
+  depsMissing = false,
   otherRunningServers = [],
   onReplaceServer,
   linearWorkspace = "",
@@ -121,6 +122,10 @@ export function WorktreeDetails({
   onStopServer: () => void;
   /** Run `npm install` in this worktree (fixes a stale/missing node_modules). */
   onInstall?: () => void;
+  /** True when this working copy is a Node project (has package.json) whose node_modules isn't
+   * present yet — starting a dev server would fail confusingly, so Start/Replace are disabled and
+   * a hint points at "Install deps". */
+  depsMissing?: boolean;
   /** Dev servers running on OTHER working copies of this same project (different branch/cwd). A
    * project's dev server holds one port, so only one branch can run it — these enable "replace". */
   otherRunningServers?: RunningServer[];
@@ -336,7 +341,7 @@ export function WorktreeDetails({
                 <div className="flex">
                   <Button
                     size="xs"
-                    disabled={busy}
+                    disabled={busy || depsMissing}
                     onClick={onStartServer}
                     className="rounded-r-none"
                   >
@@ -351,7 +356,7 @@ export function WorktreeDetails({
                           wire their asChild triggers. */}
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busy || depsMissing}
                         aria-label="Replace a dev server running on another branch"
                         className={cn(
                           buttonVariants({ size: "xs", variant: "outline" }),
@@ -374,7 +379,7 @@ export function WorktreeDetails({
                   </DropdownMenu>
                 </div>
               ) : (
-                <Button size="xs" disabled={busy} onClick={onStartServer}>
+                <Button size="xs" disabled={busy || depsMissing} onClick={onStartServer}>
                   <Play className="size-3.5" /> Start server
                 </Button>
               )}
@@ -384,6 +389,12 @@ export function WorktreeDetails({
                 </Button>
               )}
             </div>
+            {depsMissing && !running && (
+              <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="size-3 shrink-0" /> Dependencies not installed — run Install
+                deps first.
+              </p>
+            )}
             {installing && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <RefreshCw className="size-3 animate-spin" /> Installing dependencies… (output in Logs)
