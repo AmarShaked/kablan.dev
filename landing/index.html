@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kablan.dev — your local dev environment, under one roof</title>
+    <title>Kablan.dev — mission control for your AI coding agents</title>
     <meta
       name="description"
-      content="A fast, native desktop cockpit for your local dev environment: every repo, branch and worktree, env files, and dev servers with live logs — no terminal tab graveyard."
+      content="Run a Claude Code agent on every branch, supervise each tool call, and review its diffs — a fast, native desktop cockpit that runs on your own Claude subscription. No API key, no terminal-tab graveyard."
     />
     <meta property="og:title" content="Kablan.dev" />
-    <meta property="og:description" content="Your local dev environment, under one roof." />
+    <meta property="og:description" content="Mission control for your AI coding agents — on your own Claude subscription." />
     <meta property="og:type" content="website" />
     <link
       rel="icon"
@@ -17,18 +17,23 @@
     />
     <style>
       :root {
-        --bg: #0e0d0b;
-        --bg-2: #17150f;
-        --panel: #1c1a14;
-        --panel-2: #232019;
+        --bg: #0d0c0a;
+        --bg-2: #16140f;
+        --panel: #1b1913;
+        --panel-2: #221f18;
         --border: #322d22;
-        --text: #f2ede2;
+        --border-2: #40392b;
+        --text: #f3eee3;
         --muted: #a89e8b;
+        --faint: #766d5c;
         --accent: #e8a34d;
         --accent-2: #d98338;
         --sky: #6bb6e6;
         --violet: #b39ddb;
+        --indigo: #8f8ce8;
         --emerald: #5fd39a;
+        --rose: #f0857f;
+        --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html { scroll-behavior: smooth; }
@@ -41,111 +46,179 @@
         overflow-x: hidden;
       }
       a { color: inherit; text-decoration: none; }
-      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+      code { font-family: var(--mono); font-size: 0.88em; }
+      .wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+
+      /* Ambient background: warm amber + cool indigo glows, animated, over a masked grid. */
       .glow {
         position: fixed; inset: 0; z-index: 0; pointer-events: none;
         background:
-          radial-gradient(60% 50% at 75% -10%, rgba(232,163,77,0.18), transparent 70%),
-          radial-gradient(50% 40% at 10% 0%, rgba(107,182,230,0.10), transparent 70%);
+          radial-gradient(55% 45% at 78% -8%, rgba(232,163,77,0.20), transparent 70%),
+          radial-gradient(45% 40% at 12% 4%, rgba(143,140,232,0.16), transparent 70%),
+          radial-gradient(40% 35% at 55% 110%, rgba(107,182,230,0.10), transparent 70%);
+        animation: drift 22s ease-in-out infinite alternate;
       }
+      @keyframes drift { to { transform: translate3d(0, -14px, 0) scale(1.04); } }
+      @media (prefers-reduced-motion: reduce) { .glow { animation: none; } }
       .grid-bg {
-        position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
+        position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.4;
         background-image:
-          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-        background-size: 44px 44px;
-        mask-image: radial-gradient(circle at 50% 20%, black, transparent 75%);
+          linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+        background-size: 46px 46px;
+        mask-image: radial-gradient(circle at 50% 18%, black, transparent 72%);
       }
       main, nav { position: relative; z-index: 1; }
 
       /* Nav */
       nav {
         position: sticky; top: 0; z-index: 50;
-        backdrop-filter: blur(12px);
-        background: rgba(14,13,11,0.7);
+        backdrop-filter: blur(14px);
+        background: rgba(13,12,10,0.72);
         border-bottom: 1px solid var(--border);
       }
-      .nav-in { display: flex; align-items: center; gap: 16px; height: 60px; }
-      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
-      .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 12px var(--accent-2); }
+      .nav-in { display: flex; align-items: center; gap: 16px; height: 62px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+      .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 14px var(--accent-2); }
       .nav-links { margin-left: auto; display: flex; align-items: center; gap: 22px; font-size: 14px; color: var(--muted); }
       .nav-links a:hover { color: var(--text); }
       .btn {
         display: inline-flex; align-items: center; gap: 8px;
-        padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
-        cursor: pointer; border: 1px solid transparent; transition: transform .12s ease, box-shadow .2s ease, background .2s;
+        padding: 10px 18px; border-radius: 11px; font-weight: 600; font-size: 14px;
+        cursor: pointer; border: 1px solid transparent; transition: transform .12s ease, box-shadow .2s ease, background .2s, border-color .2s;
       }
-      .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #241a0c; box-shadow: 0 6px 24px rgba(232,163,77,0.35); }
-      .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(232,163,77,0.45); }
-      .btn-ghost { border-color: var(--border); color: var(--text); background: rgba(255,255,255,0.02); }
+      .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #241a0c; box-shadow: 0 6px 26px rgba(232,163,77,0.35); }
+      .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 34px rgba(232,163,77,0.48); }
+      .btn-ghost { border-color: var(--border-2); color: var(--text); background: rgba(255,255,255,0.02); }
       .btn-ghost:hover { border-color: var(--accent-2); }
 
       /* Hero */
-      .hero { text-align: center; padding: 90px 0 40px; }
+      .hero { text-align: center; padding: 96px 0 34px; }
       .pill {
-        display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
-        border: 1px solid var(--border); background: rgba(255,255,255,0.02); padding: 6px 14px; border-radius: 999px; margin-bottom: 26px;
+        display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted);
+        border: 1px solid var(--border-2); background: rgba(255,255,255,0.02); padding: 6px 15px; border-radius: 999px; margin-bottom: 26px;
       }
       .pill b { color: var(--emerald); font-weight: 600; }
-      h1 { font-size: clamp(38px, 6vw, 68px); line-height: 1.05; letter-spacing: -0.03em; font-weight: 800; }
-      h1 .grad { background: linear-gradient(120deg, var(--accent) 20%, #f4c98a 50%, var(--sky) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-      .sub { max-width: 660px; margin: 22px auto 0; font-size: clamp(16px, 2.2vw, 20px); color: var(--muted); }
+      .pill .tag { color: var(--accent); font-weight: 700; }
+      h1 { font-size: clamp(40px, 6.4vw, 74px); line-height: 1.03; letter-spacing: -0.035em; font-weight: 800; }
+      h1 .grad { background: linear-gradient(105deg, var(--accent) 8%, #f4c98a 38%, var(--violet) 72%, var(--sky) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .sub { max-width: 680px; margin: 24px auto 0; font-size: clamp(16px, 2.2vw, 20px); color: var(--muted); }
+      .sub b { color: var(--text); font-weight: 600; }
       .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
-      .cta .hint { color: var(--muted); font-size: 12.5px; margin-top: 12px; width: 100%; }
+      .cta .hint { color: var(--faint); font-size: 12.5px; margin-top: 12px; width: 100%; }
+      .cta .hint b { color: var(--muted); font-weight: 600; }
 
-      /* App mockup */
-      .shot { margin: 56px auto 0; max-width: 940px; position: relative; }
-      .shot::after { content: ""; position: absolute; inset: -1px; border-radius: 14px; padding: 1px; background: linear-gradient(160deg, rgba(232,163,77,0.5), transparent 40%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
-      .win { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 40px 120px rgba(0,0,0,0.6); }
+      /* App mockup — the agent cockpit */
+      .shot { margin: 60px auto 0; max-width: 1000px; position: relative; }
+      .shot::after { content: ""; position: absolute; inset: -1px; border-radius: 16px; padding: 1px; background: linear-gradient(160deg, rgba(232,163,77,0.55), rgba(143,140,232,0.25) 35%, transparent 60%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+      .win { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 44px 130px rgba(0,0,0,0.65); }
       .titlebar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
       .tl { width: 12px; height: 12px; border-radius: 50%; }
       .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
       .titlebar .t { margin-left: 10px; font-size: 12px; color: var(--muted); }
-      .app { display: grid; grid-template-columns: 220px 1fr; min-height: 380px; text-align: left; }
-      .side { background: var(--bg-2); border-right: 1px solid var(--border); padding: 14px 10px; font-size: 13px; }
-      .side .search { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-      .side .grp { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 4px 6px 8px; }
-      .prow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 7px; color: #d8d0c0; }
-      .prow.active { background: rgba(232,163,77,0.12); color: var(--text); }
-      .prow .ic { width: 15px; height: 15px; opacity: .8; }
-      .prow .run { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
-      .main { padding: 16px 18px; }
-      .fbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
-      .fbar .inp { flex: 1; max-width: 240px; border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; color: var(--muted); font-size: 12px; }
-      .fbar .chip { border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; color: var(--muted); font-size: 12px; }
-      .ghead { display: flex; align-items: center; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 10px; border-radius: 7px; margin: 10px 0 6px; font-weight: 700; }
-      .ghead.wt { background: rgba(179,157,219,0.12); color: var(--violet); }
-      .ghead.br { background: rgba(107,182,230,0.12); color: var(--sky); }
-      .item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
-      .item:hover { background: rgba(255,255,255,0.03); }
-      .badge { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
-      .b-cur { background: rgba(95,211,154,0.15); color: var(--emerald); }
-      .b-main { background: rgba(107,182,230,0.15); color: var(--sky); }
-      .b-run { color: var(--emerald); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
-      .b-run .d { width: 7px; height: 7px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 7px var(--emerald); }
-      .item .meta { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
-      .av { width: 20px; height: 20px; border-radius: 50%; background: rgba(232,163,77,0.2); color: var(--accent); font-size: 9px; font-weight: 700; display: grid; place-items: center; }
-      .heat { display: flex; gap: 3px; margin-top: 4px; }
-      .heat .col { display: flex; flex-direction: column; gap: 3px; }
-      .heat i { width: 9px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.06); display: block; }
-      .heat i.l1 { background: rgba(95,211,154,0.35);} .heat i.l2{ background: rgba(95,211,154,0.6);} .heat i.l3{ background: rgba(95,211,154,0.85);} .heat i.l4{ background: var(--emerald);}
+      .app { display: grid; grid-template-columns: 210px 1fr 210px; min-height: 430px; text-align: left; font-size: 13px; }
+
+      /* left rail: branches/features */
+      .side { background: var(--bg-2); border-right: 1px solid var(--border); padding: 12px 9px; }
+      .side .sw { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-weight: 600; font-size: 12.5px; margin-bottom: 12px; }
+      .side .sw .cube { font-size: 13px; }
+      .grp { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; margin: 10px 6px 6px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+      .grp.f { color: var(--accent); } .grp.b { color: var(--sky); }
+      .grp .ct { margin-left: auto; background: rgba(255,255,255,0.06); color: var(--muted); border-radius: 999px; padding: 0 7px; font-size: 10px; }
+      .brow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; color: #d8d0c0; }
+      .brow.active { background: rgba(232,163,77,0.12); box-shadow: inset 0 0 0 1px rgba(232,163,77,0.35); color: var(--text); }
+      .brow .bd { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+      .bd.on { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+      .bd.off { background: transparent; border: 1.5px solid var(--faint); }
+      .brow .nm { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .brow .tm { margin-left: auto; color: var(--faint); font-size: 10.5px; }
+      .fold { display: flex; align-items: center; gap: 8px; padding: 7px 8px; color: #d8d0c0; }
+      .fold .chev { color: var(--faint); font-size: 10px; }
+
+      /* center: chat cockpit */
+      .chat { display: flex; flex-direction: column; background: var(--panel); }
+      .chdr { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+      .chdr .bk { color: var(--faint); }
+      .chdr .cb { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
+      .chdr .tabs { margin-left: auto; display: flex; gap: 2px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 2px; }
+      .chdr .tabs span { font-size: 11px; color: var(--muted); padding: 3px 9px; border-radius: 6px; }
+      .chdr .tabs span.on { background: var(--panel-2); color: var(--text); }
+      .stream { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+      .bub { align-self: flex-start; max-width: 88%; background: rgba(255,255,255,0.045); border-radius: 12px; border-top-left-radius: 4px; padding: 9px 12px; font-size: 12.5px; color: #e7e0d3; }
+      .you { align-self: flex-end; max-width: 88%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; border-top-right-radius: 4px; padding: 9px 12px; font-size: 12.5px; }
+      .toolrow { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 0 2px; }
+      .toolrow .d { color: var(--accent); font-size: 9px; }
+      .toolrow .chev { color: var(--faint); font-size: 9px; }
+      .diff { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; font-family: var(--mono); font-size: 11px; }
+      .diff .dh { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg-2); color: var(--muted); }
+      .diff .dh .st { margin-left: auto; } .diff .dh .st .p { color: var(--emerald); } .diff .dh .st .m { color: var(--rose); }
+      .diff .ln { padding: 2px 10px; white-space: pre; }
+      .diff .ln.add { background: rgba(95,211,154,0.10); color: #bfe6d3; }
+      .diff .ln.del { background: rgba(240,133,127,0.10); color: #f2c3c0; }
+      .diff .ln.ctx { color: var(--faint); }
+      /* approve/deny card */
+      .appr { align-self: flex-start; width: 92%; border: 1px solid rgba(232,163,77,0.4); background: rgba(232,163,77,0.06); border-radius: 11px; padding: 10px 12px; }
+      .appr .ah { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+      .appr .ah .lab { font-weight: 700; color: var(--accent); }
+      .appr .ah .tool { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+      .appr .cmd { font-family: var(--mono); font-size: 11px; color: #e7e0d3; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 5px 8px; margin: 8px 0; }
+      .appr .ab { display: flex; gap: 8px; }
+      .appr .ab .a { flex: 1; text-align: center; font-size: 11.5px; font-weight: 600; padding: 6px; border-radius: 7px; }
+      .appr .ab .allow { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #241a0c; }
+      .appr .ab .deny { border: 1px solid var(--border-2); color: var(--muted); }
+      /* composer */
+      .composer { border-top: 1px solid var(--border); padding: 10px 12px; }
+      .composer .box { border: 1px solid var(--border-2); border-radius: 10px; background: var(--bg-2); padding: 9px 11px; color: var(--faint); font-size: 12px; display: flex; align-items: center; }
+      .composer .box .snd { margin-left: auto; width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #241a0c; display: grid; place-items: center; font-size: 12px; }
+      .composer .foot { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+      .composer .foot .sel { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; }
+      .composer .foot .status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); }
+      .composer .foot .status .d { width: 7px; height: 7px; border-radius: 50%; background: var(--sky); box-shadow: 0 0 7px var(--sky); }
+
+      /* right rail: details */
+      .det { background: var(--bg-2); border-left: 1px solid var(--border); padding: 12px 11px; display: flex; flex-direction: column; gap: 10px; }
+      .dcard { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+      .dcard .h { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 700; margin-bottom: 8px; }
+      .dcard .kv { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin: 3px 0; }
+      .dcard .kv b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 10.5px; }
+      .srv { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--emerald); }
+      .srv .d { width: 7px; height: 7px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 7px var(--emerald); }
+      .mini-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; border: 1px solid var(--border-2); border-radius: 7px; padding: 4px 8px; color: var(--text); }
+
+      /* Logo strip / trust line */
+      .trust { text-align: center; color: var(--faint); font-size: 12.5px; padding: 8px 0 0; }
+      .trust b { color: var(--muted); }
 
       /* Sections */
-      section { padding: 72px 0; }
-      .eyebrow { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; text-align: center; }
-      h2 { text-align: center; font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.02em; margin: 10px 0 8px; font-weight: 800; }
-      .lead { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 46px; }
+      section { padding: 76px 0; }
+      .eyebrow { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; text-align: center; }
+      h2 { text-align: center; font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.025em; margin: 10px 0 8px; font-weight: 800; }
+      .lead { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 48px; }
       .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-      .card { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 14px; padding: 24px; transition: transform .15s, border-color .2s; }
-      .card:hover { transform: translateY(-3px); border-color: var(--accent-2); }
-      .card .emo { font-size: 24px; margin-bottom: 12px; }
-      .card h3 { font-size: 17px; margin-bottom: 6px; }
-      .card p { color: var(--muted); font-size: 14px; }
+      .card { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 15px; padding: 24px; transition: transform .15s, border-color .2s, box-shadow .2s; }
+      .card:hover { transform: translateY(-3px); border-color: var(--accent-2); box-shadow: 0 16px 40px rgba(0,0,0,0.35); }
+      .card .emo { font-size: 23px; margin-bottom: 12px; }
+      .card h3 { font-size: 16.5px; margin-bottom: 6px; letter-spacing: -0.01em; }
+      .card p { color: var(--muted); font-size: 13.5px; }
+      .card p code { color: var(--accent); background: rgba(232,163,77,0.1); padding: 1px 5px; border-radius: 5px; }
+
+      /* subscription highlight band */
+      .band { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-2); }
+      .band-in { display: flex; align-items: center; gap: 30px; flex-wrap: wrap; padding: 40px 0; }
+      .band .txt { flex: 1; min-width: 300px; }
+      .band h2 { text-align: left; margin-top: 6px; }
+      .band .lead { text-align: left; margin: 12px 0 0; }
+      .band .art { flex: none; width: 300px; max-width: 100%; }
+      .keyrow { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; background: var(--panel); margin-bottom: 10px; }
+      .keyrow .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; flex: none; }
+      .keyrow.good .ico { background: rgba(95,211,154,0.14); } .keyrow.bad .ico { background: rgba(240,133,127,0.14); }
+      .keyrow .l { font-size: 13px; } .keyrow .l b { display: block; } .keyrow .l span { color: var(--faint); font-size: 11.5px; }
+      .keyrow .mark { margin-left: auto; font-size: 16px; } .keyrow.good .mark { color: var(--emerald); } .keyrow.bad .mark { color: var(--rose); }
 
       /* Download */
       .dl { background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
       .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 12px; }
-      .dlcard { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 26px; text-align: center; }
+      .dlcard { background: var(--panel); border: 1px solid var(--border); border-radius: 15px; padding: 26px; text-align: center; }
       .dlcard.match { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(232,163,77,0.15); }
       .dlcard .os { font-size: 30px; }
       .dlcard h3 { margin: 8px 0 4px; }
@@ -153,24 +226,21 @@
       .dlcard .btn { width: 100%; justify-content: center; }
       .dlcard .alt { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
       .dlcard .alt:hover { color: var(--accent); }
-      .stack { display: grid; gap: 8px; }
-      .stack a { font-size: 13px; color: var(--muted); }
-      .stack a:hover { color: var(--accent); }
 
       /* How */
       .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; text-align: center; }
       .how .step .n { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--accent-2); color: var(--accent); display: grid; place-items: center; margin: 0 auto 12px; font-weight: 700; }
-      .how .step p { color: var(--muted); font-size: 14px; }
+      .how .step h3 { font-size: 16px; margin-bottom: 6px; }
+      .how .step p { color: var(--muted); font-size: 13.5px; }
 
       footer { border-top: 1px solid var(--border); padding: 34px 0; color: var(--muted); font-size: 13px; }
       .foot { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
       .foot a:hover { color: var(--text); }
       .foot .r { margin-left: auto; display: flex; gap: 18px; }
 
+      @media (max-width: 980px) { .app { grid-template-columns: 1fr; } .side, .det { display: none; } }
       @media (max-width: 860px) {
         .features, .dls, .how { grid-template-columns: 1fr; }
-        .app { grid-template-columns: 1fr; }
-        .side { display: none; }
         .nav-links a.hide { display: none; }
       }
     </style>
@@ -193,17 +263,17 @@
 
     <main>
       <header class="hero wrap">
-        <div class="pill">🏗️ Open source · <b>MIT</b> · macOS · Windows · Linux</div>
-        <h1>Your local dev environment,<br /><span class="grad">under one roof.</span></h1>
+        <div class="pill"><span class="tag">v0.3</span> · Open source · <b>Runs on your Claude subscription</b></div>
+        <h1>Mission control for your<br /><span class="grad">AI coding agents.</span></h1>
         <p class="sub">
-          Every repo, branch and worktree at a glance. Edit env files, spin dev servers up and
-          down with live logs, pull and switch branches — one fast, native desktop app instead of
-          a terminal-tab graveyard.
+          Spin up a <b>Claude Code</b> agent on any branch, <b>approve or deny</b> what it does tool-by-tool,
+          and read its <b>diffs, todos and plans</b> as it works — one fast, native desktop cockpit.
+          On <b>your own Claude Pro/Max login</b>, no API key.
         </p>
         <div class="cta">
           <a class="btn btn-primary" id="hero-dl" href="#download">⬇ Download for your OS</a>
           <a class="btn btn-ghost" href="https://github.com/AmarShaked/kablan.dev">★ Star on GitHub</a>
-          <div class="hint" id="hero-hint">Free &amp; open source. No account, no telemetry.</div>
+          <div class="hint" id="hero-hint">Free &amp; open source · No account, no telemetry · <b>uses your Claude subscription, not the metered API</b></div>
         </div>
 
         <div class="shot">
@@ -213,74 +283,118 @@
               <span class="t">Kablan.dev</span>
             </div>
             <div class="app">
+              <!-- left: branches / features -->
               <aside class="side">
-                <div class="search">🔍 Filter projects…</div>
-                <div class="grp">Projects</div>
-                <div class="prow active">📦 web-app <span class="run"></span></div>
-                <div class="prow">🚀 api-gateway</div>
-                <div class="prow">🧩 design-system</div>
-                <div class="prow">📊 analytics</div>
-                <div class="prow">🤖 agent-runtime</div>
-                <div class="prow">🛠️ infra</div>
+                <div class="sw"><span class="cube">📦</span> sweet/frontend/app <span style="margin-left:auto;color:var(--faint)">▾</span></div>
+                <div class="grp f">🧩 Features <span class="ct">2</span></div>
+                <div class="fold"><span class="chev">▾</span> 🗂️ Checkout revamp</div>
+                <div class="brow active" style="margin-left:14px">
+                  <span class="bd on"></span><span class="nm">fe-3216-payment-retry</span><span class="tm">now</span>
+                </div>
+                <div class="grp b">🔀 Branches <span class="ct">1644</span></div>
+                <div class="brow"><span class="bd on"></span><span class="nm">fe-3201-address-book</span><span class="tm">3h</span></div>
+                <div class="brow"><span class="bd off"></span><span class="nm">fe-3188-coupon-stack</span><span class="tm">1d</span></div>
+                <div class="brow"><span class="bd off"></span><span class="nm">main</span><span class="tm">2d</span></div>
               </aside>
-              <div class="main">
-                <div class="fbar">
-                  <div class="inp">Search name, author, sha…</div>
-                  <div class="chip">All authors ▾</div>
-                  <div class="chip">● Running</div>
+
+              <!-- center: agent chat cockpit -->
+              <div class="chat">
+                <div class="chdr">
+                  <span class="bk">‹</span>
+                  <span class="cb">fe-3216-payment-retry</span>
+                  <span class="tabs"><span class="on">Details</span><span>Env</span><span>Logs</span></span>
                 </div>
-                <div class="ghead wt">🌲 Worktrees <span style="opacity:.6">2</span></div>
-                <div class="item">
-                  main <span class="badge b-cur">✓ current</span><span class="badge b-main">main</span>
-                  <span class="b-run"><span class="d"></span>running</span>
-                  <span class="meta">1694c71 · 2m <span class="av">SA</span></span>
+                <div class="stream">
+                  <div class="you">Add a retry with backoff to the payment call and cover it with a test.</div>
+                  <div class="bub">On it — I'll add exponential backoff to <code>submitPayment</code>, then a test.</div>
+                  <div class="toolrow"><span class="chev">›</span><span class="d">●</span> 4 tool calls · Read paymentClient.ts, checkout.ts …</div>
+                  <div class="appr">
+                    <div class="ah"><span>⏺</span><span class="lab">Approve tool use</span><span class="tool">Bash</span></div>
+                    <div class="cmd">npm test -- payment.retry.test.ts</div>
+                    <div class="ab"><span class="a allow">Approve</span><span class="a deny">Deny</span></div>
+                  </div>
+                  <div class="diff">
+                    <div class="dh"><span>⏺ Edit</span> paymentClient.ts <span class="st"><span class="p">+18</span> <span class="m">−3</span></span></div>
+                    <div class="ln del">-  return api.post("/pay", body);</div>
+                    <div class="ln add">+  return withBackoff(() =&gt; api.post("/pay", body), { retries: 3 });</div>
+                    <div class="ln ctx">   }</div>
+                  </div>
                 </div>
-                <div class="item">
-                  feat/checkout-flow
-                  <span class="meta">a41f0d2 · 3h <span class="av">DK</span></span>
+                <div class="composer">
+                  <div class="box">Message the agent…&nbsp; <span style="color:var(--faint)">@paymentClient.ts</span> <span class="snd">↑</span></div>
+                  <div class="foot">
+                    <span class="sel">Opus ▾</span>
+                    <span class="sel">Think hard ▾</span>
+                    <span class="sel">Supervised ▾</span>
+                    <span class="status"><span class="d"></span> Working…</span>
+                  </div>
                 </div>
-                <div class="ghead br">🔀 Branches <span style="opacity:.6">3</span></div>
-                <div class="item">
-                  main <span class="badge b-cur">✓ current</span>
-                  <span class="meta">1694c71 · 2m <span class="av">SA</span></span>
-                </div>
-                <div class="item">
-                  vk/2481-fix-reorder
-                  <span class="meta">↓2 · dad783a · 5d <span class="av">MB</span></span>
-                </div>
-                <div class="item">
-                  release/0.4
-                  <span class="meta">9f2c1a0 · 2w <span class="av">SA</span></span>
-                </div>
-                <div class="heat" style="margin-top:14px" aria-hidden="true"></div>
               </div>
+
+              <!-- right: details -->
+              <aside class="det">
+                <div class="dcard">
+                  <div class="h">Dev server</div>
+                  <div class="srv"><span class="d"></span> Running · :3000</div>
+                  <div style="margin-top:8px"><span class="mini-btn">⟳ Replace ▾</span></div>
+                </div>
+                <div class="dcard">
+                  <div class="h">Working diff</div>
+                  <div class="kv"><span>2 files</span><b><span style="color:var(--emerald)">+24</span> <span style="color:var(--rose)">−7</span></b></div>
+                  <div class="kv"><span>vs base</span><b>main</b></div>
+                </div>
+                <div class="dcard">
+                  <div class="h">Context</div>
+                  <div class="kv"><span>Tokens</span><b>38k / 200k</b></div>
+                  <div class="kv"><span>Session</span><b>saved</b></div>
+                </div>
+              </aside>
             </div>
           </div>
         </div>
+        <p class="trust">Drives the real <b>Claude Code</b> CLI &amp; your <b>git</b> · macOS · Windows · Linux · MIT-licensed</p>
       </header>
 
       <section id="features" class="wrap">
-        <div class="eyebrow">Everything, one window</div>
-        <h2>Stop juggling terminals</h2>
-        <p class="lead">Kablan.dev pulls your whole local workflow into a single, fast surface.</p>
+        <div class="eyebrow">One cockpit, every agent</div>
+        <h2>Run agents like you run infra</h2>
+        <p class="lead">Kablan.dev turns a folder of repos into a control room — a coding agent per branch, supervised and reviewable.</p>
         <div class="features">
-          <div class="card"><div class="emo">🗂️</div><h3>Every repo at a glance</h3><p>Recursively discovers all git repos under a folder you pick. Nested repos like <code>acme/frontend/app</code> stay grouped and instantly searchable.</p></div>
-          <div class="card"><div class="emo">🌿</div><h3>Branches &amp; worktrees</h3><p>One unified, virtualized list — current branch, ahead/behind vs. upstream, and a commit-activity heatmap scoped to each branch's own work.</p></div>
-          <div class="card"><div class="emo">▶️</div><h3>Dev servers, one click</h3><p>Start or stop a dev server from any row. One per project — starting a new one replaces the old — with live console logs streamed in.</p></div>
-          <div class="card"><div class="emo">🔑</div><h3>Environment editor</h3><p>View and edit each project's and each worktree's <code>.env</code> files right in the app. No more <code>cd</code>-ing around to find them.</p></div>
-          <div class="card"><div class="emo">🔀</div><h3>Git without the terminal</h3><p>Check out branches and pull — including fast-forwarding branches that aren't even checked out — without dropping to a shell.</p></div>
-          <div class="card"><div class="emo">⚡</div><h3>Native &amp; fast</h3><p>A Rust backend (Axum) in a Tauri shell. Small footprint, instant startup, and a warm, focused UI in light or dark.</p></div>
+          <div class="card"><div class="emo">🏗️</div><h3>An agent on every branch</h3><p>Start a session on any branch and Kablan spins a Claude Code agent in its own git worktree — isolated, auto-managed, and yours to resume anytime.</p></div>
+          <div class="card"><div class="emo">🛡️</div><h3>Supervise every action</h3><p>Approve or deny each tool call inline — or set a session to <code>bypass</code>. Read-only tools (Read, Grep, Glob) run un-gated so you only weigh in on what matters.</p></div>
+          <div class="card"><div class="emo">💬</div><h3>A real coding chat</h3><p>Full markdown, syntax-highlighted <b>diffs</b> for every edit, live <b>todo</b> checklists, plan cards, and collapsible thinking — not a wall of raw stream output.</p></div>
+          <div class="card"><div class="emo">⌨️</div><h3>A composer that keeps up</h3><p>Paste or drop images, <code>@</code>-mention files, fire <code>/</code> commands, pick the model &amp; thinking level, and <b>queue</b> follow-ups while the agent works.</p></div>
+          <div class="card"><div class="emo">⏪</div><h3>Rewind &amp; retry</h3><p>Edit an earlier message to fork the session and re-run from there. Every branch's chat is <b>persisted to disk</b> with a retention you control.</p></div>
+          <div class="card"><div class="emo">▶️</div><h3>Per-branch dev servers</h3><p>Run a dev server for any worktree with live logs. Another branch holding the port? One click to <b>replace</b> it and take over.</p></div>
+          <div class="card"><div class="emo">🔀</div><h3>Git &amp; integrations, in-app</h3><p>Branches, worktrees, working diffs and pull — plus a <b>GitLab</b> &amp; <b>Linear</b> tab that only shows up when you've connected them.</p></div>
+          <div class="card"><div class="emo">🔑</div><h3>Your subscription, no API key</h3><p>Kablan drives your installed <code>claude</code> CLI, so agents run on your <b>Claude Pro/Max</b> login — not pay-as-you-go API billing.</p></div>
+          <div class="card"><div class="emo">⚡</div><h3>Native &amp; fast</h3><p>A Rust core (Axum) in a Tauri shell does the git, process and agent work. Small footprint, instant startup, light or dark.</p></div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="wrap band-in">
+          <div class="txt">
+            <div class="eyebrow" style="text-align:left">On your terms</div>
+            <h2>Runs on your Claude subscription</h2>
+            <p class="lead">Most agent tools quietly put you on metered API billing. Kablan drives the real Claude Code CLI, so it uses the Pro/Max login you already have — and when a tool needs permission, <b>you</b> decide.</p>
+          </div>
+          <div class="art">
+            <div class="keyrow good"><div class="ico">🔓</div><div class="l"><b>Kablan.dev</b><span>Your Claude Pro/Max subscription</span></div><span class="mark">✓</span></div>
+            <div class="keyrow bad"><div class="ico">💳</div><div class="l"><b>SDK-based tools</b><span>Requires an ANTHROPIC_API_KEY · metered</span></div><span class="mark">✕</span></div>
+            <div class="keyrow good"><div class="ico">🛡️</div><div class="l"><b>Per-tool Approve / Deny</b><span>Supervised, or bypass when you trust it</span></div><span class="mark">✓</span></div>
+          </div>
         </div>
       </section>
 
       <section id="how" class="wrap">
-        <div class="eyebrow">Under the hood</div>
-        <h2>Native where it counts</h2>
-        <p class="lead">A Rust core does the git, filesystem and process work; a React UI renders it. Shipped as one Tauri app.</p>
+        <div class="eyebrow">How it works</div>
+        <h2>Point it at your code and go</h2>
+        <p class="lead">A Rust core drives real <code>git</code>, your dev scripts, and the Claude Code CLI; a React UI renders it. Shipped as one native app.</p>
         <div class="how">
-          <div class="step"><div class="n">1</div><h3>Point it at a folder</h3><p>Kablan.dev scans for git repos and builds your project list in seconds.</p></div>
-          <div class="step"><div class="n">2</div><h3>Work the way you already do</h3><p>Switch branches, edit envs, run dev servers — it drives real <code>git</code> and your package-manager scripts.</p></div>
-          <div class="step"><div class="n">3</div><h3>Stay in flow</h3><p>Live logs, running indicators and update notifications keep everything in view.</p></div>
+          <div class="step"><div class="n">1</div><h3>Pick your projects folder</h3><p>Kablan scans for git repos and builds your project list — features, branches and worktrees — in seconds.</p></div>
+          <div class="step"><div class="n">2</div><h3>Start a session on a branch</h3><p>An agent spins up in a fresh worktree, node_modules and <code>.env</code> seeded, ready for your first message.</p></div>
+          <div class="step"><div class="n">3</div><h3>Supervise &amp; stay in flow</h3><p>Watch it work, approve the risky tools, review the diffs, run the dev server — never touching a terminal tab.</p></div>
         </div>
       </section>
 
@@ -305,10 +419,10 @@
             </div>
           </div>
           <p class="lead" style="margin-top:26px;font-size:13px">
-            Builds are unsigned for now. On <b>macOS</b>, if you see “Kablan.dev is damaged”, drag it to Applications and run
-            <code>xattr&nbsp;-dr&nbsp;com.apple.quarantine&nbsp;/Applications/Kablan.dev.app</code> once — it's the Gatekeeper
-            quarantine flag, not a broken download. On <b>Windows</b>, choose “More info → Run anyway”.
-            Requires <code>git</code> and Node.js, the tools you already develop with.
+            You'll need the <a href="https://www.anthropic.com/claude-code" style="color:var(--accent)">Claude Code</a> CLI (signed in with your Claude subscription), plus <code>git</code> and Node.js.
+            Builds are unsigned for now: on <b>macOS</b>, if you see “Kablan.dev is damaged”, move it to Applications and run
+            <code>xattr&nbsp;-dr&nbsp;com.apple.quarantine&nbsp;/Applications/Kablan.dev.app</code> once (it's the Gatekeeper quarantine flag, not a broken download).
+            On <b>Windows</b>, choose “More info → Run anyway”.
           </p>
         </div>
       </section>
@@ -327,24 +441,6 @@
     </main>
 
     <script>
-      // Fill the heatmap mockup deterministically.
-      (function () {
-        const heat = document.querySelector(".heat");
-        if (!heat) return;
-        const seed = [2, 3, 0, 1, 4, 2, 3, 1, 0, 2, 4, 3, 1, 2, 0, 3, 2, 4, 1, 2, 3, 0, 1, 2, 4, 3];
-        for (let w = 0; w < 26; w++) {
-          const col = document.createElement("div");
-          col.className = "col";
-          for (let d = 0; d < 7; d++) {
-            const cell = document.createElement("i");
-            const lvl = (seed[(w * 7 + d) % seed.length] + d) % 5;
-            if (lvl) cell.className = "l" + lvl;
-            col.appendChild(cell);
-          }
-          heat.appendChild(col);
-        }
-      })();
-
       // OS detection → highlight the matching download card + hero button.
       const REPO = "AmarShaked/kablan.dev";
       const ua = navigator.userAgent;
