@@ -14,6 +14,7 @@ function branchEntity(overrides: Partial<BranchEntity> = {}): BranchEntity {
     isCurrent: false,
     dirty: false,
     ts: 100,
+    remoteOnly: false,
     ...overrides,
   };
 }

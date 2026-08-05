@@ -680,6 +680,8 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    // Optional images pasted/dropped into the New-session composer, delivered with the first turn.
+    let images = parse_message_images(&b);
     // Optionally seed the fresh worktree with the project's gitignored dev assets so it can build/
     // run immediately (a new worktree has neither, since both are gitignored).
     let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -696,6 +698,13 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
     let name2 = name.clone();
     let branch2 = new_branch.clone();
     let cfg2 = cfg.clone();
+    // Source root for the deferred dev-asset copy below (the blocking closure moves `dir`).
+    let src_root = dir.clone();
+    // Create the worktree + persist the factory state (fast) and RETURN the worktree path — the
+    // node_modules/.env copy is deliberately NOT done here. That copy can be large and slow, and the
+    // agent doesn't need it to start (only a dev server does; "Install deps" is the fallback), so it
+    // runs in a detached background thread AFTER this returns — the HTTP response, and thus the
+    // cockpit, no longer waits on it.
     let worktree_path = blocking(move || {
         let wt_root = if cfg2.factory.worktree_root.trim().is_empty() {
             config::config_dir().join("worktrees")
@@ -707,24 +716,30 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
         let mut file = factory::load_file(&path);
         factory::set_branch_worktree(&mut file, &name2, &branch2, &wt.path);
         factory::save_file(&path, &file)?;
-        // Copy the requested dev assets from the project's main working copy BEFORE the agent
-        // starts, so node_modules/.env are already in place. Best-effort (missing sources skip).
-        copy_session_extras(
-            std::path::Path::new(&dir),
-            std::path::Path::new(&wt.path),
-            copy_node_modules,
-            copy_env,
-        );
         Ok::<_, String>(wt.path)
     })
     .await
     .map_err(bad)?;
 
+    // Deferred, best-effort dev-asset copy on a detached thread that owns its own PathBufs (so it
+    // outlives this handler). Runs concurrently with the agent start below — deps aren't needed to
+    // start the agent, and copy_session_extras is idempotent/self-skipping if the assets are absent.
+    if copy_node_modules || copy_env {
+        let copy_src = std::path::PathBuf::from(&src_root);
+        let copy_dst = std::path::PathBuf::from(&worktree_path);
+        std::thread::spawn(move || {
+            copy_session_extras(&copy_src, &copy_dst, copy_node_modules, copy_env);
+        });
+    }
+
     let key = branch_agent_key(&name, &new_branch);
     let argv = agents::build_agent_argv(&cfg.factory, None, None);
     let _ = st.agents.start(&key, &worktree_path, argv, None);
-    if let Some(text) = message {
-        st.agents.send(&key, &text, &[]);
+    // Deliver the first turn when there's a message and/or at least one image (agents.send renders
+    // the image content blocks). A turn with images but no text is valid.
+    if message.is_some() || !images.is_empty() {
+        let text = message.unwrap_or_default();
+        st.agents.send(&key, &text, &images);
     }
 
     Ok(Json(json!({ "branch": new_branch })))

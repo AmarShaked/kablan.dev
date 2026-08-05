@@ -1148,6 +1148,7 @@ export function AgentChat({
   canChat = true,
   files = [],
   initialMessage,
+  initialImages,
   defaultPermissionMode,
   onStart,
   onMessage,
@@ -1164,6 +1165,9 @@ export function AgentChat({
   /** The first message from the New-session flow (sent server-side, so it never streamed back as
    * an event) — seeded as the opening "You" bubble so the transcript shows what kicked it off. */
   initialMessage?: string;
+  /** Data-URL previews of any images that went with the New-session first message — seeded onto
+   * the opening "You" bubble so its thumbnails show alongside `initialMessage`. */
+  initialImages?: string[];
   /** The configured default permission mode (factory.permissionMode) — seeds the composer's
    * Permission picker so it reflects the Settings default when it's one of the picker's options. */
   defaultPermissionMode?: string;
@@ -1330,9 +1334,11 @@ export function AgentChat({
   // as stream events — they go straight to stdin) with agent events, in send/arrival order.
   // Seeded from `events` on mount and grown as `events` grows (backfill resolving counts as
   // growth too), tracking how many have already been folded in via `processedRef`.
-  const [timeline, setTimeline] = useState<TimelineItem[]>(() =>
-    initialMessage && initialMessage.trim() ? [{ kind: "you", text: initialMessage.trim() }] : [],
-  );
+  const [timeline, setTimeline] = useState<TimelineItem[]>(() => {
+    const text = initialMessage?.trim() ?? "";
+    const images = initialImages ?? [];
+    return text || images.length > 0 ? [{ kind: "you", text, images: images.length > 0 ? images : undefined }] : [];
+  });
   const processedRef = useRef(0);
   useEffect(() => {
     if (events.length <= processedRef.current) return;

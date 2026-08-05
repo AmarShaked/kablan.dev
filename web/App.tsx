@@ -225,7 +225,11 @@ function AppContent() {
 
   // The New-session first message, held only until its freshly-created cockpit consumes it as the
   // opening "You" bubble. Any manual branch open clears it so it never re-seeds a later visit.
-  const [pendingFirstMessage, setPendingFirstMessage] = useState<{ branch: string; text: string } | null>(null);
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<{
+    branch: string;
+    text: string;
+    images: string[];
+  } | null>(null);
 
   const openBranch = useCallback((branch: string) => {
     setPendingFirstMessage(null);
@@ -238,14 +242,16 @@ function AppContent() {
   // the newly-created branch's data in (factory/worktrees/branches all changed server-side) and
   // opens straight into its cockpit, exactly like clicking an existing branch would.
   const handleSessionStarted = useCallback(
-    (branch: string, message?: string) => {
+    (branch: string, message?: string, images?: string[]) => {
       if (!selected) return;
       queryClient.invalidateQueries({ queryKey: ["factory", selected] });
       queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) });
       queryClient.invalidateQueries({ queryKey: qk.branches(selected) });
-      // The first message was delivered server-side (it never streams back as an event), so hand it
-      // to the opening cockpit to show as the initiating "You" bubble.
-      setPendingFirstMessage(message?.trim() ? { branch, text: message.trim() } : null);
+      // The first message + images were delivered server-side (they never stream back as events),
+      // so hand them to the opening cockpit to show as the initiating "You" bubble.
+      const text = message?.trim() ?? "";
+      const imgs = images ?? [];
+      setPendingFirstMessage(text || imgs.length > 0 ? { branch, text, images: imgs } : null);
       setCockpitBranch(branch);
       setView("cockpit");
     },
@@ -485,6 +491,7 @@ function AppContent() {
                 onSeedLogs={seedLogs}
                 onBack={() => setView("project")}
                 initialMessage={pendingFirstMessage?.branch === cockpitBranch ? pendingFirstMessage.text : undefined}
+                initialImages={pendingFirstMessage?.branch === cockpitBranch ? pendingFirstMessage.images : undefined}
               />
             </div>
           ) : (

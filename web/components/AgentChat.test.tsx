@@ -103,6 +103,23 @@ describe("AgentChat", () => {
     expect(screen.getByText("kick things off")).toBeInTheDocument();
   });
 
+  it("renders New-session initialImages as thumbnails in the opening You bubble", () => {
+    const urls = ["data:image/png;base64,AQIDBA==", "data:image/png;base64,BQYHCA=="];
+    renderChat([], { initialMessage: "look at these", initialImages: urls });
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByText("look at these")).toBeInTheDocument();
+    const thumbs = screen.getAllByAltText("pasted attachment");
+    expect(thumbs).toHaveLength(2);
+    expect(thumbs[0]).toHaveAttribute("src", urls[0]);
+    expect(thumbs[1]).toHaveAttribute("src", urls[1]);
+  });
+
+  it("seeds an image-only opening You bubble even with no initial message", () => {
+    renderChat([], { initialImages: ["data:image/png;base64,AQIDBA=="] });
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByAltText("pasted attachment")).toBeInTheDocument();
+  });
+
   it("defaults the Permission picker to the configured default when it's a valid option", () => {
     renderChat([], { defaultPermissionMode: "bypassPermissions" });
     expect(screen.getByLabelText("Permission")).toHaveValue("bypassPermissions");

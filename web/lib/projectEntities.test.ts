@@ -220,6 +220,30 @@ describe("buildBranchEntities", () => {
     expect(unfiled.map((e) => e.name)).toEqual(["new", "old"]);
   });
 
+  it("ranks locally-present branches ahead of remote-only ones, each group ts-desc", () => {
+    // localOld: local branch, older activity. remoteNew: remote-only, newer activity.
+    // The local branch must still sort ABOVE the remote-only one despite the older ts.
+    const { unfiled, all } = buildBranchEntities({
+      branches: [
+        branch({ name: "localOld", lastCommitTs: 1, remoteOnly: false }),
+        branch({ name: "localNew", lastCommitTs: 100, remoteOnly: false }),
+        branch({ name: "remoteNew", lastCommitTs: 9999, remoteOnly: true }),
+        branch({ name: "remoteOld", lastCommitTs: 5, remoteOnly: true }),
+      ],
+      worktrees: [],
+      factory: factory(),
+      statusFor: noStatus,
+      isServerRunning: noServer,
+    });
+    // Locals first (ts desc within), then remote-only (ts desc within).
+    expect(unfiled.map((e) => e.name)).toEqual(["localNew", "localOld", "remoteNew", "remoteOld"]);
+    expect(all.map((e) => e.name)).toEqual(["localNew", "localOld", "remoteNew", "remoteOld"]);
+    // A locally-present branch with older activity still outranks a remote-only branch with newer.
+    expect(unfiled.findIndex((e) => e.name === "localOld")).toBeLessThan(
+      unfiled.findIndex((e) => e.name === "remoteNew"),
+    );
+  });
+
   it("populates title + displayName from factory.branchState[name].title", () => {
     const { all } = buildBranchEntities({
       branches: [branch({ name: "feat/xyz" }), branch({ name: "feat/plain" })],

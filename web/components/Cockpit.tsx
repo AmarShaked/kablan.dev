@@ -90,12 +90,16 @@ export function Cockpit({
   onSeedLogs,
   onBack,
   initialMessage,
+  initialImages,
 }: {
   project: string;
   branch: string;
   /** First message from the New-session flow (already sent server-side) — passed to AgentChat so
    * it seeds the opening "You" bubble. Only set right after creating this branch's session. */
   initialMessage?: string;
+  /** Data-URL images that went with the New-session first message — passed to AgentChat so the
+   * opening "You" bubble shows their thumbnails. */
+  initialImages?: string[];
   /** Live dev-server map keyed by working-copy `cwd` (owned by `App`, kept live via the WS
    * "hello"/status frames). Used to detect a dev server already running on a DIFFERENT branch of
    * this same project — only one branch can hold the project's port at a time, so this cockpit
@@ -391,6 +395,7 @@ export function Cockpit({
               agentKey={agentKey}
               files={files}
               initialMessage={initialMessage}
+              initialImages={initialImages}
               defaultPermissionMode={defaultPermissionMode}
               onStart={startAgent}
               onMessage={messageAgent}

@@ -23,6 +23,9 @@ export interface BranchEntity {
   isCurrent: boolean;
   dirty: boolean;
   ts: number;
+  /** True when this branch exists ONLY on the remote (no local ref) — from git's `Branch.remoteOnly`.
+   * Used to rank locally-present branches ahead of remote-only ones in the unfiled/`all` ordering. */
+  remoteOnly: boolean;
 }
 
 /** Agent statuses that mean a live/working session (mirrors HomeView's ACTIVE_STATUSES) —
@@ -57,9 +60,12 @@ export interface BranchEntities {
   all: BranchEntity[];
 }
 
-/** Sorts by ts desc, then name asc as a stable tie-break. */
+/** Sorts LOCALLY-present branches ahead of remote-only ones, each group by ts desc then name asc
+ * as a stable tie-break. A locally-present branch (even with older activity) always ranks above a
+ * remote-only branch — remote-only branches aren't checked out here, so they belong at the bottom. */
 function sortByTsDesc(list: BranchEntity[]): BranchEntity[] {
   return [...list].sort((a, b) => {
+    if (a.remoteOnly !== b.remoteOnly) return a.remoteOnly ? 1 : -1;
     if (b.ts !== a.ts) return b.ts - a.ts;
     return a.name.localeCompare(b.name);
   });
@@ -106,6 +112,7 @@ export function buildBranchEntities({
       isCurrent: b.current,
       dirty: wt?.dirty ?? false,
       ts,
+      remoteOnly: b.remoteOnly,
     };
   });
 

@@ -354,7 +354,12 @@ export const api = {
     startSession: (
       name: string,
       baseBranch: string,
-      opts: { message?: string; copyNodeModules?: boolean; copyEnv?: boolean } = {},
+      opts: {
+        message?: string;
+        copyNodeModules?: boolean;
+        copyEnv?: boolean;
+        images?: { mediaType: string; data: string }[];
+      } = {},
     ) =>
       req<{ branch: string }>(`/api/projects/${encodeURIComponent(name)}/factory/session`, {
         method: "POST",
@@ -363,6 +368,7 @@ export const api = {
           message: opts.message,
           copyNodeModules: opts.copyNodeModules,
           copyEnv: opts.copyEnv,
+          ...(opts.images && opts.images.length ? { images: opts.images } : {}),
         }),
       }),
 

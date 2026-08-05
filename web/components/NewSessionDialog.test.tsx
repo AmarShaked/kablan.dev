@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
@@ -128,6 +128,57 @@ describe("NewSessionDialog", () => {
     await vi.waitFor(() => expect(api.factory.startSession).toHaveBeenCalled());
     expect(props.onStarted).not.toHaveBeenCalled();
     expect(props.onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("stages a pasted image thumbnail and passes images to startSession + onStarted", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/img" });
+    const props = renderDialog();
+
+    const box = screen.getByLabelText(/first message/i);
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "shot.png", { type: "image/png" });
+    fireEvent.paste(box, {
+      clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }] },
+    });
+    // The staged thumbnail appears (FileReader resolves async).
+    expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
+
+    await userEvent.type(box, "look here");
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    await vi.waitFor(() => expect(api.factory.startSession).toHaveBeenCalled());
+    const opts = vi.mocked(api.factory.startSession).mock.calls[0][2]!;
+    expect(opts.message).toBe("look here");
+    expect(opts.images).toHaveLength(1);
+    expect(opts.images![0].mediaType).toBe("image/png");
+    expect(typeof opts.images![0].data).toBe("string");
+    expect(opts.images![0].data.length).toBeGreaterThan(0);
+
+    await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalled());
+    const startedArgs = vi.mocked(props.onStarted).mock.calls[0];
+    expect(startedArgs[0]).toBe("session/img");
+    expect(startedArgs[1]).toBe("look here");
+    expect(startedArgs[2]).toHaveLength(1);
+    expect(String(startedArgs[2]![0])).toMatch(/^data:image\/png/);
+  });
+
+  it("starts an image-only session (empty message) and still passes the image", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/only" });
+    const props = renderDialog();
+
+    const box = screen.getByLabelText(/first message/i);
+    const file = new File([new Uint8Array([9, 8, 7])], "only.png", { type: "image/png" });
+    fireEvent.paste(box, {
+      clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }] },
+    });
+    expect(await screen.findByAltText("pasted attachment")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    await vi.waitFor(() => expect(api.factory.startSession).toHaveBeenCalled());
+    const opts = vi.mocked(api.factory.startSession).mock.calls[0][2]!;
+    expect(opts.message).toBeUndefined();
+    expect(opts.images).toHaveLength(1);
+    await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalledWith("session/only", undefined, [expect.any(String)]));
   });
 
   it("resets the first-message field when reopened after Cancel", async () => {
