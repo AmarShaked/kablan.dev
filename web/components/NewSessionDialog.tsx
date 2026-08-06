@@ -258,7 +258,6 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="relative"
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
