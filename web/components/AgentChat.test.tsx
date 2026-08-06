@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
@@ -162,6 +162,34 @@ describe("AgentChat", () => {
   it("does not show a thinking indicator when the agent isn't working", () => {
     renderChat([]);
     expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
+  });
+
+  it("shows the current tool label and a live elapsed timer while working", () => {
+    vi.useFakeTimers();
+    try {
+      // Seed a working agent plus a tool call, so the row can surface the current activity.
+      renderChat([
+        workingStatus,
+        ev({
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "npm test" } }],
+          },
+        }),
+      ]);
+      // The working row surfaces the most recent tool call's label as the current activity
+      // (scoped to the row so it isn't confused with the transcript's own tool line).
+      const row = screen.getByText("Claude Code").parentElement as HTMLElement;
+      expect(within(row).getByText(/Bash npm test/)).toBeInTheDocument();
+      // After a second passes the elapsed timer becomes live (m:ss).
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(within(row).getByText(/·\s*\d+:\d{2}/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // Regression: a freshly-started agent (status "idle") must NOT look busy before the user
@@ -443,28 +471,6 @@ describe("AgentChat", () => {
     expect(jump).toBeInTheDocument();
     await userEvent.click(jump);
     expect(screen.queryByRole("button", { name: /jump to bottom/i })).not.toBeInTheDocument();
-  });
-
-  it("shows a context-usage gauge in the footer when a result event carries usage", () => {
-    renderChat([
-      ev({
-        type: "result",
-        subtype: "success",
-        usage: {
-          input_tokens: 100000,
-          output_tokens: 2000,
-          cache_read_input_tokens: 26000,
-          cache_creation_input_tokens: 0,
-        },
-      }),
-    ]);
-    // total = 128000 → "128k", default window 200000 → "128k / 200k".
-    expect(screen.getByText("128k / 200k")).toBeInTheDocument();
-  });
-
-  it("shows no usage gauge before any usage has arrived", () => {
-    renderChat([assistant([{ type: "text", text: "hi" }])]);
-    expect(screen.queryByText(/\/ 200k/)).not.toBeInTheDocument();
   });
 
   it("persists an expanded ToolGroup to localStorage and restores it on remount", async () => {

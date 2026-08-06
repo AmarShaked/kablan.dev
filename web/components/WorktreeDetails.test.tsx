@@ -94,20 +94,20 @@ describe("WorktreeDetails", () => {
   });
 
   it("defaults to the uncommitted (working-tree) diff — useDiff called without `against`", () => {
-    renderDetails();
+    renderDetails({ view: "diff" });
     const last = useDiffMock.mock.calls.at(-1);
     expect(last?.[4]).toBeUndefined();
   });
 
   it("toggling to 'vs <base>' calls useDiff with the base branch as `against`", async () => {
-    renderDetails();
+    renderDetails({ view: "diff" });
     await userEvent.click(screen.getByRole("button", { name: /vs main/i }));
     const last = useDiffMock.mock.calls.at(-1);
     expect(last?.[4]).toBe("main");
   });
 
   it("Refresh button triggers the diff query's refetch", async () => {
-    renderDetails();
+    renderDetails({ view: "diff" });
     await userEvent.click(screen.getByRole("button", { name: /refresh diff/i }));
     expect(refetchSpy).toHaveBeenCalled();
   });
@@ -138,7 +138,7 @@ describe("WorktreeDetails", () => {
       isFetching: false,
       refetch: refetchSpy,
     });
-    renderDetails();
+    renderDetails({ view: "diff" });
     // Both files' basenames render in their headers.
     expect(screen.getByText("foo.ts")).toBeInTheDocument();
     expect(screen.getByText("README.md")).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe("WorktreeDetails", () => {
 
   it("shows the empty-state (no viewer) when the diff string is empty", () => {
     // beforeEach already mocks an empty diff.
-    renderDetails();
+    renderDetails({ view: "diff" });
     expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
     expect(screen.queryByText("foo.ts")).not.toBeInTheDocument();
   });

@@ -40,6 +40,16 @@ function defaultBase(branches: Branch[]): string {
   return branches.find((b) => b.current)?.name ?? "main";
 }
 
+/** Permission-mode options for the New-session picker — chosen BEFORE the agent starts and passed
+ * through to the launch argv server-side (see `post_new_session`). Mirrors the cockpit composer's
+ * options; defaults to "Accept edits". */
+const PERMISSION_OPTIONS: { value: string; label: string }[] = [
+  { value: "acceptEdits", label: "Accept edits" },
+  { value: "plan", label: "Plan" },
+  { value: "bypassPermissions", label: "Bypass" },
+  { value: "supervised", label: "Supervised — approve each" },
+];
+
 const MAX_SHOWN = 100;
 
 /** Searchable base-branch picker: a repo can have hundreds of branches, so instead of a native
@@ -136,6 +146,7 @@ function BaseBranchPicker({
 export function NewSessionDialog({ project, open, onOpenChange, branches, onStarted }: NewSessionDialogProps) {
   const [baseBranch, setBaseBranch] = useState(() => defaultBase(branches));
   const [message, setMessage] = useState("");
+  const [permissionMode, setPermissionMode] = useState("acceptEdits");
   const [copyNodeModules, setCopyNodeModules] = useState(true);
   const [copyEnv, setCopyEnv] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -217,6 +228,7 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
 
   const reset = () => {
     setMessage("");
+    setPermissionMode("acceptEdits");
     setCopyNodeModules(true);
     setCopyEnv(true);
     setAttachments([]);
@@ -242,6 +254,7 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
         message: firstMessage,
         copyNodeModules,
         copyEnv,
+        permissionMode,
         ...(images.length ? { images } : {}),
       });
       if (imageUrls.length) onStarted(branch, firstMessage, imageUrls);
@@ -274,6 +287,22 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-base-branch">Base branch</Label>
           <BaseBranchPicker branches={branches} value={baseBranch} onChange={setBaseBranch} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="new-session-permission">Permission</Label>
+          <select
+            id="new-session-permission"
+            aria-label="Permission"
+            value={permissionMode}
+            onChange={(e) => setPermissionMode(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm transition-colors hover:bg-accent focus:outline-none"
+          >
+            {PERMISSION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-message">First message (optional)</Label>

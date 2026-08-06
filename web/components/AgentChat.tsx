@@ -941,10 +941,23 @@ function renderPrims(prims: Prim[], edit?: EditCtx): ReactNode[] {
   return nodes;
 }
 
-/** Small animated "thinking…" row shown at the end of the transcript while the agent is
- * working — a lightweight stand-in for the raw stream_event deltas we deliberately don't
- * re-enable. Uses Tailwind's motion-safe: variant so it's inert under prefers-reduced-motion. */
-function ThinkingRow() {
+/** Formats a working-turn duration as `m:ss` (e.g. 83000ms → "1:23"). */
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** Small animated "working" row shown at the end of the transcript while the agent is working — a
+ * lightweight stand-in for the raw stream_event deltas we deliberately don't re-enable. To reassure
+ * the user a long turn is actually progressing it surfaces the CURRENT activity (`currentTool`, the
+ * most recent tool call's label) and a LIVE elapsed timer (`elapsedMs`, ticked every second by the
+ * parent), reading like "Claude Code · Bash npm test · 1:23". Until any elapsed time is available
+ * (and with no current tool) it falls back to the original "thinking…". Uses Tailwind's motion-safe:
+ * variant so the dots are inert under prefers-reduced-motion. */
+function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; currentTool?: string }) {
+  const timer = elapsedMs != null && elapsedMs >= 1000 ? formatElapsed(elapsedMs) : null;
   return (
     <div className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground">
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold">
@@ -956,117 +969,13 @@ function ThinkingRow() {
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-150ms]" />
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce" />
       </span>
-      <span>thinking…</span>
+      {currentTool && <span className="min-w-0 truncate">· {currentTool}</span>}
+      {timer ? (
+        <span className="shrink-0 tabular-nums">· {timer}</span>
+      ) : currentTool ? null : (
+        <span>thinking…</span>
+      )}
     </div>
-  );
-}
-
-/** The token accounting we surface in the footer gauge: the four raw counters Claude Code reports
- * (`usage.input_tokens` / `output_tokens` / `cache_read_input_tokens` / `cache_creation_input_tokens`),
- * their sum, and the model's context window (best-effort — a sane default when unknown). */
-type Usage = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheCreation: number;
-  total: number;
-  contextWindow: number;
-};
-
-/** Fallback context window when we can't infer the model's real one from the stream. Claude Code
- * models are ≥200k, so this keeps the gauge honest-ish without over-claiming. */
-const DEFAULT_CONTEXT_WINDOW = 200_000;
-
-/** Parses a raw Claude Code `usage` object into our `Usage`, summing the four token counters.
- * Returns null when there's nothing meaningful (no object / all-zero) so callers can hide the gauge. */
-function parseUsage(u: unknown): Usage | null {
-  if (!u || typeof u !== "object") return null;
-  const o = u as Record<string, any>;
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-  const input = num(o.input_tokens);
-  const output = num(o.output_tokens);
-  const cacheRead = num(o.cache_read_input_tokens);
-  const cacheCreation = num(o.cache_creation_input_tokens);
-  const total = input + output + cacheRead + cacheCreation;
-  if (total <= 0) return null;
-  return { input, output, cacheRead, cacheCreation, total, contextWindow: DEFAULT_CONTEXT_WINDOW };
-}
-
-/** The latest known token usage for the session: prefer the most recent `result` event's usage
- * (the authoritative end-of-turn tally), falling back to the most recent assistant `message.usage`
- * (the running turn). Returns null until any usage has arrived. */
-function latestUsage(timeline: TimelineItem[]): Usage | null {
-  for (let i = timeline.length - 1; i >= 0; i--) {
-    const item = timeline[i];
-    if (item.kind !== "agent") continue;
-    const e = item.event as Record<string, any> | null;
-    if (e?.type === "result") {
-      const u = parseUsage(e.usage);
-      if (u) return u;
-    }
-  }
-  for (let i = timeline.length - 1; i >= 0; i--) {
-    const item = timeline[i];
-    if (item.kind !== "agent") continue;
-    const e = item.event as Record<string, any> | null;
-    if (e?.type === "assistant") {
-      const u = parseUsage(e.message?.usage);
-      if (u) return u;
-    }
-  }
-  return null;
-}
-
-/** Compact token count formatter: 1234 → "1k", 128000 → "128k", 2_500_000 → "2.5M". */
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000;
-    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
-  }
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
-  return String(n);
-}
-
-/** A small, muted context-usage indicator for the composer footer: a thin progress ring (color
- * shifting toward amber/red as the window fills) plus a "used / window" label, with a tooltip
- * breaking down input/output/cache tokens. Rendered only when usage exists (see the footer). */
-function ContextUsage({ usage }: { usage: Usage }) {
-  const pct = Math.min(1, usage.total / usage.contextWindow);
-  const pctLabel = Math.round(pct * 100);
-  const r = 6;
-  const c = 2 * Math.PI * r;
-  const off = c * (1 - pct);
-  const ring = pct >= 0.9 ? "text-destructive" : pct >= 0.75 ? "text-amber-500" : "text-primary";
-  const n = (v: number) => v.toLocaleString();
-  const tip =
-    `Context: ${n(usage.total)} / ${n(usage.contextWindow)} tokens (${pctLabel}%)\n` +
-    `input ${n(usage.input)} · output ${n(usage.output)} · ` +
-    `cache read ${n(usage.cacheRead)} · cache write ${n(usage.cacheCreation)}`;
-  return (
-    <span
-      className="flex items-center gap-1"
-      title={tip}
-      aria-label={`Context usage ${pctLabel}%`}
-    >
-      <svg viewBox="0 0 16 16" className="size-3.5 -rotate-90" aria-hidden>
-        <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-border" />
-        <circle
-          cx="8"
-          cy="8"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray={`${c} ${c}`}
-          strokeDashoffset={off}
-          className={`${ring} transition-[stroke-dashoffset] duration-500 ease-out`}
-        />
-      </svg>
-      <span className="tabular-nums">
-        {formatTokens(usage.total)} / {formatTokens(usage.contextWindow)}
-      </span>
-    </span>
   );
 }
 
@@ -1330,6 +1239,28 @@ export function AgentChat({
   const status = live.status ?? backfillStatus;
   const running = isRunningStatus(status);
 
+  // Live "working" elapsed timer for the ThinkingRow, so a long turn visibly progresses.
+  // `workingStartRef` anchors when the current working turn began (set once on entering "working");
+  // a 1s interval ticks `elapsedMs` while working and is torn down when the status leaves "working"
+  // or on unmount (so no interval leaks). Cleared to null when not working.
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const workingStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (status !== "working") {
+      workingStartRef.current = null;
+      setElapsedMs(null);
+      return;
+    }
+    if (workingStartRef.current == null) {
+      workingStartRef.current = Date.now();
+      setElapsedMs(0);
+    }
+    const id = setInterval(() => {
+      if (workingStartRef.current != null) setElapsedMs(Date.now() - workingStartRef.current);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
+
   // Local ordered timeline: interleaves the user's own sent messages (which never come back
   // as stream events — they go straight to stdin) with agent events, in send/arrival order.
   // Seeded from `events` on mount and grown as `events` grows (backfill resolving counts as
@@ -1392,13 +1323,21 @@ export function AgentChat({
     }
   }, [timeline.length, status, live.approvals.length]);
 
-  // Latest known token usage for the session, recomputed as the transcript grows (cheap: two
-  // backward scans that early-exit). null until any usage has streamed in → the gauge stays hidden.
-  const usage = useMemo(() => latestUsage(timeline), [timeline]);
-
   // Flattened transcript prims (memoized), reused for both rendering and to locate the last user
   // turn for Retry.
   const prims = useMemo(() => flattenTimeline(timeline), [timeline]);
+  // The CURRENT activity label for the "working" row — the most recent tool/diff/task call, so a
+  // long turn shows what the agent is actually doing (e.g. "Bash npm test"). Undefined until a tool
+  // call exists in the transcript.
+  const currentTool = useMemo(() => {
+    for (let i = prims.length - 1; i >= 0; i--) {
+      const p = prims[i];
+      if (p.t === "tool") return p.label;
+      if (p.t === "diff") return toolSummary(p.name, p.input);
+      if (p.t === "task") return p.description ? `Task ${p.description}` : "Task";
+    }
+    return undefined;
+  }, [prims]);
   const lastYou = useMemo(() => {
     for (let i = prims.length - 1; i >= 0; i--) {
       const p = prims[i];
@@ -1673,7 +1612,7 @@ export function AgentChat({
               live.approvals.map((appr) => (
                 <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
               ))}
-            {status === "working" && <ThinkingRow />}
+            {status === "working" && <ThinkingRow elapsedMs={elapsedMs} currentTool={currentTool} />}
             {/* Retry / Reset actions — re-run the last user turn, or start the conversation over.
                 Shown once there's a turn to act on and the agent isn't mid-run (a fork stops and
                 relaunches the process, so acting while it works would be surprising). */}
@@ -1890,12 +1829,7 @@ export function AgentChat({
               <Square className="size-3" /> Stop
             </button>
           )}
-          {usage && (
-            <span className="ml-auto">
-              <ContextUsage usage={usage} />
-            </span>
-          )}
-          <span className={`flex items-center gap-1.5 ${usage ? "" : "ml-auto"}`}>
+          <span className="ml-auto flex items-center gap-1.5">
             <AgentDot status={status} />
             {title ? `${title} · ` : ""}
             {status ? STATUS_LABEL[status] ?? "Idle" : "Not started"}

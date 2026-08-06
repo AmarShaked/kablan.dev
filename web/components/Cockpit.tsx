@@ -17,7 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauri } from "../lib/version.ts";
 
 /** The right-pane views selectable from the cockpit header's tabs. */
-type RightTab = "details" | "environment" | "integrations" | "logs";
+type RightTab = "details" | "diff" | "environment" | "integrations" | "logs";
 
 /** Poll until the dev server at `cwd` has actually exited (or vanished), so its port is released
  * before we bind it from another branch. Bounded so a stuck process can't hang the swap; a small
@@ -397,6 +397,7 @@ export function Cockpit({
           <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as RightTab)}>
             <TabsList variant="line" className="h-8">
               <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="diff">Diff</TabsTrigger>
               <TabsTrigger value="environment">Environment</TabsTrigger>
               {hasIntegrations && <TabsTrigger value="integrations">Integrations</TabsTrigger>}
               {isTauri && <TabsTrigger value="logs">Logs</TabsTrigger>}

@@ -44,6 +44,7 @@ describe("factory types", () => {
           message?: string;
           copyNodeModules?: boolean;
           copyEnv?: boolean;
+          permissionMode?: string;
           images?: { mediaType: string; data: string }[];
         }?,
       ]

@@ -364,6 +364,7 @@ export const api = {
         message?: string;
         copyNodeModules?: boolean;
         copyEnv?: boolean;
+        permissionMode?: string;
         images?: { mediaType: string; data: string }[];
       } = {},
     ) =>
@@ -374,6 +375,7 @@ export const api = {
           message: opts.message,
           copyNodeModules: opts.copyNodeModules,
           copyEnv: opts.copyEnv,
+          ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
           ...(opts.images && opts.images.length ? { images: opts.images } : {}),
         }),
       }),

@@ -134,8 +134,8 @@ export function WorktreeDetails({
   linearWorkspace?: string;
   logs?: LogLine[];
   /** Which right-pane view to render — driven by the cockpit header's tabs. Details is the
-   * cards column; environment/logs each fill the pane with their single editor/stream. */
-  view?: "details" | "environment" | "integrations" | "logs";
+   * cards column; diff/environment/logs each fill the pane with their single view. */
+  view?: "details" | "diff" | "environment" | "integrations" | "logs";
 }) {
   const hasWorktree = !!entry.cwd;
   const running = server?.status === "running" || server?.status === "starting";
@@ -207,6 +207,81 @@ export function WorktreeDetails({
       setPulling(false);
     }
   };
+
+  if (view === "diff") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+        {!hasWorktree ? (
+          <p className="text-sm text-muted-foreground">Start a session for this branch to see its working diff.</p>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Working diff</h3>
+              <div className="flex items-center gap-1">
+                <div className="flex overflow-hidden rounded-md border border-border">
+                  <button
+                    onClick={() => setDiffMode("working")}
+                    aria-pressed={diffMode === "working"}
+                    className={cn(
+                      "px-2 py-0.5 text-xs transition-colors",
+                      diffMode === "working"
+                        ? "bg-accent font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50",
+                    )}
+                  >
+                    Uncommitted
+                  </button>
+                  <button
+                    onClick={() => setDiffMode("base")}
+                    aria-pressed={diffMode === "base"}
+                    className={cn(
+                      "border-l border-border px-2 py-0.5 text-xs transition-colors",
+                      diffMode === "base"
+                        ? "bg-accent font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50",
+                    )}
+                  >
+                    vs {baseBranch}
+                  </button>
+                </div>
+                <button
+                  onClick={() => diff.refetch()}
+                  aria-label="Refresh diff"
+                  title="Refresh diff"
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <RefreshCw className={cn("size-3.5", diff.isFetching && "animate-spin")} />
+                </button>
+              </div>
+            </div>
+            {diff.isPending ? (
+              <Skeleton className="h-6 w-2/3 rounded-md" />
+            ) : diffSummary && diffSummary.files > 0 ? (
+              <>
+                <p className="font-mono text-xs">
+                  {diffSummary.files} file{diffSummary.files === 1 ? "" : "s"} changed ·{" "}
+                  <span className="text-[var(--success)]">+{diffSummary.added}</span>{" "}
+                  <span className="text-destructive">-{diffSummary.removed}</span>
+                </p>
+                {/* The parsed per-file diff fills the remaining pane height and scrolls internally. */}
+                <div className="min-h-0 flex-1 overflow-y-auto custom-scroll">
+                  <UnifiedDiffView diff={diff.data?.diff ?? ""} />
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {diffMode === "base"
+                  ? `No changes vs ${baseBranch}.`
+                  : "No uncommitted changes — this branch's committed work shows under “vs " +
+                    baseBranch +
+                    "”."}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (view === "environment") {
     return (
@@ -422,78 +497,6 @@ export function WorktreeDetails({
           </>
         ) : (
           <p className="text-xs text-muted-foreground">Start a session for this branch to run a dev server.</p>
-        )}
-      </Card>
-
-      {/* Working diff */}
-      <Card
-        title="Working diff"
-        actions={
-          hasWorktree ? (
-            <div className="flex items-center gap-1">
-              <div className="flex overflow-hidden rounded-md border border-border">
-                <button
-                  onClick={() => setDiffMode("working")}
-                  aria-pressed={diffMode === "working"}
-                  className={cn(
-                    "px-2 py-0.5 text-xs transition-colors",
-                    diffMode === "working"
-                      ? "bg-accent font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-accent/50",
-                  )}
-                >
-                  Uncommitted
-                </button>
-                <button
-                  onClick={() => setDiffMode("base")}
-                  aria-pressed={diffMode === "base"}
-                  className={cn(
-                    "border-l border-border px-2 py-0.5 text-xs transition-colors",
-                    diffMode === "base"
-                      ? "bg-accent font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-accent/50",
-                  )}
-                >
-                  vs {baseBranch}
-                </button>
-              </div>
-              <button
-                onClick={() => diff.refetch()}
-                aria-label="Refresh diff"
-                title="Refresh diff"
-                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <RefreshCw className={cn("size-3.5", diff.isFetching && "animate-spin")} />
-              </button>
-            </div>
-          ) : undefined
-        }
-      >
-        {!hasWorktree ? (
-          <p className="text-xs text-muted-foreground">Start a session for this branch to see its working diff.</p>
-        ) : diff.isPending ? (
-          <Skeleton className="h-6 w-2/3 rounded-md" />
-        ) : diffSummary && diffSummary.files > 0 ? (
-          <>
-            <p className="font-mono text-xs">
-              {diffSummary.files} file{diffSummary.files === 1 ? "" : "s"} changed ·{" "}
-              <span className="text-[var(--success)]">+{diffSummary.added}</span>{" "}
-              <span className="text-destructive">-{diffSummary.removed}</span>
-            </p>
-            {/* The parsed per-file diff. Caps its own height and scrolls internally so a huge diff
-             * doesn't swallow the whole details column. */}
-            <div className="max-h-[70vh] overflow-y-auto custom-scroll">
-              <UnifiedDiffView diff={diff.data?.diff ?? ""} />
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {diffMode === "base"
-              ? `No changes vs ${baseBranch}.`
-              : "No uncommitted changes — this branch's committed work shows under “vs " +
-                baseBranch +
-                "”."}
-          </p>
         )}
       </Card>
     </div>

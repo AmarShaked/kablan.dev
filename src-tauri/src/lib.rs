@@ -710,6 +710,9 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
     // run immediately (a new worktree has neither, since both are gitignored).
     let copy_node_modules = b.get("copyNodeModules").and_then(|v| v.as_bool()).unwrap_or(false);
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(false);
+    // Optional per-session permission mode chosen in the New-session dialog — applied as a launch
+    // override when building the agent argv below (mirrors `start_branch_agent`'s override).
+    let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
 
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let cfg = config::load();
@@ -757,7 +760,15 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
     }
 
     let key = branch_agent_key(&name, &new_branch);
-    let argv = agents::build_agent_argv(&cfg.factory, None, None);
+    // Apply the New-session permission override (if any) to a cloned config for this launch only —
+    // `build_agent_argv` emits `--permission-mode <mode>`, so e.g. a Bypass selection auto-proceeds.
+    let mut cfg_run = cfg.clone();
+    if let Some(pm) = permission_mode {
+        if !pm.trim().is_empty() {
+            cfg_run.factory.permission_mode = pm.trim().to_string();
+        }
+    }
+    let argv = agents::build_agent_argv(&cfg_run.factory, None, None);
     let _ = st.agents.start(&key, &worktree_path, argv, None);
     // Deliver the first turn when there's a message and/or at least one image (agents.send renders
     // the image content blocks). A turn with images but no text is valid.

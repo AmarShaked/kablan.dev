@@ -64,11 +64,15 @@ describe("NewSessionDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
-      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
-        message: undefined,
-        copyNodeModules: true,
-        copyEnv: true,
-      }),
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({
+          message: undefined,
+          copyNodeModules: true,
+          copyEnv: true,
+        }),
+      ),
     );
   });
 
@@ -79,11 +83,15 @@ describe("NewSessionDialog", () => {
     await userEvent.type(screen.getByLabelText(/first message/i), "  do the thing  ");
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
-    expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
-      message: "do the thing",
-      copyNodeModules: true,
-      copyEnv: true,
-    });
+    expect(api.factory.startSession).toHaveBeenCalledWith(
+      "proj",
+      "main",
+      expect.objectContaining({
+        message: "do the thing",
+        copyNodeModules: true,
+        copyEnv: true,
+      }),
+    );
     await vi.waitFor(() => expect(props.onStarted).toHaveBeenCalledWith("session/abc123", "do the thing"));
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -95,11 +103,15 @@ describe("NewSessionDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
-      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
-        message: undefined,
-        copyNodeModules: true,
-        copyEnv: true,
-      }),
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({
+          message: undefined,
+          copyNodeModules: true,
+          copyEnv: true,
+        }),
+      ),
     );
   });
 
@@ -111,11 +123,33 @@ describe("NewSessionDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
-      expect(api.factory.startSession).toHaveBeenCalledWith("proj", "main", {
-        message: undefined,
-        copyNodeModules: false,
-        copyEnv: true,
-      }),
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({
+          message: undefined,
+          copyNodeModules: false,
+          copyEnv: true,
+        }),
+      ),
+    );
+  });
+
+  it("defaults permission to acceptEdits and passes the chosen mode to startSession", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/perm" });
+    renderDialog();
+
+    // Defaults to Accept edits.
+    expect(screen.getByLabelText("Permission")).toHaveValue("acceptEdits");
+    await userEvent.selectOptions(screen.getByLabelText("Permission"), "bypassPermissions");
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    await vi.waitFor(() =>
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({ permissionMode: "bypassPermissions" }),
+      ),
     );
   });
 
