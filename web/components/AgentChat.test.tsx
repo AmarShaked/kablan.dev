@@ -164,7 +164,7 @@ describe("AgentChat", () => {
     expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
   });
 
-  it("shows the current tool label and a live elapsed timer while working", () => {
+  it("surfaces the current tool label via a hover tooltip and shows a live elapsed timer", () => {
     vi.useFakeTimers();
     try {
       // Seed a working agent plus a tool call, so the row can surface the current activity.
@@ -178,15 +178,15 @@ describe("AgentChat", () => {
           },
         }),
       ]);
-      // The working row surfaces the most recent tool call's label as the current activity
-      // (scoped to the row so it isn't confused with the transcript's own tool line).
+      // The row stays short: the current tool lives in the hover tooltip (title), not inline.
       const row = screen.getByText("Claude Code").parentElement as HTMLElement;
-      expect(within(row).getByText(/Bash npm test/)).toBeInTheDocument();
+      expect(row.getAttribute("title")).toMatch(/Bash npm test/);
+      expect(within(row).queryByText(/Bash npm test/)).not.toBeInTheDocument();
       // After a second passes the elapsed timer becomes live (m:ss).
       act(() => {
         vi.advanceTimersByTime(1500);
       });
-      expect(within(row).getByText(/·\s*\d+:\d{2}/)).toBeInTheDocument();
+      expect(within(row).getByText(/^\d+:\d{2}$/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -326,6 +326,25 @@ describe("AgentChat", () => {
     expect(screen.getByRole("heading", { level: 2, name: /big heading/i })).toBeInTheDocument();
     // rehype-highlight tokenizes the fenced block — the `const` keyword becomes its own span.
     expect(screen.getByText("const")).toBeInTheDocument();
+  });
+
+  it("hides compaction bookkeeping (compact_boundary + isCompactSummary) but keeps real replies", () => {
+    renderChat([
+      // The system boundary marker Claude Code emits when it auto-compacts.
+      ev({ type: "system", subtype: "compact_boundary", content: "Conversation compacted" }),
+      // The internal summary turn ("This session is being continued…") — a user-role event
+      // flagged isCompactSummary. It must never render as a bubble on resume/replay.
+      ev({
+        type: "user",
+        isCompactSummary: true,
+        message: { role: "user", content: "This session is being continued from a previous conversation…" },
+      }),
+      // A genuine assistant reply that merely mentions the phrase must still show.
+      assistant([{ type: "text", text: "I will create a detailed summary of the module." }]),
+    ]);
+    expect(screen.queryByText(/Conversation compacted/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This session is being continued/)).not.toBeInTheDocument();
+    expect(screen.getByText(/create a detailed summary of the module/)).toBeInTheDocument();
   });
 
   it("renders a TodoWrite tool_use as a checklist showing each item's text", () => {

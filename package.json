@@ -1,6 +1,6 @@
 {
   "name": "kablan-dev",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "type": "module",
   "description": "Kablan.dev — a desktop cockpit for your local dev environment: projects, branches, worktrees, env files, and dev servers.",

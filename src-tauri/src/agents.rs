@@ -407,6 +407,9 @@ impl Agents {
 
                     let Some(ev) = parse_event(&line) else { continue };
                     let mut status_changed = false;
+                    // Set when this event carries the first session id we've seen for
+                    // this agent, so we can persist it below (off the registry lock).
+                    let mut new_session_id: Option<String> = None;
                     {
                         let mut reg = me.registry.lock().unwrap();
                         if let Some(r) = reg.get_mut(&k) {
@@ -416,7 +419,12 @@ impl Agents {
                             // trailing output can't clobber the new agent's state
                             // (e.g. stamping a stale session_id).
                             if r.generation != generation { break; }
-                            if let Some(sid) = &ev.session_id { if r.view.session_id.is_none() { r.view.session_id = Some(sid.clone()); } }
+                            if let Some(sid) = &ev.session_id {
+                                if r.view.session_id.is_none() {
+                                    r.view.session_id = Some(sid.clone());
+                                    new_session_id = Some(sid.clone());
+                                }
+                            }
                             let next = next_status(r.view.status, &ev);
                             if next != r.view.status { r.view.status = next; status_changed = true; }
                             r.events.push(raw.clone());
@@ -428,6 +436,11 @@ impl Agents {
                     // in-memory `record.events` above — real agent stream events
                     // only, never the synthetic status frames.
                     crate::chat_history::append_event(&k, &raw);
+                    // Persist the session id the moment we first learn it, so a
+                    // never-polled live session can still `--resume` after restart.
+                    if let Some(sid) = &new_session_id {
+                        crate::persist_branch_session_id(&k, sid);
+                    }
                     let _ = me.tx.send(json!({ "type":"agent-event","key":k,"event":raw }).to_string());
                     if status_changed { me.emit_status(&k); }
                 }

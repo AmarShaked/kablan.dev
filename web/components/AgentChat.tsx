@@ -339,6 +339,14 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
     }
     const e = item.event as Record<string, any> | null;
     if (!e || typeof e !== "object") return;
+    // Compaction machinery is internal bookkeeping, never conversation. When Claude Code
+    // auto-compacts a long session it emits a `compact_boundary` system event and an
+    // `isCompactSummary` user turn (the "This session is being continued…" summary). Both must
+    // stay out of the transcript — otherwise, on resume/replay after an app restart, the summary
+    // would surface as a stray bubble. The `type:"user"` and non-error `system` branches below
+    // already skip these; this explicit guard keeps them hidden even if a future change starts
+    // rendering user/system turns.
+    if (e.isCompactSummary === true || (e.type === "system" && e.subtype === "compact_boundary")) return;
     switch (e.type) {
       case "assistant": {
         if (typeof e.uuid === "string" && e.uuid) lastAssistantUuid = e.uuid;
@@ -958,8 +966,14 @@ function formatElapsed(ms: number): string {
  * variant so the dots are inert under prefers-reduced-motion. */
 function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; currentTool?: string }) {
   const timer = elapsedMs != null && elapsedMs >= 1000 ? formatElapsed(elapsedMs) : null;
+  // Keep the row short — the current tool can be a long label, so it lives in a hover
+  // tooltip rather than stretching the line.
+  const tip = currentTool ? `Working: ${currentTool}${timer ? ` · ${timer}` : ""}` : "thinking…";
   return (
-    <div className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground">
+    <div
+      className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground"
+      title={tip}
+    >
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold">
         CC
       </span>
@@ -969,12 +983,7 @@ function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; cur
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-150ms]" />
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce" />
       </span>
-      {currentTool && <span className="min-w-0 truncate">· {currentTool}</span>}
-      {timer ? (
-        <span className="shrink-0 tabular-nums">· {timer}</span>
-      ) : currentTool ? null : (
-        <span>thinking…</span>
-      )}
+      {timer ? <span className="shrink-0 tabular-nums">{timer}</span> : <span>thinking…</span>}
     </div>
   );
 }
