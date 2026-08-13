@@ -2362,7 +2362,7 @@ dependencies = [
 
 [[package]]
 name = "kablan-app"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "axum",
  "dirs 5.0.1",
