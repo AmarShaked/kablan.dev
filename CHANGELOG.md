@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-20
+
 ### Changed
 - **Every dropdown now uses Kablan's own select** (cockpit composer model /
   permission / thinking, New session → Permission, Settings → Permission mode).
