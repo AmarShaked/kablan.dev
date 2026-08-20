@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentStreamProvider, useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentChat } from "./AgentChat.tsx";
 import { resetExpandStore } from "../lib/chatExpand.ts";
+import { openSelect, selectOption, selectValue } from "../test/select.ts";
 
 /** Feeds messages into the AgentStreamProvider's ingest on mount, the way the app's WebSocket
  * handler normally would — lets a test seed the transcript without a real socket. */
@@ -122,23 +123,23 @@ describe("AgentChat", () => {
 
   it("defaults the Permission picker to the configured default when it's a valid option", () => {
     renderChat([], { defaultPermissionMode: "bypassPermissions" });
-    expect(screen.getByLabelText("Permission")).toHaveValue("bypassPermissions");
+    expect(selectValue("Permission")).toBe("Bypass");
   });
 
-  it("falls back to acceptEdits when the configured default isn't a per-session option", () => {
-    renderChat([], { defaultPermissionMode: "auto" });
-    expect(screen.getByLabelText("Permission")).toHaveValue("acceptEdits");
+  it("falls back to acceptEdits when the configured default isn't a known mode", () => {
+    renderChat([], { defaultPermissionMode: "nonsense" });
+    expect(selectValue("Permission")).toBe("Accept edits");
   });
 
   it("restarts a running agent with the chosen model when the Model dropdown changes", async () => {
     const { onStart } = renderChat([workingStatus]);
-    await userEvent.selectOptions(screen.getByLabelText("Model"), "opus");
+    await selectOption("Model", "Opus");
     await waitFor(() => expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ model: "opus" })));
   });
 
   it("restarts a running agent with the chosen permission mode when the Permission dropdown changes", async () => {
     const { onStart } = renderChat([workingStatus]);
-    await userEvent.selectOptions(screen.getByLabelText("Permission"), "bypassPermissions");
+    await selectOption("Permission", "Bypass");
     await waitFor(() =>
       expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ permissionMode: "bypassPermissions" })),
     );
@@ -146,7 +147,7 @@ describe("AgentChat", () => {
 
   it("appends the thinking keyword to the sent message but keeps the visible bubble clean", async () => {
     const { onMessage } = renderChat([idleStatus]);
-    await userEvent.selectOptions(screen.getByLabelText("Thinking"), "hard");
+    await selectOption("Thinking", "Think hard");
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "do it");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -307,11 +308,10 @@ describe("AgentChat", () => {
     expect(onResolveApproval).toHaveBeenCalledWith("appr-1", "deny");
   });
 
-  it("Permission dropdown includes a Supervised option", () => {
+  it("Permission dropdown includes a Supervised option", async () => {
     renderChat([workingStatus]);
-    expect(
-      screen.getByRole("option", { name: "Supervised" }),
-    ).toBeInTheDocument();
+    const listbox = await openSelect("Permission");
+    expect(within(listbox).getByRole("option", { name: "Supervised" })).toBeInTheDocument();
   });
 
   // ---- Phase 1: enriched transcript (markdown, todos, tool results, plan, MCP notice) ----
@@ -375,7 +375,7 @@ describe("AgentChat", () => {
     renderChat([
       assistant([{ type: "tool_use", id: "p1", name: "ExitPlanMode", input: { plan: "## My Plan\n\nStep one" } }]),
     ]);
-    // Card title (a <div>) — disambiguated from the Permission dropdown's "Plan" <option>.
+    // Card title (a <div>) — the Permission dropdown's own "Plan" row only exists while open.
     expect(screen.getByText("Plan", { selector: "div" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /my plan/i })).toBeInTheDocument();
   });

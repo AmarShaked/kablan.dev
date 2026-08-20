@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { openExternal } from "../lib/openExternal.ts";
 
 // Falls back for backends that predate the `factory` config field (e.g. an
 // on-disk ~/.kablan/config.json from before this feature, or a reference
@@ -153,7 +154,7 @@ export function SettingsPage({
         if (u) {
           toast.success(`Update available: v${u.latest}`, {
             duration: 12000,
-            action: { label: "Download", onClick: () => window.open(DOWNLOAD_URL, "_blank", "noopener") },
+            action: { label: "Download", onClick: () => void openExternal(DOWNLOAD_URL) },
           });
         } else {
           toast.success(`You're on the latest version (v${APP_VERSION}).`);

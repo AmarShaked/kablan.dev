@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Every dropdown now uses Kablan's own select** (cockpit composer model /
+  permission / thinking, New session → Permission, Settings → Permission mode).
+  They were native `<select>`s, which macOS WebKit draws as OS popup buttons —
+  bezel, filled background and stepper arrows — ignoring the app's styling, so
+  they looked foreign in the desktop app and different from machine to machine.
+- **New session starts in the configured permission mode** (Settings → Agent
+  factory → Permission mode) instead of always defaulting to "Accept edits".
+  The per-session pickers now offer every mode that default can hold (Ask and
+  Auto included), so the setting is always honoured.
+
+### Fixed
+- **Links open in the browser again from the desktop app.** Inside the webview
+  an `<a target="_blank">` is a silent no-op, so clicking a link — in an agent
+  transcript, on a Linear ticket, on a GitLab MR — did nothing at all. Link
+  clicks are now handed to the OS browser (new `POST /api/open-url`, restricted
+  to `http(s)`/`mailto`).
+
 ## [0.2.0] - 2026-07-23
 
 ### Added

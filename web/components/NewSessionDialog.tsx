@@ -13,9 +13,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ChevronsUpDown, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PERMISSION_OPTIONS, resolvePermissionMode } from "../lib/permissions.ts";
 
 /** A pasted/dropped image staged in the composer, awaiting session start. `data` is the raw base64
  * (no data-URL prefix) for the API; `url` is the full data URL for the thumbnail preview. Mirrors
@@ -28,6 +36,9 @@ export interface NewSessionDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Base-branch options — the caller's `useBranches(project)` data. */
   branches: Branch[];
+  /** The configured default permission mode (Settings → Agent factory → Permission mode). Seeds
+   * the Permission picker, so a new session starts in whatever mode the user configured. */
+  defaultPermissionMode?: string;
   /** Called with the freshly-generated `session/<hex>` branch name once the session has started.
    * `images` are the staged data URLs, handed to the cockpit so its opening "You" bubble shows
    * their thumbnails. */
@@ -39,16 +50,6 @@ export interface NewSessionDialogProps {
 function defaultBase(branches: Branch[]): string {
   return branches.find((b) => b.current)?.name ?? "main";
 }
-
-/** Permission-mode options for the New-session picker — chosen BEFORE the agent starts and passed
- * through to the launch argv server-side (see `post_new_session`). Mirrors the cockpit composer's
- * options; defaults to "Accept edits". */
-const PERMISSION_OPTIONS: { value: string; label: string }[] = [
-  { value: "acceptEdits", label: "Accept edits" },
-  { value: "plan", label: "Plan" },
-  { value: "bypassPermissions", label: "Bypass" },
-  { value: "supervised", label: "Supervised — approve each" },
-];
 
 const MAX_SHOWN = 100;
 
@@ -143,10 +144,17 @@ function BaseBranchPicker({
  * agent server-side (`api.factory.startSession` → `POST .../factory/session`); an optional first
  * message is delivered once the agent's up.
  */
-export function NewSessionDialog({ project, open, onOpenChange, branches, onStarted }: NewSessionDialogProps) {
+export function NewSessionDialog({
+  project,
+  open,
+  onOpenChange,
+  branches,
+  defaultPermissionMode,
+  onStarted,
+}: NewSessionDialogProps) {
   const [baseBranch, setBaseBranch] = useState(() => defaultBase(branches));
   const [message, setMessage] = useState("");
-  const [permissionMode, setPermissionMode] = useState("acceptEdits");
+  const [permissionMode, setPermissionMode] = useState(() => resolvePermissionMode(defaultPermissionMode));
   const [copyNodeModules, setCopyNodeModules] = useState(true);
   const [copyEnv, setCopyEnv] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -226,9 +234,16 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
     setBaseBranch((prev) => (branches.some((b) => b.name === prev) ? prev : defaultBase(branches)));
   }, [open, branches]);
 
+  // Permission starts from the configured default on every open, so editing Settings → Agent
+  // factory → Permission mode changes what the next new session launches with.
+  useEffect(() => {
+    if (!open) return;
+    setPermissionMode(resolvePermissionMode(defaultPermissionMode));
+  }, [open, defaultPermissionMode]);
+
   const reset = () => {
     setMessage("");
-    setPermissionMode("acceptEdits");
+    setPermissionMode(resolvePermissionMode(defaultPermissionMode));
     setCopyNodeModules(true);
     setCopyEnv(true);
     setAttachments([]);
@@ -290,19 +305,18 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-permission">Permission</Label>
-          <select
-            id="new-session-permission"
-            aria-label="Permission"
-            value={permissionMode}
-            onChange={(e) => setPermissionMode(e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm transition-colors hover:bg-accent focus:outline-none"
-          >
-            {PERMISSION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <Select value={permissionMode} onValueChange={setPermissionMode}>
+            <SelectTrigger id="new-session-permission" aria-label="Permission" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERMISSION_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-message">First message (optional)</Label>

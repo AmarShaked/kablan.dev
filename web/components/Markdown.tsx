@@ -10,8 +10,10 @@ import rehypeHighlight from "rehype-highlight";
  * without a heavy prose plugin. Long code blocks scroll horizontally inside their own container
  * (see the `pre` override) so they never widen the chat pane.
  *
- * Links open in a new tab with `noopener noreferrer` — external targets are never auto-navigated
- * in-app, and we don't wire them to `api.openIn` (which needs a project context this leaf lacks).
+ * Links carry `target="_blank" rel="noopener noreferrer"` so an external target is never navigated
+ * to in-app. In the desktop shell the webview can't act on that on its own, so the app-wide
+ * interceptor (`installExternalLinkHandler`) catches the click and hands the URL to the real
+ * browser — no project context needed at this leaf.
  */
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (

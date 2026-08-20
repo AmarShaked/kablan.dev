@@ -83,6 +83,25 @@ describe("security: path-traversal / input-validation guards", () => {
     assert.ok(Array.isArray(json), "branches should be an array");
   });
 
+  // POST /api/open-url hands its argument to the OS launcher, and the URLs reaching it come from
+  // rendered agent/tool output — so anything but a web/mail link must be refused before spawn.
+  test("POST /api/open-url rejects a missing url and non-web schemes with 400", async () => {
+    const rejected = [
+      undefined,
+      "",
+      "   ",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "vscode://file/etc/passwd",
+      "/etc/passwd",
+      "example.com",
+    ];
+    for (const url of rejected) {
+      const { status } = await s.api.post("/api/open-url", url === undefined ? {} : { url });
+      assert.equal(status, 400, `open-url ${JSON.stringify(url)} should be 400`);
+    }
+  });
+
   test("resolveWorkdir guard: cwd outside the repo/worktrees is rejected with 400", async () => {
     await initRepo(join(s.workspace, "wdrepo"));
 

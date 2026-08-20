@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { AgentSettings } from "./AgentSettings.tsx";
 import type { FactorySettings } from "../api.ts";
+import { selectOption, selectValue } from "../test/select.ts";
 
 const base: FactorySettings = {
   agentCommand: "claude",
@@ -98,10 +99,10 @@ describe("AgentSettings", () => {
   it("selects a permission mode", async () => {
     const onChange = vi.fn();
     render(<Harness initial={base} onChange={onChange} />);
-    const select = screen.getByLabelText(/permission mode/i);
-    await userEvent.selectOptions(select, "auto");
+    expect(selectValue(/permission mode/i)).toBe("Ask (default)");
+    await selectOption(/permission mode/i, "Auto");
     expect(onChange.mock.calls.at(-1)![0].permissionMode).toBe("auto");
-    expect(select).toHaveValue("auto");
+    expect(selectValue(/permission mode/i)).toBe("Auto");
   });
 
   it("adds and removes a notification event", async () => {

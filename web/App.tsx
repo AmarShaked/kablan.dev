@@ -12,6 +12,7 @@ import {
 } from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
 import { consumeIntentionalStop } from "./lib/serverStopIntent.ts";
+import { installExternalLinkHandler } from "./lib/openExternal.ts";
 import { useAgentNotifications } from "./hooks/useAgentNotifications.tsx";
 import {
   APP_VERSION,
@@ -81,6 +82,8 @@ function AppContent() {
   const [view, setView] = useState<View>("home");
   const [cockpitBranch, setCockpitBranch] = useState<string | null>(null);
   const [linearWorkspace, setLinearWorkspace] = useState("");
+  // Settings → Agent factory → Permission mode. Seeds the New-session dialog's Permission picker.
+  const [defaultPermissionMode, setDefaultPermissionMode] = useState<string | undefined>(undefined);
   const [notifications, setNotifications] = useState<NotificationSettings>({ enabled: false, events: [] });
 
   const [commandOpen, setCommandOpen] = useState(false);
@@ -138,10 +141,14 @@ function AppContent() {
     setLogs((prev) => ({ ...prev, [cwd]: lines }));
   }, []);
 
+  // Desktop shell: link clicks are dead inside the webview, so route them to the OS browser.
+  useEffect(() => installExternalLinkHandler(), []);
+
   useEffect(() => {
     api.getConfig().then((c) => {
       setLinearWorkspace(c.linearWorkspace);
       setNotifications(c.factory.notifications);
+      setDefaultPermissionMode(c.factory.permissionMode);
     });
   }, []);
 
@@ -499,6 +506,7 @@ function AppContent() {
                 const c = await api.getConfig();
                 setLinearWorkspace(c.linearWorkspace);
                 setNotifications(c.factory.notifications);
+                setDefaultPermissionMode(c.factory.permissionMode);
                 await refreshProjects();
               }}
               projects={projects}
@@ -556,6 +564,7 @@ function AppContent() {
           open={newSessionOpen}
           onOpenChange={setNewSessionOpen}
           branches={branchesQuery.data ?? []}
+          defaultPermissionMode={defaultPermissionMode}
           onStarted={handleSessionStarted}
         />
       )}

@@ -181,6 +181,23 @@ api.get("/projects/:name/files", async (req, res) => {
   }
 });
 
+/** Hand a web URL to the OS browser. The desktop shell needs this: inside the webview an
+ * `<a target="_blank">` (or `window.open`) is a silent no-op, so link clicks did nothing.
+ * Project-independent — unlike /projects/:name/open, there's no working copy involved. */
+api.post("/open-url", async (req, res) => {
+  try {
+    const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    if (!url) return res.status(400).json({ error: "missing url" });
+    // Scheme allowlist: transcripts render agent/tool-authored markdown, so only ever hand the OS
+    // a web or mail link — never file://, a custom scheme, or a shell-ish argument.
+    if (!/^(https?:\/\/|mailto:)/.test(url)) return res.status(400).json({ error: "unsupported url scheme" });
+    await openTarget("url", url);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
+  }
+});
+
 api.post("/projects/:name/open", async (req, res) => {
   try {
     const { target, cwd, url } = req.body ?? {};

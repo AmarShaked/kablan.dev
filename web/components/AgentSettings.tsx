@@ -3,14 +3,14 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const PERMISSION_MODES = [
-  { value: "default", label: "Ask (default)" },
-  { value: "acceptEdits", label: "Accept edits" },
-  { value: "supervised", label: "Supervised — approve each tool" },
-  { value: "auto", label: "Auto" },
-  { value: "bypassPermissions", label: "Bypass all" },
-] as const;
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SETTINGS_PERMISSION_OPTIONS } from "../lib/permissions.ts";
 
 const NOTIFIABLE_EVENTS = [
   { key: "awaitingInput", label: "Awaiting input" },
@@ -68,18 +68,21 @@ export function AgentSettings({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="af-perm">Permission mode</Label>
-          <select
-            id="af-perm"
+          <Select
             value={value.permissionMode}
-            className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs"
-            onChange={(e) => set("permissionMode", e.target.value as FactorySettings["permissionMode"])}
+            onValueChange={(v) => set("permissionMode", v as FactorySettings["permissionMode"])}
           >
-            {PERMISSION_MODES.map((mode) => (
-              <option key={mode.value} value={mode.value}>
-                {mode.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="af-perm" aria-label="Permission mode" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SETTINGS_PERMISSION_OPTIONS.map((mode) => (
+                <SelectItem key={mode.value} value={mode.value}>
+                  {mode.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="af-base">Default base branch</Label>

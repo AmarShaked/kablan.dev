@@ -281,6 +281,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ target, ...opts }),
     }),
+  /** Hand a web URL to the OS browser (see `openExternal` — the desktop webview can't do it
+   * itself). Project-independent, unlike `openIn`. */
+  openUrl: (url: string) =>
+    req<{ ok: boolean }>("/api/open-url", { method: "POST", body: JSON.stringify({ url }) }),
 
   gitlab: {
     hosts: () => req<{ hosts: string[] }>("/api/gitlab/hosts"),

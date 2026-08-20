@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { openExternal } from "../lib/openExternal.ts";
 
 /** Tailwind text color for a pipeline/CI status. */
 export function pipelineTone(status: string | null): string {
@@ -97,7 +98,7 @@ export function GitlabSection({
       });
       toast.success(`Created MR !${r.iid}`, {
         duration: 8000,
-        action: { label: "Open", onClick: () => window.open(r.webUrl, "_blank", "noopener") },
+        action: { label: "Open", onClick: () => void openExternal(r.webUrl) },
       });
       setShowForm(false);
       setTitle("");

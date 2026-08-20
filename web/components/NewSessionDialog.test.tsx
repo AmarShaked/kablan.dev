@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { api } from "../api.ts";
 import type { Branch } from "../api.ts";
+import { selectOption, selectValue } from "../test/select.ts";
 
 vi.mock("../api.ts");
 
@@ -139,9 +140,9 @@ describe("NewSessionDialog", () => {
     vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/perm" });
     renderDialog();
 
-    // Defaults to Accept edits.
-    expect(screen.getByLabelText("Permission")).toHaveValue("acceptEdits");
-    await userEvent.selectOptions(screen.getByLabelText("Permission"), "bypassPermissions");
+    // Defaults to Accept edits when Settings has no (usable) default.
+    expect(selectValue("Permission")).toBe("Accept edits");
+    await selectOption("Permission", "Bypass");
     await userEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     await vi.waitFor(() =>
@@ -151,6 +152,34 @@ describe("NewSessionDialog", () => {
         expect.objectContaining({ permissionMode: "bypassPermissions" }),
       ),
     );
+  });
+
+  it("seeds permission from the configured Settings default", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/perm" });
+    renderDialog({ defaultPermissionMode: "supervised" });
+
+    expect(selectValue("Permission")).toBe("Supervised");
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+
+    await vi.waitFor(() =>
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({ permissionMode: "supervised" }),
+      ),
+    );
+  });
+
+  it("re-seeds permission from the configured default each time it opens", async () => {
+    const { rerenderWith } = renderDialog({ defaultPermissionMode: "auto" });
+    expect(selectValue("Permission")).toBe("Auto");
+
+    // A per-session choice is dropped on close…
+    await selectOption("Permission", "Bypass");
+    expect(selectValue("Permission")).toBe("Bypass");
+    rerenderWith({ open: false });
+    rerenderWith({ open: true });
+    expect(selectValue("Permission")).toBe("Auto");
   });
 
   it("shows an error toast and does not close or call onStarted when the API call fails", async () => {

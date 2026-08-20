@@ -77,6 +77,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/files", get(get_files))
         .route("/api/projects/:name/deps", get(get_deps))
         .route("/api/projects/:name/open", post(post_open))
+        .route("/api/open-url", post(post_open_url))
         .route("/api/projects/:name/checkout", post(post_checkout))
         .route("/api/projects/:name/pull", post(post_pull))
         .route("/api/projects/:name/pull-branch", post(post_pull_branch))
@@ -944,6 +945,25 @@ async fn post_open(Path(name): Path<String>, body: Bytes) -> ApiResult {
     blocking(move || open::open_target(&target, &arg)).await.map_err(bad)?;
     Ok(Json(json!({ "ok": true })))
 }
+/// Hand a web URL to the OS browser. The desktop shell needs this: inside the webview an
+/// `<a target="_blank">` (or `window.open`) is a silent no-op, so link clicks did nothing.
+/// Project-independent — unlike `post_open`, there's no working copy involved.
+async fn post_open_url(body: Bytes) -> ApiResult {
+    let b = parse_body(&body);
+    let url = b.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if url.is_empty() {
+        return Err(bad("missing url"));
+    }
+    // Scheme allowlist: transcripts render agent/tool-authored markdown, so only ever hand the
+    // OS a web or mail link — never file://, a custom scheme, or a shell-ish argument.
+    let allowed = ["http://", "https://", "mailto:"].iter().any(|p| url.starts_with(p));
+    if !allowed {
+        return Err(bad("unsupported url scheme"));
+    }
+    blocking(move || open::open_target("url", &url)).await.map_err(bad)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
 async fn post_checkout(Path(name): Path<String>, body: Bytes) -> ApiResult {
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let b = parse_body(&body);

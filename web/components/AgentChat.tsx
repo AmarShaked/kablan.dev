@@ -22,6 +22,14 @@ import { Markdown } from "./Markdown.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PERMISSION_OPTIONS, resolvePermissionMode } from "../lib/permissions.ts";
 
 /** One entry in the chat's local timeline: either the user's own sent message (never echoed
  * back by the stream — it goes straight to stdin) or a raw agent stream-json event. `images` are
@@ -34,6 +42,46 @@ type TimelineItem =
  * prefix) for the API; `url` is the full data URL for the thumbnail preview. */
 type Attachment = { id: string; url: string; mediaType: string; data: string };
 
+/** The composer footer's dropdowns (model / permission / thinking).
+ *
+ * These used to be native `<select>`s. On macOS WebKit (the Tauri WKWebView, and Safari) a native
+ * select is drawn as an OS popup button — bezel, filled background and stepper arrows — which
+ * ignores the transparent/ghost styling the footer wants, so it looked nothing like the rest of the
+ * app. This wraps the app's Radix Select instead, styled down to the footer's text-xs ghost row so
+ * it renders identically on every platform. */
+function ComposerSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} disabled={disabled} onValueChange={onChange}>
+      <SelectTrigger
+        size="sm"
+        aria-label={label}
+        className="h-6 gap-1 rounded border border-transparent bg-transparent px-1 py-0 text-xs text-muted-foreground shadow-none transition-colors hover:border-border hover:text-foreground focus-visible:ring-0 disabled:opacity-50 data-[size=sm]:h-6 dark:bg-transparent dark:hover:bg-transparent [&_svg]:size-3"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="start">
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value} className="text-xs">
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 const STATUS_LABEL: Record<string, string> = {
   idle: "Ready",
   working: "Working",
@@ -42,23 +90,18 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
 };
 
-/** Model options for the composer dropdown. Empty value = "Default" (use the configured/global
- * model — no `--model` flag). The others are Claude Code's model aliases. */
+/** Sentinel for the Model picker's "Default" row: the state value is "" (no `--model` flag, so the
+ * configured/global model applies), but a Radix SelectItem can't carry an empty value — the two are
+ * mapped at the picker boundary. */
+const MODEL_DEFAULT = "__default__";
+
+/** Model options for the composer dropdown. The non-default values are Claude Code's model
+ * aliases, passed through as `--model`. */
 const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Default" },
+  { value: MODEL_DEFAULT, label: "Default" },
   { value: "opus", label: "Opus" },
   { value: "sonnet", label: "Sonnet" },
   { value: "haiku", label: "Haiku" },
-];
-
-/** Permission-mode options for the composer dropdown. Applied as a launch arg (`--permission-mode`)
- * per-branch, mirroring the model override: changing it restarts the agent (resuming its session).
- * "Bypass" (bypassPermissions) lets tool calls auto-proceed instead of stalling on prompts. */
-const PERMISSION_OPTIONS: { value: string; label: string }[] = [
-  { value: "acceptEdits", label: "Accept edits" },
-  { value: "supervised", label: "Supervised" },
-  { value: "plan", label: "Plan" },
-  { value: "bypassPermissions", label: "Bypass" },
 ];
 
 /** "Performance" = thinking budget, applied by appending Claude Code's magic keyword to the
@@ -1133,9 +1176,7 @@ export function AgentChat({
   // `thinking` is applied per-message by appending Claude Code's thinking-budget keyword to the
   // outgoing text (no restart).
   const [model, setModel] = useState("");
-  const [permissionMode, setPermissionMode] = useState(() =>
-    PERMISSION_OPTIONS.some((o) => o.value === defaultPermissionMode) ? (defaultPermissionMode as string) : "acceptEdits",
-  );
+  const [permissionMode, setPermissionMode] = useState(() => resolvePermissionMode(defaultPermissionMode));
   const [thinking, setThinking] = useState<keyof typeof THINKING_KEYWORD>("off");
   // Images pasted/dropped into the composer, staged until the next send (removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1780,45 +1821,27 @@ export function AgentChat({
         {/* Composer footer (Claude-Code-style): per-session model + permission + thinking controls
             on the left, Stop + agent status on the right. */}
         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <select
-            aria-label="Model"
-            value={model}
+          <ComposerSelect
+            label="Model"
+            value={model || MODEL_DEFAULT}
             disabled={!chatEnabled || busy}
-            onChange={(e) => changeModel(e.target.value)}
-            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
-          >
-            {MODEL_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Permission"
+            onChange={(v) => changeModel(v === MODEL_DEFAULT ? "" : v)}
+            options={MODEL_OPTIONS}
+          />
+          <ComposerSelect
+            label="Permission"
             value={permissionMode}
             disabled={!chatEnabled || busy}
-            onChange={(e) => changePermission(e.target.value)}
-            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
-          >
-            {PERMISSION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Thinking"
+            onChange={changePermission}
+            options={PERMISSION_OPTIONS}
+          />
+          <ComposerSelect
+            label="Thinking"
             value={thinking}
             disabled={!chatEnabled}
-            onChange={(e) => setThinking(e.target.value as keyof typeof THINKING_KEYWORD)}
-            className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground focus:border-border focus:outline-none disabled:opacity-50"
-          >
-            {THINKING_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setThinking(v as keyof typeof THINKING_KEYWORD)}
+            options={THINKING_OPTIONS}
+          />
           {running && (
             <button
               type="button"

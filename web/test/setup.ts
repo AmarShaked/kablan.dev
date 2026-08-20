@@ -24,3 +24,12 @@ globalThis.ResizeObserver ??= class {
   unobserve() {}
   disconnect() {}
 } as unknown as typeof ResizeObserver;
+
+// Radix Select (the app's dropdown, replacing native <select>s) drives its trigger with the Pointer
+// Capture API and scrolls the highlighted item into view — jsdom implements neither, which would
+// throw the moment a test opens a dropdown. No-ops are enough: the tests assert the resulting DOM,
+// not scroll position.
+Element.prototype.scrollIntoView ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.setPointerCapture ??= () => {};
+Element.prototype.releasePointerCapture ??= () => {};
