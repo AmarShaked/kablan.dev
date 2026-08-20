@@ -316,6 +316,9 @@ export function NewSessionDialog({ project, open, onOpenChange, branches, onStar
             }}
             placeholder="What should the agent do first? (paste or drop an image to attach)"
             rows={4}
+            // The Textarea grows to fit its content (field-sizing). Cap it so a long pasted
+            // prompt scrolls inside the box instead of ballooning the whole dialog.
+            className="max-h-64 overflow-y-auto"
           />
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2">
