@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -207,9 +207,116 @@ describe("AgentChat", () => {
     expect(onStop).toHaveBeenCalled();
   });
 
+  // When Stop reports ok:false (the server has no live process for this key, but the view showed
+  // it running — the "click does nothing" drift), the frontend resyncs to the server's truth so
+  // the stale running state clears instead of the button silently doing nothing.
+  it("resyncs and clears the stale running state when Stop reports ok:false", async () => {
+    const onStop = vi.fn().mockResolvedValue({ ok: false });
+    const onBackfill = vi.fn().mockResolvedValue({
+      agent: { key: "proj::wt:/wt/one", status: "done", sessionId: null, pid: null, startedAt: 0, exitCode: 0 },
+      events: [],
+    });
+    renderChat([workingStatus], { onStop, onBackfill });
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^stop$/i }));
+    // After resync the store reports the agent as done → Stop hides, thinking row clears.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument());
+    expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
+  });
+
   it("disables the composer when canChat is false", () => {
     renderChat([], { canChat: false });
     expect(screen.getByPlaceholderText(/start a session to chat/i)).toBeDisabled();
+  });
+
+  // Repro for "the timer is reset every change": the working-turn timer anchors to the store's
+  // workingSince (set when the turn began), so mounting AgentChat mid-turn (a branch switch back)
+  // shows the accumulated elapsed, not 0. Pre-fix it re-anchored to mount time and restarted at 0.
+  it("resumes the working timer from the stored turn-start after a remount (not 0)", () => {
+    vi.useFakeTimers();
+    try {
+      function Harness() {
+        const { ingest } = useAgentStream();
+        const [mounted, setMounted] = useState(false);
+        useEffect(() => {
+          ingest(workingStatus); // turn starts now → store stamps workingSince
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
+        return (
+          <>
+            <button type="button" onClick={() => setMounted((m) => !m)}>
+              toggle-mount
+            </button>
+            {mounted && (
+              <AgentChat
+                project="proj"
+                agentKey="proj::wt:/wt/one"
+                onStart={vi.fn().mockResolvedValue(undefined)}
+                onMessage={vi.fn().mockResolvedValue(undefined)}
+                onStop={vi.fn().mockResolvedValue(undefined)}
+              />
+            )}
+          </>
+        );
+      }
+      render(
+        <AgentStreamProvider>
+          <Harness />
+        </AgentStreamProvider>,
+      );
+      // The turn has been running 5s while we were on another branch (AgentChat unmounted).
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      // Switch back to this branch — mount AgentChat mid-turn.
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: /toggle-mount/i }));
+      });
+      const row = screen.getByText("Claude Code").parentElement as HTMLElement;
+      expect(within(row).getByText(/0:05/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Repro for "Stop not working after change branches and go back": the app keeps ONE
+  // AgentStreamProvider above the branch-keyed Cockpit, so switching branches unmounts and
+  // remounts AgentChat while the stream store persists. Stop must still show/work on return.
+  it("keeps Stop after an unmount/remount within the same stream store", async () => {
+    function RemountHarness() {
+      const { ingest } = useAgentStream();
+      const [mounted, setMounted] = useState(true);
+      useEffect(() => {
+        ingest(workingStatus);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted((m) => !m)}>
+            toggle-mount
+          </button>
+          {mounted && (
+            <AgentChat
+              project="proj"
+              agentKey="proj::wt:/wt/one"
+              onStart={vi.fn().mockResolvedValue(undefined)}
+              onMessage={vi.fn().mockResolvedValue(undefined)}
+              onStop={vi.fn().mockResolvedValue(undefined)}
+            />
+          )}
+        </>
+      );
+    }
+    render(
+      <AgentStreamProvider>
+        <RemountHarness />
+      </AgentStreamProvider>,
+    );
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /toggle-mount/i })); // leave branch
+    expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /toggle-mount/i })); // come back
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
   });
 
   function pasteImage(box: HTMLElement, type = "image/png") {
