@@ -382,6 +382,14 @@ function flattenTimeline(timeline: TimelineItem[]): Prim[] {
     }
     const e = item.event as Record<string, any> | null;
     if (!e || typeof e !== "object") return;
+    // Compaction machinery is internal bookkeeping, never conversation. When Claude Code
+    // auto-compacts a long session it emits a `compact_boundary` system event and an
+    // `isCompactSummary` user turn (the "This session is being continued…" summary). Both must
+    // stay out of the transcript — otherwise, on resume/replay after an app restart, the summary
+    // would surface as a stray bubble. The `type:"user"` and non-error `system` branches below
+    // already skip these; this explicit guard keeps them hidden even if a future change starts
+    // rendering user/system turns.
+    if (e.isCompactSummary === true || (e.type === "system" && e.subtype === "compact_boundary")) return;
     switch (e.type) {
       case "assistant": {
         if (typeof e.uuid === "string" && e.uuid) lastAssistantUuid = e.uuid;
@@ -1001,8 +1009,14 @@ function formatElapsed(ms: number): string {
  * variant so the dots are inert under prefers-reduced-motion. */
 function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; currentTool?: string }) {
   const timer = elapsedMs != null && elapsedMs >= 1000 ? formatElapsed(elapsedMs) : null;
+  // Keep the row short — the current tool can be a long label, so it lives in a hover
+  // tooltip rather than stretching the line.
+  const tip = currentTool ? `Working: ${currentTool}${timer ? ` · ${timer}` : ""}` : "thinking…";
   return (
-    <div className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground">
+    <div
+      className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground"
+      title={tip}
+    >
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-semibold">
         CC
       </span>
@@ -1012,12 +1026,7 @@ function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; cur
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-150ms]" />
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce" />
       </span>
-      {currentTool && <span className="min-w-0 truncate">· {currentTool}</span>}
-      {timer ? (
-        <span className="shrink-0 tabular-nums">· {timer}</span>
-      ) : currentTool ? null : (
-        <span>thinking…</span>
-      )}
+      {timer ? <span className="shrink-0 tabular-nums">{timer}</span> : <span>thinking…</span>}
     </div>
   );
 }
@@ -1150,7 +1159,7 @@ export function AgentChat({
    * supervised callers can omit it — the cards only appear when there are pending approvals. */
   onResolveApproval?: (approvalId: string, decision: "allow" | "deny", reason?: string) => Promise<unknown>;
 }) {
-  const { agentFor, setActiveKey, seedApprovals } = useAgentStream();
+  const { agentFor, setActiveKey, seedApprovals, ingest } = useAgentStream();
   const live = agentFor(agentKey);
 
   // Viewing this pane clears its unread and suppresses further increments while it's active;
@@ -1281,26 +1290,22 @@ export function AgentChat({
   const running = isRunningStatus(status);
 
   // Live "working" elapsed timer for the ThinkingRow, so a long turn visibly progresses.
-  // `workingStartRef` anchors when the current working turn began (set once on entering "working");
-  // a 1s interval ticks `elapsedMs` while working and is torn down when the status leaves "working"
-  // or on unmount (so no interval leaks). Cleared to null when not working.
+  // The turn-start anchor (`live.workingSince`) lives in the stream store, not a local ref, so it
+  // survives the unmount/remount of a branch switch — otherwise the timer restarted from 0 every
+  // time you left the branch and came back. A 1s interval ticks `elapsedMs` while working and is
+  // torn down when the status leaves "working" or on unmount (so no interval leaks).
+  const workingSince = status === "working" ? live.workingSince : undefined;
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const workingStartRef = useRef<number | null>(null);
   useEffect(() => {
-    if (status !== "working") {
-      workingStartRef.current = null;
+    if (status !== "working" || workingSince == null) {
       setElapsedMs(null);
       return;
     }
-    if (workingStartRef.current == null) {
-      workingStartRef.current = Date.now();
-      setElapsedMs(0);
-    }
-    const id = setInterval(() => {
-      if (workingStartRef.current != null) setElapsedMs(Date.now() - workingStartRef.current);
-    }, 1000);
+    const tick = () => setElapsedMs(Date.now() - workingSince);
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status]);
+  }, [status, workingSince]);
 
   // Local ordered timeline: interleaves the user's own sent messages (which never come back
   // as stream events — they go straight to stdin) with agent events, in send/arrival order.
@@ -1453,7 +1458,30 @@ export function AgentChat({
   const stop = async () => {
     setBusy(true);
     try {
-      await onStop();
+      const res = (await onStop()) as { ok?: boolean } | undefined;
+      // `ok: false` means the server had no live process under this branch's key even though the
+      // view showed the agent running — a frontend/backend drift (e.g. a status frame missed while
+      // this branch was off-screen after a branch switch). Previously we ignored the result, so
+      // Stop looked like it "did nothing". Resync from the server (the source of truth) so the
+      // stale "working" clears and the button reflects reality. When `ok` is true the process was
+      // killed and its terminal status streams in normally, so we leave that path untouched.
+      if (res && res.ok === false) {
+        let fresh: AgentView | null = null;
+        if (onBackfill) {
+          try {
+            fresh = (await onBackfill()).agent;
+          } catch {
+            /* fall back to a synthetic terminal status below */
+          }
+        }
+        ingest({
+          type: "agent-status",
+          key: agentKey,
+          agent:
+            fresh ?? { key: agentKey, status: "done", sessionId: null, pid: null, startedAt: 0, exitCode: null },
+        });
+        toast("That agent wasn't running on the server — refreshed its status.");
+      }
     } catch (err) {
       toast.error(String(err));
     } finally {

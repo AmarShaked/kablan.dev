@@ -2,12 +2,27 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 import type { AgentView, AgentStatus, AgentApproval } from "../api.ts";
 
 const MAX = 5000;
-type AgentSlice = { status?: AgentStatus; view?: AgentView; events: unknown[]; approvals: AgentApproval[] };
+type AgentSlice = {
+  status?: AgentStatus;
+  view?: AgentView;
+  events: unknown[];
+  approvals: AgentApproval[];
+  /** When the current "working" turn began (ms epoch), set on the transition into "working" and
+   * cleared when it leaves. Lives here (not in AgentChat) so the elapsed timer survives the
+   * unmount/remount of a branch switch — the store persists while AgentChat comes and goes. */
+  workingSince?: number;
+};
 type Ctx = {
   ingest: (msg: any) => void;
   agentFor: (
     key: string,
-  ) => { status: AgentStatus | undefined; view: AgentView | undefined; events: unknown[]; approvals: AgentApproval[] };
+  ) => {
+    status: AgentStatus | undefined;
+    view: AgentView | undefined;
+    events: unknown[];
+    approvals: AgentApproval[];
+    workingSince: number | undefined;
+  };
   /** Merges backfilled outstanding approvals (from `getAgent`) into a key's pending set, deduping
    * by id — so a reopened/remounted cockpit re-shows gates that arrived before it was listening. */
   seedApprovals: (key: string, approvals: AgentApproval[]) => void;
@@ -57,8 +72,17 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
     if (msg.type === "agent-event" && isNoiseEvent(msg.event)) return;
     const slice = map.current.get(key) ?? { events: [], approvals: [] };
     if (msg.type === "agent-status") {
+      const prev = slice.status;
+      const next = msg.agent?.status;
       slice.view = msg.agent;
-      slice.status = msg.agent?.status;
+      slice.status = next;
+      // Anchor the working-turn start on the transition INTO working; keep it steady while it
+      // stays working (so a re-render doesn't restart it); clear it once it leaves.
+      if (next === "working") {
+        if (prev !== "working") slice.workingSince = Date.now();
+      } else {
+        slice.workingSince = undefined;
+      }
     } else if (msg.type === "agent-approval") {
       // A new pending gate for this key — append unless we already hold its id.
       const appr = msg.approval as AgentApproval | undefined;
@@ -82,7 +106,13 @@ export function AgentStreamProvider({ children }: { children: React.ReactNode })
 
   const agentFor = useCallback((key: string) => {
     const s = map.current.get(key);
-    return { status: s?.status, view: s?.view, events: s?.events ?? [], approvals: s?.approvals ?? [] };
+    return {
+      status: s?.status,
+      view: s?.view,
+      events: s?.events ?? [],
+      approvals: s?.approvals ?? [],
+      workingSince: s?.workingSince,
+    };
   }, []);
 
   const seedApprovals = useCallback((key: string, approvals: AgentApproval[]) => {

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -165,7 +165,7 @@ describe("AgentChat", () => {
     expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
   });
 
-  it("shows the current tool label and a live elapsed timer while working", () => {
+  it("surfaces the current tool label via a hover tooltip and shows a live elapsed timer", () => {
     vi.useFakeTimers();
     try {
       // Seed a working agent plus a tool call, so the row can surface the current activity.
@@ -179,15 +179,15 @@ describe("AgentChat", () => {
           },
         }),
       ]);
-      // The working row surfaces the most recent tool call's label as the current activity
-      // (scoped to the row so it isn't confused with the transcript's own tool line).
+      // The row stays short: the current tool lives in the hover tooltip (title), not inline.
       const row = screen.getByText("Claude Code").parentElement as HTMLElement;
-      expect(within(row).getByText(/Bash npm test/)).toBeInTheDocument();
+      expect(row.getAttribute("title")).toMatch(/Bash npm test/);
+      expect(within(row).queryByText(/Bash npm test/)).not.toBeInTheDocument();
       // After a second passes the elapsed timer becomes live (m:ss).
       act(() => {
         vi.advanceTimersByTime(1500);
       });
-      expect(within(row).getByText(/·\s*\d+:\d{2}/)).toBeInTheDocument();
+      expect(within(row).getByText(/^\d+:\d{2}$/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -208,9 +208,116 @@ describe("AgentChat", () => {
     expect(onStop).toHaveBeenCalled();
   });
 
+  // When Stop reports ok:false (the server has no live process for this key, but the view showed
+  // it running — the "click does nothing" drift), the frontend resyncs to the server's truth so
+  // the stale running state clears instead of the button silently doing nothing.
+  it("resyncs and clears the stale running state when Stop reports ok:false", async () => {
+    const onStop = vi.fn().mockResolvedValue({ ok: false });
+    const onBackfill = vi.fn().mockResolvedValue({
+      agent: { key: "proj::wt:/wt/one", status: "done", sessionId: null, pid: null, startedAt: 0, exitCode: 0 },
+      events: [],
+    });
+    renderChat([workingStatus], { onStop, onBackfill });
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^stop$/i }));
+    // After resync the store reports the agent as done → Stop hides, thinking row clears.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument());
+    expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
+  });
+
   it("disables the composer when canChat is false", () => {
     renderChat([], { canChat: false });
     expect(screen.getByPlaceholderText(/start a session to chat/i)).toBeDisabled();
+  });
+
+  // Repro for "the timer is reset every change": the working-turn timer anchors to the store's
+  // workingSince (set when the turn began), so mounting AgentChat mid-turn (a branch switch back)
+  // shows the accumulated elapsed, not 0. Pre-fix it re-anchored to mount time and restarted at 0.
+  it("resumes the working timer from the stored turn-start after a remount (not 0)", () => {
+    vi.useFakeTimers();
+    try {
+      function Harness() {
+        const { ingest } = useAgentStream();
+        const [mounted, setMounted] = useState(false);
+        useEffect(() => {
+          ingest(workingStatus); // turn starts now → store stamps workingSince
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
+        return (
+          <>
+            <button type="button" onClick={() => setMounted((m) => !m)}>
+              toggle-mount
+            </button>
+            {mounted && (
+              <AgentChat
+                project="proj"
+                agentKey="proj::wt:/wt/one"
+                onStart={vi.fn().mockResolvedValue(undefined)}
+                onMessage={vi.fn().mockResolvedValue(undefined)}
+                onStop={vi.fn().mockResolvedValue(undefined)}
+              />
+            )}
+          </>
+        );
+      }
+      render(
+        <AgentStreamProvider>
+          <Harness />
+        </AgentStreamProvider>,
+      );
+      // The turn has been running 5s while we were on another branch (AgentChat unmounted).
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      // Switch back to this branch — mount AgentChat mid-turn.
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: /toggle-mount/i }));
+      });
+      const row = screen.getByText("Claude Code").parentElement as HTMLElement;
+      expect(within(row).getByText(/0:05/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Repro for "Stop not working after change branches and go back": the app keeps ONE
+  // AgentStreamProvider above the branch-keyed Cockpit, so switching branches unmounts and
+  // remounts AgentChat while the stream store persists. Stop must still show/work on return.
+  it("keeps Stop after an unmount/remount within the same stream store", async () => {
+    function RemountHarness() {
+      const { ingest } = useAgentStream();
+      const [mounted, setMounted] = useState(true);
+      useEffect(() => {
+        ingest(workingStatus);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted((m) => !m)}>
+            toggle-mount
+          </button>
+          {mounted && (
+            <AgentChat
+              project="proj"
+              agentKey="proj::wt:/wt/one"
+              onStart={vi.fn().mockResolvedValue(undefined)}
+              onMessage={vi.fn().mockResolvedValue(undefined)}
+              onStop={vi.fn().mockResolvedValue(undefined)}
+            />
+          )}
+        </>
+      );
+    }
+    render(
+      <AgentStreamProvider>
+        <RemountHarness />
+      </AgentStreamProvider>,
+    );
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /toggle-mount/i })); // leave branch
+    expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /toggle-mount/i })); // come back
+    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
   });
 
   function pasteImage(box: HTMLElement, type = "image/png") {
@@ -326,6 +433,25 @@ describe("AgentChat", () => {
     expect(screen.getByRole("heading", { level: 2, name: /big heading/i })).toBeInTheDocument();
     // rehype-highlight tokenizes the fenced block — the `const` keyword becomes its own span.
     expect(screen.getByText("const")).toBeInTheDocument();
+  });
+
+  it("hides compaction bookkeeping (compact_boundary + isCompactSummary) but keeps real replies", () => {
+    renderChat([
+      // The system boundary marker Claude Code emits when it auto-compacts.
+      ev({ type: "system", subtype: "compact_boundary", content: "Conversation compacted" }),
+      // The internal summary turn ("This session is being continued…") — a user-role event
+      // flagged isCompactSummary. It must never render as a bubble on resume/replay.
+      ev({
+        type: "user",
+        isCompactSummary: true,
+        message: { role: "user", content: "This session is being continued from a previous conversation…" },
+      }),
+      // A genuine assistant reply that merely mentions the phrase must still show.
+      assistant([{ type: "text", text: "I will create a detailed summary of the module." }]),
+    ]);
+    expect(screen.queryByText(/Conversation compacted/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This session is being continued/)).not.toBeInTheDocument();
+    expect(screen.getByText(/create a detailed summary of the module/)).toBeInTheDocument();
   });
 
   it("renders a TodoWrite tool_use as a checklist showing each item's text", () => {

@@ -479,6 +479,37 @@ fn branch_agent_key(name: &str, branch: &str) -> String {
     format!("{name}::branch:{branch}")
 }
 
+/// Split a branch-agent key (`{project}::branch:{branch}`) back into its parts.
+/// Uses the first `::branch:` so a branch name that itself contains `::branch:`
+/// (unlikely, but git allows odd refs) stays intact on the branch side.
+fn parse_branch_agent_key(key: &str) -> Option<(&str, &str)> {
+    key.split_once("::branch:")
+}
+
+/// Persist an agent's Claude session id into the factory store so a later app
+/// restart can `--resume` the same conversation. Called from the agent stream
+/// reader the instant a session id is first captured.
+///
+/// Why here and not only in `get_branch_agent`: that poll path persists the id
+/// lazily, but the UI skips its backfill poll whenever the agent is live — so a
+/// brand-new session that streams start-to-finish (and is never polled before the
+/// app closes) would never record its id and would lose all context on restart.
+/// This hook closes that gap. Idempotent (only writes when nothing is stored yet)
+/// and best-effort (never panics/propagates). Runs on the reader thread, so the
+/// blocking file I/O is fine — it does not touch the async runtime.
+pub(crate) fn persist_branch_session_id(key: &str, session_id: &str) {
+    let Some((name, branch)) = parse_branch_agent_key(key) else { return };
+    let path = factory_store_path();
+    let mut file = factory::load_file(&path);
+    let needs_persist = factory::get_branch_state(&file, name, branch)
+        .map(|s| s.agent_session_id.is_none())
+        .unwrap_or(true);
+    if needs_persist {
+        factory::set_branch_session(&mut file, name, branch, session_id);
+        let _ = factory::save_file(&path, &file);
+    }
+}
+
 /// Shared start logic for `POST .../factory/agent/start`. Ensures the
 /// branch's working copy exists (reusing it if the branch is already
 /// checked out elsewhere), persists it, resumes from any stored session id,
@@ -1191,4 +1222,71 @@ pub async fn run() {
         });
     }
     serve_on_with(port, procs, agents_supervisor).await;
+}
+
+#[cfg(test)]
+mod session_persist_tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    /// Point config_dir at a fresh temp dir for the duration of a test. Mirrors
+    /// chat_history's pattern; run these single-threaded (`--test-threads=1`)
+    /// since KABLAN_CONFIG_DIR is process-global.
+    struct TempConfig {
+        dir: std::path::PathBuf,
+    }
+    impl TempConfig {
+        fn new(tag: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "kablan-session-{tag}-{}",
+                SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::env::set_var("KABLAN_CONFIG_DIR", &dir);
+            TempConfig { dir }
+        }
+        fn stored_sid(&self, name: &str, branch: &str) -> Option<String> {
+            let file = factory::load_file(&factory_store_path());
+            factory::get_branch_state(&file, name, branch).and_then(|s| s.agent_session_id.clone())
+        }
+    }
+    impl Drop for TempConfig {
+        fn drop(&mut self) {
+            std::env::remove_var("KABLAN_CONFIG_DIR");
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn parses_key_into_project_and_branch() {
+        assert_eq!(parse_branch_agent_key("proj::branch:feat/x"), Some(("proj", "feat/x")));
+        // Branch names routinely contain slashes; the project side stays clean.
+        assert_eq!(parse_branch_agent_key("a/b/c::branch:session/abc"), Some(("a/b/c", "session/abc")));
+        assert_eq!(parse_branch_agent_key("no-delimiter-here"), None);
+    }
+
+    #[test]
+    fn persists_session_id_on_first_capture() {
+        let cfg = TempConfig::new("first");
+        assert_eq!(cfg.stored_sid("proj", "feat/x"), None);
+        persist_branch_session_id("proj::branch:feat/x", "sid-1");
+        assert_eq!(cfg.stored_sid("proj", "feat/x").as_deref(), Some("sid-1"));
+    }
+
+    #[test]
+    fn does_not_overwrite_an_existing_session_id() {
+        let cfg = TempConfig::new("idempotent");
+        persist_branch_session_id("proj::branch:feat/x", "sid-1");
+        // A later event carrying a different id must not clobber the stored one —
+        // the first id owns the resumable conversation.
+        persist_branch_session_id("proj::branch:feat/x", "sid-2");
+        assert_eq!(cfg.stored_sid("proj", "feat/x").as_deref(), Some("sid-1"));
+    }
+
+    #[test]
+    fn ignores_a_malformed_key() {
+        let _cfg = TempConfig::new("malformed");
+        // Must not panic and must not write anything.
+        persist_branch_session_id("garbage-key", "sid-1");
+    }
 }
