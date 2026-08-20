@@ -4,16 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kablan.dev</title>
-    <!-- The desktop app serves its UI from tauri://localhost, so track.js's built-in
-         localhost skip would drop every hit; the track-localhost flag below overrides it.
-         A Vite plugin strips that flag during dev (vite.config.ts) so `npm run dev` and
-         `tauri dev` (also localhost) stay untracked — only the shipped build counts. -->
-    <script
-      src="https://nitur.dev/track.js"
-      data-site-id="0504cd1e4a1c0644c20aef92"
-      data-track-localhost="true"
-      async
-    ></script>
   </head>
   <body>
     <div id="root"></div>
