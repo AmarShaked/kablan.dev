@@ -1007,11 +1007,22 @@ function formatElapsed(ms: number): string {
  * parent), reading like "Claude Code · Bash npm test · 1:23". Until any elapsed time is available
  * (and with no current tool) it falls back to the original "thinking…". Uses Tailwind's motion-safe:
  * variant so the dots are inert under prefers-reduced-motion. */
-function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; currentTool?: string }) {
+function ThinkingRow({
+  elapsedMs,
+  currentTool,
+  starting,
+}: {
+  elapsedMs: number | null;
+  currentTool?: string;
+  /** The agent is spinning up / picking up the turn but hasn't produced output yet — shows
+   * "Starting agent…" so the New-session cockpit never looks like a dead empty page. */
+  starting?: boolean;
+}) {
   const timer = elapsedMs != null && elapsedMs >= 1000 ? formatElapsed(elapsedMs) : null;
+  const label = starting ? "Starting agent…" : "thinking…";
   // Keep the row short — the current tool can be a long label, so it lives in a hover
   // tooltip rather than stretching the line.
-  const tip = currentTool ? `Working: ${currentTool}${timer ? ` · ${timer}` : ""}` : "thinking…";
+  const tip = currentTool ? `Working: ${currentTool}${timer ? ` · ${timer}` : ""}` : label;
   return (
     <div
       className="flex items-center gap-2 self-start px-1 py-1 text-xs text-muted-foreground"
@@ -1026,7 +1037,7 @@ function ThinkingRow({ elapsedMs, currentTool }: { elapsedMs: number | null; cur
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce [animation-delay:-150ms]" />
         <span className="size-1 rounded-full bg-muted-foreground motion-safe:animate-bounce" />
       </span>
-      {timer ? <span className="shrink-0 tabular-nums">{timer}</span> : <span>thinking…</span>}
+      {timer ? <span className="shrink-0 tabular-nums">{timer}</span> : <span>{label}</span>}
     </div>
   );
 }
@@ -1391,6 +1402,14 @@ export function AgentChat({
     }
     return undefined;
   }, [prims]);
+  // True while the agent is picking up a turn but hasn't produced output yet: the last thing in the
+  // transcript is the user's message and we're not "working" yet. Covers the New-session gap — the
+  // worktree is being created and the agent is spawning — so the cockpit shows "Starting agent…"
+  // instead of a dead empty page until the first output streams in.
+  const startingUp = useMemo(
+    () => status !== "working" && prims.length > 0 && prims[prims.length - 1].t === "you",
+    [status, prims],
+  );
 
   // Which "You" bubble is in inline-edit mode (its prim key), or null.
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -1681,7 +1700,13 @@ export function AgentChat({
               live.approvals.map((appr) => (
                 <ApprovalCard key={appr.id} approval={appr} onResolve={onResolveApproval} />
               ))}
-            {status === "working" && <ThinkingRow elapsedMs={elapsedMs} currentTool={currentTool} />}
+            {(status === "working" || startingUp) && (
+              <ThinkingRow
+                elapsedMs={elapsedMs}
+                currentTool={currentTool}
+                starting={startingUp && status === undefined}
+              />
+            )}
             {/* Retry / Reset actions — re-run the last user turn, or start the conversation over.
                 Shown once there's a turn to act on and the agent isn't mid-run (a fork stops and
                 relaunches the process, so acting while it works would be surprising). */}

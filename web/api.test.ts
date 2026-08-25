@@ -42,6 +42,7 @@ describe("factory types", () => {
         string,
         {
           message?: string;
+          branch?: string;
           copyNodeModules?: boolean;
           copyEnv?: boolean;
           permissionMode?: string;

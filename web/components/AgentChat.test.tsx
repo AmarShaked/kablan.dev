@@ -163,6 +163,21 @@ describe("AgentChat", () => {
   it("does not show a thinking indicator when the agent isn't working", () => {
     renderChat([]);
     expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Starting agent…")).not.toBeInTheDocument();
+  });
+
+  // New-session gap: the cockpit opens with the user's first message but no agent output or status
+  // yet — show a "Starting agent…" row so it doesn't look like a dead empty page.
+  it("shows a 'Starting agent…' row after New session before any status/output arrives", () => {
+    renderChat([], { initialMessage: "do the thing" });
+    expect(screen.getByText("Starting agent…")).toBeInTheDocument();
+  });
+
+  // Once a status frame arrives (agent is up, just picking up the turn), it's no longer "starting".
+  it("downgrades to 'thinking…' once a status arrives while still awaiting the first response", () => {
+    renderChat([idleStatus], { initialMessage: "do the thing" });
+    expect(screen.queryByText("Starting agent…")).not.toBeInTheDocument();
+    expect(screen.getByText("thinking…")).toBeInTheDocument();
   });
 
   it("surfaces the current tool label via a hover tooltip and shows a live elapsed timer", () => {

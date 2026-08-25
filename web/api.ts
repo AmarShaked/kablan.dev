@@ -366,6 +366,9 @@ export const api = {
       baseBranch: string,
       opts: {
         message?: string;
+        /** Optional user-chosen branch name. The server sanitizes it to a valid git ref; empty or
+         * all-invalid falls back to an auto `session/<hex>` name. */
+        branch?: string;
         copyNodeModules?: boolean;
         copyEnv?: boolean;
         permissionMode?: string;
@@ -377,6 +380,7 @@ export const api = {
         body: JSON.stringify({
           baseBranch,
           message: opts.message,
+          ...(opts.branch && opts.branch.trim() ? { branch: opts.branch.trim() } : {}),
           copyNodeModules: opts.copyNodeModules,
           copyEnv: opts.copyEnv,
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),

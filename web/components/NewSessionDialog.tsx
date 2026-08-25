@@ -51,6 +51,26 @@ function defaultBase(branches: Branch[]): string {
   return branches.find((b) => b.current)?.name ?? "main";
 }
 
+/** Preview of the git branch the server will create from a typed name — mirrors the backend's
+ * `sanitize_branch_name` (lowercase; runs of unsupported chars, spaces included, become a single
+ * `-`; keeps a-z 0-9 _ / . ; trims separators and collapses `..`). Empty → "" (server auto-names). */
+function previewBranchName(raw: string): string {
+  let out = "";
+  let prevSep = true;
+  for (const ch of raw.trim()) {
+    const c = ch.toLowerCase();
+    if (/[a-z0-9_/.]/.test(c)) {
+      out += c;
+      prevSep = false;
+    } else if (!prevSep) {
+      out += "-";
+      prevSep = true;
+    }
+  }
+  while (out.includes("..")) out = out.replace("..", ".");
+  return out.replace(/^[-._/]+|[-._/]+$/g, "");
+}
+
 const MAX_SHOWN = 100;
 
 /** Searchable base-branch picker: a repo can have hundreds of branches, so instead of a native
@@ -153,6 +173,8 @@ export function NewSessionDialog({
   onStarted,
 }: NewSessionDialogProps) {
   const [baseBranch, setBaseBranch] = useState(() => defaultBase(branches));
+  // Optional user-chosen name for the new branch. Empty → the server auto-names it session/<hex>.
+  const [branchName, setBranchName] = useState("");
   const [message, setMessage] = useState("");
   const [permissionMode, setPermissionMode] = useState(() => resolvePermissionMode(defaultPermissionMode));
   const [copyNodeModules, setCopyNodeModules] = useState(true);
@@ -242,6 +264,7 @@ export function NewSessionDialog({
   }, [open, defaultPermissionMode]);
 
   const reset = () => {
+    setBranchName("");
     setMessage("");
     setPermissionMode(resolvePermissionMode(defaultPermissionMode));
     setCopyNodeModules(true);
@@ -267,6 +290,7 @@ export function NewSessionDialog({
       const imageUrls = attachments.map((a) => a.url);
       const { branch } = await api.factory.startSession(project, baseBranch, {
         message: firstMessage,
+        ...(branchName.trim() ? { branch: branchName.trim() } : {}),
         copyNodeModules,
         copyEnv,
         permissionMode,
@@ -302,6 +326,21 @@ export function NewSessionDialog({
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-base-branch">Base branch</Label>
           <BaseBranchPicker branches={branches} value={baseBranch} onChange={setBaseBranch} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="new-session-branch-name">Branch name (optional)</Label>
+          <Input
+            id="new-session-branch-name"
+            value={branchName}
+            onChange={(e) => setBranchName(e.target.value)}
+            placeholder="Auto-named session/… if left empty"
+            className="font-mono text-xs"
+          />
+          {branchName.trim() && (
+            <p className="text-[11px] text-muted-foreground">
+              Creates branch <span className="font-mono text-foreground">{previewBranchName(branchName) || "session/…"}</span>
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-session-permission">Permission</Label>

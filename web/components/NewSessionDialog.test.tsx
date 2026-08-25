@@ -77,6 +77,34 @@ describe("NewSessionDialog", () => {
     );
   });
 
+  it("passes a user-entered branch name (trimmed) to startSession and previews the sanitized name", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "my-feature" });
+    renderDialog();
+
+    await userEvent.type(screen.getByLabelText(/branch name/i), "  My Feature  ");
+    // Live preview mirrors the server's sanitizer.
+    expect(screen.getByText(/my-feature/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+    await vi.waitFor(() =>
+      expect(api.factory.startSession).toHaveBeenCalledWith(
+        "proj",
+        "main",
+        expect.objectContaining({ branch: "My Feature" }),
+      ),
+    );
+  });
+
+  it("omits branch when the name field is left empty (server auto-names)", async () => {
+    vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/xyz" });
+    renderDialog();
+
+    await userEvent.click(screen.getByRole("button", { name: /start session/i }));
+    await vi.waitFor(() => expect(api.factory.startSession).toHaveBeenCalled());
+    const opts = vi.mocked(api.factory.startSession).mock.calls[0][2]!;
+    expect("branch" in opts).toBe(false);
+  });
+
   it("starts a session with the default base branch and trimmed message, then notifies and closes", async () => {
     vi.mocked(api.factory.startSession).mockResolvedValue({ branch: "session/abc123" });
     const props = renderDialog();
