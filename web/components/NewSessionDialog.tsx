@@ -39,10 +39,16 @@ export interface NewSessionDialogProps {
   /** The configured default permission mode (Settings → Agent factory → Permission mode). Seeds
    * the Permission picker, so a new session starts in whatever mode the user configured. */
   defaultPermissionMode?: string;
-  /** Called with the freshly-generated `session/<hex>` branch name once the session has started.
-   * `images` are the staged data URLs, handed to the cockpit so its opening "You" bubble shows
-   * their thumbnails. */
+  /** Called immediately (optimistically) with the client-decided branch name when the user hits
+   * Start — the cockpit opens right away in a "Starting agent…" state while the worktree + agent
+   * are created in the background. `images` are the staged data URLs for the opening "You" bubble. */
   onStarted: (branch: string, message?: string, images?: string[]) => void;
+  /** Called once the background create succeeds — lets the caller refresh branch/worktree data now
+   * that the branch actually exists on disk. */
+  onCreated?: (branch: string) => void;
+  /** Called if the background create fails (e.g. the name collides) — lets the caller roll back the
+   * optimistic navigation. The error is already surfaced to the user via a toast. */
+  onStartFailed?: (branch: string) => void;
 }
 
 /** Default base branch: the repo's current branch, else "main" if that isn't in the list either
@@ -69,6 +75,16 @@ function previewBranchName(raw: string): string {
   }
   while (out.includes("..")) out = out.replace("..", ".");
   return out.replace(/^[-._/]+|[-._/]+$/g, "");
+}
+
+/** Client-generated fallback branch name (`session/<hex>`), used when the user leaves the name
+ * empty. Deciding it here (rather than letting the server generate one) is what lets us open the
+ * cockpit optimistically — we know the branch key before the create round-trip returns. Mirrors the
+ * server's `generate_session_branch` shape; the server still collision-checks it. */
+function genSessionBranch(): string {
+  const rnd = globalThis.crypto?.getRandomValues?.(new Uint32Array(1))?.[0];
+  const n = (rnd ?? Date.now()) >>> 0;
+  return `session/${n.toString(16)}`;
 }
 
 const MAX_SHOWN = 100;
@@ -171,6 +187,8 @@ export function NewSessionDialog({
   branches,
   defaultPermissionMode,
   onStarted,
+  onCreated,
+  onStartFailed,
 }: NewSessionDialogProps) {
   const [baseBranch, setBaseBranch] = useState(() => defaultBase(branches));
   // Optional user-chosen name for the new branch. Empty → the server auto-names it session/<hex>.
@@ -179,7 +197,6 @@ export function NewSessionDialog({
   const [permissionMode, setPermissionMode] = useState(() => resolvePermissionMode(defaultPermissionMode));
   const [copyNodeModules, setCopyNodeModules] = useState(true);
   const [copyEnv, setCopyEnv] = useState(true);
-  const [busy, setBusy] = useState(false);
   // Images pasted/dropped into the first-message box, staged until Start (removable thumbnails).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const attachSeq = useRef(0);
@@ -279,32 +296,38 @@ export function NewSessionDialog({
     onOpenChange(next);
   };
 
-  const handleStart = async () => {
-    if (!baseBranch || busy) return;
-    setBusy(true);
-    try {
-      const firstMessage = message.trim() || undefined;
-      // Raw base64 pairs for the API; data URLs for the seeded cockpit bubble. Both are threaded
-      // only when there are attachments, so an image-free start keeps the original call shape.
-      const images = attachments.map((a) => ({ mediaType: a.mediaType, data: a.data }));
-      const imageUrls = attachments.map((a) => a.url);
-      const { branch } = await api.factory.startSession(project, baseBranch, {
+  const handleStart = () => {
+    if (!baseBranch) return;
+    const firstMessage = message.trim() || undefined;
+    // Raw base64 pairs for the API; data URLs for the seeded cockpit bubble. Both are threaded
+    // only when there are attachments, so an image-free start keeps the original call shape.
+    const images = attachments.map((a) => ({ mediaType: a.mediaType, data: a.data }));
+    const imageUrls = attachments.map((a) => a.url);
+    // Decide the branch name client-side so we can open its cockpit optimistically: the sanitized
+    // user name, or a generated session/<hex> when left empty.
+    const branch = branchName.trim() ? previewBranchName(branchName) || genSessionBranch() : genSessionBranch();
+
+    // Open the cockpit now (it shows "Starting agent…") and close the dialog…
+    onStarted(branch, firstMessage, imageUrls.length ? imageUrls : undefined);
+    reset();
+    handleOpenChange(false);
+
+    // …then create the worktree + agent in the background. On success let the caller refresh the
+    // now-existing branch's data; on failure surface it and let the caller roll back the navigation.
+    api.factory
+      .startSession(project, baseBranch, {
         message: firstMessage,
-        ...(branchName.trim() ? { branch: branchName.trim() } : {}),
+        branch,
         copyNodeModules,
         copyEnv,
         permissionMode,
         ...(images.length ? { images } : {}),
+      })
+      .then(() => onCreated?.(branch))
+      .catch((err) => {
+        toast.error(String(err));
+        onStartFailed?.(branch);
       });
-      if (imageUrls.length) onStarted(branch, firstMessage, imageUrls);
-      else onStarted(branch, firstMessage);
-      reset();
-      handleOpenChange(false);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setBusy(false);
-    }
   };
 
   return (
@@ -365,7 +388,7 @@ export function NewSessionDialog({
             onChange={(e) => setMessage(e.target.value)}
             onPaste={onPaste}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && baseBranch && !busy) handleStart();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && baseBranch) handleStart();
             }}
             placeholder="What should the agent do first? (paste or drop an image to attach)"
             rows={4}
@@ -416,11 +439,11 @@ export function NewSessionDialog({
           </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleStart} disabled={!baseBranch || busy}>
-            {busy ? "Starting…" : "Start session"}
+          <Button onClick={handleStart} disabled={!baseBranch}>
+            Start session
           </Button>
         </DialogFooter>
       </DialogContent>

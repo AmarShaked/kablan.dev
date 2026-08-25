@@ -81,6 +81,10 @@ function AppContent() {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<View>("home");
   const [cockpitBranch, setCockpitBranch] = useState<string | null>(null);
+  // Mirrors `cockpitBranch` so a background callback (e.g. an optimistic New-session create that
+  // fails) can read the LIVE current branch instead of the value captured when it was scheduled.
+  const cockpitBranchRef = useRef(cockpitBranch);
+  cockpitBranchRef.current = cockpitBranch;
   const [linearWorkspace, setLinearWorkspace] = useState("");
   // Settings → Agent factory → Permission mode. Seeds the New-session dialog's Permission picker.
   const [defaultPermissionMode, setDefaultPermissionMode] = useState<string | undefined>(undefined);
@@ -267,16 +271,14 @@ function AppContent() {
     setView("cockpit");
   }, []);
 
-  // "New session" flow's completion: the backend already created the branch/worktree and
-  // started its agent (see `NewSessionDialog` → `api.factory.startSession`) — this just brings
-  // the newly-created branch's data in (factory/worktrees/branches all changed server-side) and
-  // opens straight into its cockpit, exactly like clicking an existing branch would.
+  // "New session" flow — OPTIMISTIC open. The dialog decides the branch name and calls this the
+  // instant the user hits Start, before the worktree/agent exist: we open straight into the
+  // branch's cockpit (which shows a "Starting agent…" state) so there's no dead wait. The actual
+  // create runs in the background; `handleSessionCreated`/`handleSessionStartFailed` below finish
+  // or roll back once it resolves.
   const handleSessionStarted = useCallback(
     (branch: string, message?: string, images?: string[]) => {
       if (!selected) return;
-      queryClient.invalidateQueries({ queryKey: ["factory", selected] });
-      queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) });
-      queryClient.invalidateQueries({ queryKey: qk.branches(selected) });
       // The first message + images were delivered server-side (they never stream back as events),
       // so hand them to the opening cockpit to show as the initiating "You" bubble.
       const text = message?.trim() ?? "";
@@ -285,8 +287,31 @@ function AppContent() {
       setCockpitBranch(branch);
       setView("cockpit");
     },
+    [selected],
+  );
+
+  // Background create succeeded — the branch/worktree now exist on disk, so refresh the data the
+  // cockpit's side panels read (the agent chat itself is already live over the WebSocket).
+  const handleSessionCreated = useCallback(
+    (_branch: string) => {
+      if (!selected) return;
+      queryClient.invalidateQueries({ queryKey: ["factory", selected] });
+      queryClient.invalidateQueries({ queryKey: qk.worktrees(selected) });
+      queryClient.invalidateQueries({ queryKey: qk.branches(selected) });
+    },
     [selected, queryClient],
   );
+
+  // Background create failed (e.g. the name collided) — the dialog already toasted the error, so
+  // just roll the optimistic navigation back to the project view if we're still on that cockpit.
+  const handleSessionStartFailed = useCallback((branch: string) => {
+    // Only roll back if the user is still sitting in the (now doomed) optimistic cockpit; if they
+    // navigated elsewhere in the meantime, leave them be.
+    if (cockpitBranchRef.current !== branch) return;
+    setPendingFirstMessage(null);
+    setCockpitBranch(null);
+    setView("project");
+  }, []);
 
   // Cross-project jump targets used by the Activity view — an agent row selects its project
   // then opens its branch cockpit; a server row selects the project. The cockpit seeds its own
@@ -566,6 +591,8 @@ function AppContent() {
           branches={branchesQuery.data ?? []}
           defaultPermissionMode={defaultPermissionMode}
           onStarted={handleSessionStarted}
+          onCreated={handleSessionCreated}
+          onStartFailed={handleSessionStartFailed}
         />
       )}
 
