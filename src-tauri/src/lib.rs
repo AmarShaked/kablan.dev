@@ -43,6 +43,23 @@ impl IntoResponse for ApiError {
 fn bad(msg: impl Into<String>) -> ApiError {
     ApiError(StatusCode::BAD_REQUEST, msg.into())
 }
+
+/// Ensure there is room to start one more agent under the concurrency cap. First prunes records
+/// whose process already exited (they inflated the count and made "agent limit reached" show up
+/// spuriously — clearing after an app restart), then reaps the oldest IDLE agent(s) to free slots.
+/// Errors only when every running agent is genuinely busy, so a pile of leftover idle sessions no
+/// longer blocks a new one. Reaped agents resume from their persisted session id when reopened.
+fn ensure_agent_slot(st: &AppState, cap: usize) -> Result<(), ApiError> {
+    st.agents.prune_dead();
+    while st.agents.running_count() >= cap {
+        if !st.agents.reap_oldest_idle() {
+            return Err(bad(
+                "agent limit reached — every running agent is busy. Stop one to start a new session.",
+            ));
+        }
+    }
+    Ok(())
+}
 fn server_err(msg: impl Into<String>) -> ApiError {
     ApiError(StatusCode::INTERNAL_SERVER_ERROR, msg.into())
 }
@@ -548,12 +565,10 @@ async fn start_branch_agent(
             cfg.factory.permission_mode = pm.trim().to_string();
         }
     }
-    // TODO: running_count() is a soft cap — it's checked-then-acted-on without
-    // holding a lock across the check and the later `agents.start()` call, so
-    // concurrent starts can race past the limit (small TOCTOU window).
-    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
-        return Err(bad("agent limit reached"));
-    }
+    // Soft cap: prunes dead records and reaps idle agents to make room, erroring only if every
+    // agent is genuinely busy. TODO: still checked-then-acted-on without a lock held across the
+    // later `agents.start()`, so concurrent starts can race past the limit (small TOCTOU window).
+    ensure_agent_slot(st, cfg.factory.max_concurrent_agents as usize)?;
     let name2 = name.to_string();
     let branch2 = branch.to_string();
     let cfg2 = cfg.clone();
@@ -675,6 +690,35 @@ async fn post_branch_agent_fork(State(st): State<AppState>, Path(name): Path<Str
 /// doc comment): short, monotonic-ish, and collision-proof in practice for a
 /// single user clicking "New session" — a true collision would just surface
 /// as a "branch already exists" git error on the next click.
+/// Turn a user-typed New-session branch name into a valid, tidy git branch name, or None if
+/// nothing usable remains (→ caller falls back to the auto `session/<hex>` name). Lowercases,
+/// turns any run of unsupported characters (spaces included) into a single `-`, keeps
+/// `a-z 0-9 - _ / .`, and strips leading/trailing separators plus git-forbidden `..` sequences.
+/// Anything still invalid is caught later by `git worktree add` and surfaced as an error.
+fn sanitize_branch_name(raw: &str) -> Option<String> {
+    let mut out = String::new();
+    let mut prev_sep = true; // true so a leading separator run is dropped
+    for ch in raw.trim().chars() {
+        let c = ch.to_ascii_lowercase();
+        if c.is_ascii_alphanumeric() || matches!(c, '_' | '/' | '.') {
+            out.push(c);
+            prev_sep = false;
+        } else if !prev_sep {
+            out.push('-');
+            prev_sep = true;
+        }
+    }
+    while out.contains("..") {
+        out = out.replace("..", ".");
+    }
+    let trimmed = out.trim_matches(|c| matches!(c, '-' | '.' | '/' | '_')).to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
 fn generate_session_branch() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -748,12 +792,21 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
 
     let dir = projects::project_path_from_name(&name).map_err(bad)?;
     let cfg = config::load();
-    // Same soft (TOCTOU-able) cap as `start_branch_agent` — see its TODO.
-    if st.agents.running_count() >= cfg.factory.max_concurrent_agents as usize {
-        return Err(bad("agent limit reached"));
-    }
+    // Same soft (TOCTOU-able) cap as `start_branch_agent` — prunes dead + reaps idle to make room.
+    ensure_agent_slot(&st, cfg.factory.max_concurrent_agents as usize)?;
 
-    let new_branch = generate_session_branch();
+    // Optional user-chosen branch name from the New-session dialog; sanitized to a valid git ref.
+    // Empty/all-invalid falls back to the auto `session/<hex>` name. A name that already exists is
+    // rejected up front so the user can pick another (rather than a cryptic worktree-add failure).
+    let new_branch = match b.get("branch").and_then(|v| v.as_str()).and_then(sanitize_branch_name) {
+        Some(chosen) => {
+            if git::local_branch_exists(&dir, &chosen) {
+                return Err(bad(format!("branch \"{chosen}\" already exists — pick another name")));
+            }
+            chosen
+        }
+        None => generate_session_branch(),
+    };
     let name2 = name.clone();
     let branch2 = new_branch.clone();
     let cfg2 = cfg.clone();
@@ -1255,6 +1308,19 @@ mod session_persist_tests {
             std::env::remove_var("KABLAN_CONFIG_DIR");
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    #[test]
+    fn sanitizes_user_branch_names() {
+        assert_eq!(super::sanitize_branch_name("Fix login bug").as_deref(), Some("fix-login-bug"));
+        assert_eq!(super::sanitize_branch_name("feature/New Thing").as_deref(), Some("feature/new-thing"));
+        assert_eq!(super::sanitize_branch_name("  --weird__/name..  ").as_deref(), Some("weird__/name"));
+        assert_eq!(super::sanitize_branch_name("MyBranch").as_deref(), Some("mybranch"));
+        // Nothing usable left → None (caller falls back to the auto session/<hex> name).
+        assert_eq!(super::sanitize_branch_name(""), None);
+        assert_eq!(super::sanitize_branch_name("   "), None);
+        assert_eq!(super::sanitize_branch_name("///"), None);
+        assert_eq!(super::sanitize_branch_name("***"), None);
     }
 
     #[test]

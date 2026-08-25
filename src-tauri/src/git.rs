@@ -170,6 +170,12 @@ fn head_meta(dir: &str) -> (Option<i64>, Option<String>) {
     }
 }
 
+/// True if a local branch of this exact name already exists — used to reject a user-chosen
+/// New-session branch name before `git worktree add -b` fails with a cryptic message.
+pub fn local_branch_exists(dir: &str, branch: &str) -> bool {
+    git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok()
+}
+
 pub fn list_branches(dir: &str) -> Vec<Branch> {
     let fmt = "%(refname:short)%09%(HEAD)%09%(upstream:short)%09%(objectname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(authorname)%09%(upstream:track,nobracket)";
     let format_arg = format!("--format={fmt}");

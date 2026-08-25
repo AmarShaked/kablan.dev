@@ -309,6 +309,25 @@ pub fn kill_group_pub(pid: i32, force: bool) {
     kill_group(pid, force);
 }
 
+/// True if a process with this pid currently exists — a signal-0 probe (`kill(pid, 0)`), which
+/// checks for the process without actually signalling it. Used to tell a genuinely-running agent
+/// from a registry record whose process has already exited (so a stale record can't inflate the
+/// concurrent-agent count). `EPERM` counts as alive (the process exists, we just may not own it).
+#[cfg(unix)]
+pub fn is_process_alive(pid: i32) -> bool {
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    !matches!(kill(Pid::from_raw(pid), None), Err(Errno::ESRCH))
+}
+
+#[cfg(not(unix))]
+pub fn is_process_alive(_pid: i32) -> bool {
+    // No cheap cross-process liveness probe wired up on Windows yet; assume alive so we never
+    // wrongly reap. The packaged Windows app manages process lifetimes separately.
+    true
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

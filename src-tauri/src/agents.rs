@@ -324,8 +324,70 @@ impl Agents {
         items.sort_by_key(|(_, p)| p.created_at);
         items.into_iter().map(|(id, p)| approval_view(id, &p.tool_name, &p.input, p.created_at)).collect()
     }
+    /// Number of agents with a process that is *actually* still running. Probes each recorded pid
+    /// (signal-0) rather than trusting the stored pid, so a record whose process already exited but
+    /// wasn't cleared can't inflate the count — that stale-count inflation was why "agent limit
+    /// reached" appeared spuriously and cleared after an app restart.
     pub fn running_count(&self) -> usize {
-        self.registry.lock().unwrap().values().filter(|r| r.view.pid.is_some()).count()
+        self.registry
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|r| r.view.pid.map(crate::processes::is_process_alive).unwrap_or(false))
+            .count()
+    }
+
+    /// Clear any record whose process has already exited but whose pid we never cleared, marking it
+    /// Failed and broadcasting the corrected status so the UI stops showing a dead agent as live.
+    /// Called before the concurrency-cap check so the cap reflects reality.
+    pub fn prune_dead(&self) {
+        let mut dead: Vec<String> = Vec::new();
+        {
+            let mut reg = self.registry.lock().unwrap();
+            for r in reg.values_mut() {
+                if let Some(pid) = r.view.pid {
+                    if !crate::processes::is_process_alive(pid) {
+                        r.view.pid = None;
+                        if matches!(
+                            r.view.status,
+                            AgentStatus::Idle | AgentStatus::Working | AgentStatus::AwaitingInput
+                        ) {
+                            r.view.status = AgentStatus::Failed;
+                        }
+                        dead.push(r.view.key.clone());
+                    }
+                }
+            }
+        }
+        for k in dead {
+            self.emit_status(&k);
+        }
+    }
+
+    /// Stop the oldest still-alive IDLE agent to free a concurrency slot for a new session. Never
+    /// touches a Working/AwaitingInput agent. Returns true if one was reaped. The reaped agent's
+    /// session id is persisted, so reopening its branch resumes the conversation — no work is lost.
+    pub fn reap_oldest_idle(&self) -> bool {
+        let target = {
+            let reg = self.registry.lock().unwrap();
+            reg.values()
+                .filter(|r| r.view.pid.is_some() && r.view.status == AgentStatus::Idle)
+                .min_by_key(|r| r.view.started_at)
+                .map(|r| r.view.key.clone())
+        };
+        let Some(key) = target else { return false };
+        self.stop(&key); // SIGTERM now + SIGKILL follow-up
+        // Clear the pid synchronously so an immediately-following running_count() sees the freed
+        // slot (the async child.wait handler also finalizes + emits when the process really dies).
+        {
+            let mut reg = self.registry.lock().unwrap();
+            if let Some(r) = reg.get_mut(&key) {
+                r.view.pid = None;
+                r.view.status = AgentStatus::Done;
+            }
+        }
+        self.emit_status(&key);
+        true
     }
 
     fn emit_status(&self, key: &str) {
@@ -912,6 +974,33 @@ mod tests {
         assert!(wait_until(|| agents.get("p::tf3").and_then(|v| v.pid).is_some()));
         assert!(agents.stop("p::tf3"));
         assert!(wait_until(|| matches!(agents.get("p::tf3").map(|v| v.status), Some(AgentStatus::Done) | Some(AgentStatus::Failed))));
+    }
+
+    #[test]
+    fn running_count_excludes_a_process_that_has_exited() {
+        let agents = Agents::new();
+        agents.start("p::dead1", &std::env::temp_dir().to_string_lossy(), mock_argv(), None);
+        assert!(wait_until(|| agents.get("p::dead1").and_then(|v| v.pid).is_some()));
+        assert_eq!(agents.running_count(), 1);
+        // Tell the mock agent to quit → its process exits. running_count probes liveness, so it
+        // drops to 0 even if the exit handler hasn't cleared the stored pid yet.
+        agents.send("p::dead1", "QUIT", &[]);
+        assert!(wait_until(|| agents.running_count() == 0));
+        agents.prune_dead();
+        assert!(agents.get("p::dead1").map(|v| v.pid.is_none()).unwrap_or(false));
+    }
+
+    #[test]
+    fn reap_oldest_idle_frees_a_slot_for_a_new_agent() {
+        let agents = Agents::new();
+        agents.start("p::idle1", &std::env::temp_dir().to_string_lossy(), mock_argv(), None);
+        // The mock agent is alive and idle after its init line (waiting on stdin).
+        assert!(wait_until(|| agents.get("p::idle1").and_then(|v| v.pid).is_some()));
+        assert_eq!(agents.running_count(), 1);
+        assert!(agents.reap_oldest_idle());
+        assert_eq!(agents.running_count(), 0);
+        // Nothing idle left to reap.
+        assert!(!agents.reap_oldest_idle());
     }
 
     /// Restart smoke test: calling `start` a second time on the SAME key

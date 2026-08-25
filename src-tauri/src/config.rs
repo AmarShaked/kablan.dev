@@ -63,7 +63,7 @@ pub struct FactorySettings {
 fn default_agent_command() -> String { "claude".into() }
 fn default_permission_mode() -> String { "acceptEdits".into() }
 fn default_branch_pattern() -> String { "feat/{feature}-{task}".into() }
-fn default_max_agents() -> u32 { 4 }
+fn default_max_agents() -> u32 { 8 }
 fn default_chat_history_days() -> u32 { 30 }
 
 impl Default for FactorySettings {
@@ -342,7 +342,7 @@ mod tests {
         // A config with no "factory" key loads with factory defaults.
         let cfg: AppConfig = serde_json::from_str(r#"{"parentDir":"/tmp"}"#).unwrap();
         assert_eq!(cfg.factory.agent_command, "claude");
-        assert_eq!(cfg.factory.max_concurrent_agents, 4);
+        assert_eq!(cfg.factory.max_concurrent_agents, 8);
         assert!(cfg.factory.stop_agents_on_exit);
         assert!(!cfg.factory.auto_resume_agents);
         assert_eq!(cfg.factory.permission_mode, "acceptEdits");
@@ -392,7 +392,7 @@ mod tests {
         // maxConcurrentAgents must stay >= 1; a 0 is ignored (keeps default).
         let patch = serde_json::json!({ "factory": { "maxConcurrentAgents": 0 } });
         let next = apply_patch(base, &patch);
-        assert_eq!(next.factory.max_concurrent_agents, 4);
+        assert_eq!(next.factory.max_concurrent_agents, 8);
     }
 
     #[test]
