@@ -78,6 +78,31 @@ describe("AgentChat", () => {
     expect(screen.getByText("do the thing")).toBeInTheDocument();
   });
 
+  it("clears the composer immediately on send (optimistic), not after the send resolves", async () => {
+    // A slow send: onMessage stays pending so we can observe the input state mid-flight.
+    let resolveSend: () => void = () => {};
+    const onMessage = vi.fn().mockReturnValue(new Promise<void>((r) => (resolveSend = r)));
+    renderChat([idleStatus], { onMessage });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "hello there");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    // Input is empty right away even though onMessage hasn't resolved.
+    expect(box).toHaveValue("");
+    expect(screen.getByText("hello there")).toBeInTheDocument(); // bubble is up
+    resolveSend();
+  });
+
+  it("on a failed send, removes the optimistic bubble and restores the text for a retry", async () => {
+    const onMessage = vi.fn().mockRejectedValue(new Error("boom"));
+    renderChat([idleStatus], { onMessage });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "will fail");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    // Fallback: bubble pulled back out, text restored to the composer.
+    await waitFor(() => expect(box).toHaveValue("will fail"));
+    expect(screen.queryByText("You")).not.toBeInTheDocument(); // no orphaned bubble left behind
+  });
+
   it("auto-starts the agent on the first message when it isn't running", async () => {
     const { onStart, onMessage } = renderChat([]); // no status seed → agent not running
     const box = screen.getByPlaceholderText(/message the agent/i);

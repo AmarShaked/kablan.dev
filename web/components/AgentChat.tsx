@@ -35,7 +35,9 @@ import { PERMISSION_OPTIONS, resolvePermissionMode } from "../lib/permissions.ts
  * back by the stream — it goes straight to stdin) or a raw agent stream-json event. `images` are
  * data-URL previews of any pasted images that went with the message. */
 type TimelineItem =
-  | { kind: "you"; text: string; images?: string[] }
+  // `id` tags an optimistically-added user bubble so a send that then fails can remove exactly
+  // that bubble (the seeded/edited bubbles omit it — they're never rolled back this way).
+  | { kind: "you"; text: string; images?: string[]; id?: string }
   | { kind: "agent"; event: unknown };
 
 /** A pasted image staged in the composer, awaiting send. `data` is the raw base64 (no data-URL
@@ -1205,9 +1207,11 @@ export function AgentChat({
   // (`status === "working"`) are parked here instead of sent, so they can keep typing the next
   // one. When the agent next goes idle, the HEAD is auto-dequeued and sent (one per idle
   // transition — see the effect below). Each item captures the composer text + staged attachments
-  // at enqueue time; the thinking keyword is applied at SEND time (consistent with `sendText`).
+  // at enqueue time; the thinking keyword is applied at SEND time (consistent with `sendMessage`).
   const [queue, setQueue] = useState<{ id: string; text: string; images: Attachment[] }[]>([]);
   const queueSeq = useRef(0);
+  // Monotonic id source for optimistic "You" bubbles, so a failed send can remove exactly its own.
+  const sendSeq = useRef(0);
   const transcriptRef = useRef<HTMLDivElement>(null);
   // Drag-and-drop overlay state. `dragDepth` counts enter/leave over nested children so the
   // "Drop images to attach" overlay doesn't flicker as the pointer crosses child elements.
@@ -1510,7 +1514,7 @@ export function AgentChat({
   // Core send: append the user's own "You" bubble to the timeline immediately (independent of
   // whatever the agent does next), then forward the message (with the thinking keyword applied)
   // to the agent, auto-starting it first if it isn't running. Returns whether it succeeded. Used
-  // by both the composer path (`sendText`) and the queue auto-drain effect.
+  // by both the composer path (`send`) and the queue auto-drain effect.
   const sendMessage = async (value: string, imgs: Attachment[]): Promise<boolean> => {
     const t = value.trim();
     if (!t && imgs.length === 0) return false;
@@ -1518,7 +1522,10 @@ export function AgentChat({
     // the agent receives (so a "Think hard" setting doesn't visibly clutter the transcript).
     const keyword = THINKING_KEYWORD[thinking];
     const outgoing = keyword ? `${t}\n\n${keyword}` : t;
-    setTimeline((prev) => [...prev, { kind: "you", text: t, images: imgs.map((a) => a.url) }]);
+    // Optimistically show the bubble immediately, tagged so we can roll back exactly this one if the
+    // send fails (auto-start error, dropped connection, agent limit, …).
+    const optimisticId = `you-${(sendSeq.current += 1)}`;
+    setTimeline((prev) => [...prev, { kind: "you", id: optimisticId, text: t, images: imgs.map((a) => a.url) }]);
     setBusy(true);
     try {
       // Auto-start the agent on the first message so the user can just type — no explicit Start
@@ -1533,18 +1540,12 @@ export function AgentChat({
       return true;
     } catch (err) {
       toast.error(String(err));
+      // Fallback: pull the optimistic bubble back out so a failed send doesn't leave an orphan.
+      setTimeline((prev) => prev.filter((it) => !(it.kind === "you" && it.id === optimisticId)));
       return false;
     } finally {
       setBusy(false);
     }
-  };
-  // Send path for the free-text composer: pulls the currently-staged attachments, clears them,
-  // and delivers the message. Returns whether the send succeeded.
-  const sendText = async (value: string): Promise<boolean> => {
-    const imgs = attachments;
-    if (!value.trim() && imgs.length === 0) return false;
-    setAttachments([]);
-    return sendMessage(value, imgs);
   };
   // Enqueue the current composer contents as a pending message, then clear the composer +
   // attachments so the user can keep typing the next one.
@@ -1566,7 +1567,19 @@ export function AgentChat({
       enqueue();
       return;
     }
-    if (await sendText(text)) setText("");
+    const value = text;
+    const imgs = attachments;
+    if (!value.trim() && imgs.length === 0) return;
+    // Optimistic: clear the composer immediately so the sent text doesn't linger in the input beside
+    // the bubble it just produced. sendMessage adds the bubble; on failure it removes that bubble and
+    // we restore the text + attachments here so the user can retry without retyping.
+    setText("");
+    setAttachments([]);
+    const ok = await sendMessage(value, imgs);
+    if (!ok) {
+      setText(value);
+      setAttachments(imgs);
+    }
   };
 
   // Recompute the typeahead menu from the latest composer value + caret. Called on every text
@@ -1664,7 +1677,7 @@ export function AgentChat({
   };
 
   // Composer is enabled whenever the branch can host an agent — the first message auto-starts it
-  // (see sendText), so we don't require a running process up front.
+  // (see `send`), so we don't require a running process up front.
   const chatEnabled = canChat;
 
   return (
