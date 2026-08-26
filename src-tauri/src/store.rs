@@ -83,6 +83,16 @@ pub struct StoredImage {
     pub data: String,
 }
 
+/// One agent turn: a `claude` process that took a single message and ran to completion.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionRow {
+    pub id: String,
+    pub run_reason: String,
+    pub status: String,
+    pub exit_code: Option<i32>,
+}
+
 /// One message waiting in a branch's follow-up queue.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct QueuedMessage {
@@ -221,6 +231,84 @@ impl Store {
             .collect()
     }
 
+    // --- Execution processes ----------------------------------------------------------------
+    // One row per agent TURN. A turn is a `claude` process that receives one message, streams its
+    // work, and exits — so "what happened, and did it finish" is durable rather than inferred from
+    // a live process that may no longer exist.
+
+    /// Open a row for a turn that is starting. `run_reason` is "initial" for the first turn of a
+    /// conversation and "followUp" afterwards. Returns the new execution id.
+    pub async fn begin_execution(
+        &self,
+        branch_key: &str,
+        run_reason: &str,
+        pid: Option<i32>,
+    ) -> Result<String, String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO execution_processes (id, branch_key, run_reason, status, pid, started_at)
+             VALUES (?1, ?2, ?3, 'running', ?4, ?5)",
+        )
+        .bind(&id)
+        .bind(branch_key)
+        .bind(run_reason)
+        .bind(pid)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("store: begin_execution failed: {e}"))?;
+        Ok(id)
+    }
+
+    /// Close a turn's row once its process exits. `exit_code` of `Some(0)` is a completed turn;
+    /// anything else (including a signal, which reports `None`) is a failure.
+    pub async fn finish_execution(&self, id: &str, exit_code: Option<i32>) -> Result<(), String> {
+        let status = if exit_code == Some(0) { "completed" } else { "failed" };
+        sqlx::query(
+            "UPDATE execution_processes SET status = ?2, exit_code = ?3, ended_at = ?4 WHERE id = ?1",
+        )
+        .bind(id)
+        .bind(status)
+        .bind(exit_code)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("store: finish_execution failed: {e}"))?;
+        Ok(())
+    }
+
+    /// A branch's turns, newest first.
+    pub async fn list_executions(&self, branch_key: &str) -> Vec<ExecutionRow> {
+        sqlx::query(
+            "SELECT id, run_reason, status, exit_code FROM execution_processes
+             WHERE branch_key = ?1 ORDER BY rowid DESC",
+        )
+        .bind(branch_key)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| ExecutionRow {
+            id: row.get("id"),
+            run_reason: row.get("run_reason"),
+            status: row.get("status"),
+            exit_code: row.get("exit_code"),
+        })
+        .collect()
+    }
+
+    /// Close out turns still marked running at startup — their processes died with the last run.
+    pub async fn reconcile_stale_executions(&self) -> u64 {
+        sqlx::query(
+            "UPDATE execution_processes SET status = 'failed', ended_at = ?1 WHERE status = 'running'",
+        )
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map(|r| r.rows_affected())
+        .unwrap_or(0)
+    }
+
     // --- Composer drafts -------------------------------------------------------------------
     // The unsent contents of a branch's composer. Kept server-side so a half-written message
     // survives a reload, a branch switch, and an app restart instead of living only in React
@@ -300,7 +388,10 @@ impl Store {
     /// The branch's queued messages, oldest first.
     pub async fn list_queue(&self, branch_key: &str) -> Vec<QueuedMessage> {
         sqlx::query(
-            "SELECT id, text, images FROM follow_up_queue WHERE branch_key = ?1 ORDER BY created_at, id",
+            // Order by rowid: SQLite assigns it in insertion order, so this is true FIFO.
+            // created_at is only millisecond-resolution, so two messages queued in the same
+            // millisecond tied and fell back to the random uuid — delivering them out of order.
+            "SELECT id, text, images FROM follow_up_queue WHERE branch_key = ?1 ORDER BY rowid",
         )
         .bind(branch_key)
         .fetch_all(&self.pool)
@@ -520,6 +611,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn executions_record_each_turn_and_its_outcome() {
+        let (store, dir) = open_temp("exec").await;
+        let first = store.begin_execution("p::branch:e", "initial", Some(42)).await.unwrap();
+        let second = store.begin_execution("p::branch:e", "followUp", Some(43)).await.unwrap();
+
+        // Newest first, both still running.
+        let rows = store.list_executions("p::branch:e").await;
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.status == "running"));
+
+        store.finish_execution(&first, Some(0)).await.unwrap();
+        store.finish_execution(&second, Some(1)).await.unwrap();
+        let rows = store.list_executions("p::branch:e").await;
+        let by_id = |id: &str| rows.iter().find(|r| r.id == id).unwrap().clone();
+        assert_eq!(by_id(&first).status, "completed");
+        assert_eq!(by_id(&second).status, "failed", "a non-zero exit is a failed turn");
+        assert_eq!(by_id(&second).exit_code, Some(1));
+        // A killed process reports no code at all — still a failure, not a success.
+        let third = store.begin_execution("p::branch:e", "followUp", None).await.unwrap();
+        store.finish_execution(&third, None).await.unwrap();
+        assert_eq!(by_id_in(&store.list_executions("p::branch:e").await, &third).status, "failed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn reconcile_closes_turns_left_running_by_a_previous_run() {
+        let (store, dir) = open_temp("execrec").await;
+        store.begin_execution("p::branch:x", "initial", Some(7)).await.unwrap();
+        let done = store.begin_execution("p::branch:x", "followUp", Some(8)).await.unwrap();
+        store.finish_execution(&done, Some(0)).await.unwrap();
+
+        assert_eq!(store.reconcile_stale_executions().await, 1, "only the still-running one");
+        let rows = store.list_executions("p::branch:x").await;
+        assert!(rows.iter().all(|r| r.status != "running"));
+        assert_eq!(by_id_in(&rows, &done).status, "completed", "a finished turn is left alone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn by_id_in(rows: &[ExecutionRow], id: &str) -> ExecutionRow {
+        rows.iter().find(|r| r.id == id).expect("row present").clone()
+    }
+
+    #[tokio::test]
     async fn drafts_round_trip_and_clear_when_emptied() {
         let (store, dir) = open_temp("draft").await;
         assert_eq!(store.get_draft("p::branch:d").await, (String::new(), vec![]));
@@ -558,6 +692,29 @@ mod tests {
             store.list_queue("p::branch:q").await.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
             vec!["second"]
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression: `created_at` is only millisecond-resolution, so a burst of enqueues lands on the
+    /// same timestamp. Ordering used to fall back to the random uuid, which delivered a user's
+    /// messages out of order. Insertion order (rowid) must decide instead.
+    #[tokio::test]
+    async fn queue_stays_in_order_for_messages_enqueued_in_the_same_millisecond() {
+        let (store, dir) = open_temp("fifo").await;
+        let sent: Vec<String> = (0..25).map(|n| format!("msg-{n:02}")).collect();
+        for t in &sent {
+            store.enqueue_follow_up("p::branch:burst", t, &[]).await.unwrap();
+        }
+        let got: Vec<String> =
+            store.list_queue("p::branch:burst").await.into_iter().map(|m| m.text).collect();
+        assert_eq!(got, sent, "queued messages must come back in the order they were sent");
+
+        // Draining follows the same order.
+        let mut drained = Vec::new();
+        while let Some(m) = store.take_next_queued("p::branch:burst").await {
+            drained.push(m.text);
+        }
+        assert_eq!(drained, sent, "draining must also be FIFO");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
