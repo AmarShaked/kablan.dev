@@ -30,6 +30,12 @@ pub fn install_global(store: Store) -> bool {
     }
 }
 
+/// The globally-installed store plus the runtime to spawn on, for sync callers that need to run
+/// their own async work (e.g. draining the follow-up queue). `None` before startup installs one.
+pub fn global() -> Option<(Store, tokio::runtime::Handle)> {
+    GLOBAL.get().cloned()
+}
+
 /// Record a newly-captured Claude session id from sync code (the supervisor's reader thread learns
 /// it from the stream's `init` event). Separate from `mirror_status` because the id often arrives
 /// on an event that doesn't change status, so the status hook alone would miss it — and missing it
@@ -65,6 +71,24 @@ pub struct SessionRow {
     pub session_id: Option<String>,
     pub status: String,
     pub worktree_path: Option<String>,
+}
+
+/// An attachment carried by a draft or a queued message. Same `{mediaType, data}` shape the send
+/// endpoint already takes (raw base64, no data-URL prefix), so a drained message can go straight
+/// to the agent; the frontend rebuilds a `data:` URL from these two fields for its thumbnails.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredImage {
+    pub media_type: String,
+    pub data: String,
+}
+
+/// One message waiting in a branch's follow-up queue.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct QueuedMessage {
+    pub id: String,
+    pub text: String,
+    pub images: Vec<StoredImage>,
 }
 
 #[derive(Clone)]
@@ -195,6 +219,128 @@ impl Store {
                 worktree_path: row.get("worktree_path"),
             })
             .collect()
+    }
+
+    // --- Composer drafts -------------------------------------------------------------------
+    // The unsent contents of a branch's composer. Kept server-side so a half-written message
+    // survives a reload, a branch switch, and an app restart instead of living only in React
+    // state. `images` is a JSON array of data URLs.
+
+    /// Store (or clear) a branch's draft. An empty draft with no images deletes the row rather
+    /// than leaving an empty one behind.
+    pub async fn set_draft(&self, branch_key: &str, text: &str, images: &[StoredImage]) -> Result<(), String> {
+        if text.is_empty() && images.is_empty() {
+            sqlx::query("DELETE FROM drafts WHERE branch_key = ?1")
+                .bind(branch_key)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| format!("store: clear draft failed: {e}"))?;
+            return Ok(());
+        }
+        let images_json = serde_json::to_string(images).unwrap_or_else(|_| "[]".to_string());
+        sqlx::query(
+            "INSERT INTO drafts (branch_key, text, images, updated_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(branch_key) DO UPDATE SET
+               text = excluded.text, images = excluded.images, updated_at = excluded.updated_at",
+        )
+        .bind(branch_key)
+        .bind(text)
+        .bind(images_json)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("store: set_draft failed: {e}"))?;
+        Ok(())
+    }
+
+    /// The branch's draft as `(text, images)`, or `("", [])` when there is none.
+    pub async fn get_draft(&self, branch_key: &str) -> (String, Vec<StoredImage>) {
+        let Some(row) = sqlx::query("SELECT text, images FROM drafts WHERE branch_key = ?1")
+            .bind(branch_key)
+            .fetch_optional(&self.pool)
+            .await
+            .ok()
+            .flatten()
+        else {
+            return (String::new(), Vec::new());
+        };
+        let text: String = row.get("text");
+        let images: String = row.get("images");
+        (text, serde_json::from_str(&images).unwrap_or_default())
+    }
+
+    // --- Follow-up queue -------------------------------------------------------------------
+    // Messages submitted while a turn was still running. Server-side so a queued message survives
+    // a reload; drained in FIFO order when the agent next goes idle.
+
+    /// Append a message to the branch's queue and return its id.
+    pub async fn enqueue_follow_up(
+        &self,
+        branch_key: &str,
+        text: &str,
+        images: &[StoredImage],
+    ) -> Result<String, String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let images_json = serde_json::to_string(images).unwrap_or_else(|_| "[]".to_string());
+        sqlx::query(
+            "INSERT INTO follow_up_queue (id, branch_key, text, images, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(&id)
+        .bind(branch_key)
+        .bind(text)
+        .bind(images_json)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("store: enqueue failed: {e}"))?;
+        Ok(id)
+    }
+
+    /// The branch's queued messages, oldest first.
+    pub async fn list_queue(&self, branch_key: &str) -> Vec<QueuedMessage> {
+        sqlx::query(
+            "SELECT id, text, images FROM follow_up_queue WHERE branch_key = ?1 ORDER BY created_at, id",
+        )
+        .bind(branch_key)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| {
+            let images: String = row.get("images");
+            QueuedMessage {
+                id: row.get("id"),
+                text: row.get("text"),
+                images: serde_json::from_str(&images).unwrap_or_default(),
+            }
+        })
+        .collect()
+    }
+
+    /// Remove one queued message (the user cancelled it, or it has been sent). Returns whether a
+    /// row was actually removed — the caller uses that to avoid double-sending a message another
+    /// client already drained.
+    pub async fn remove_queued(&self, id: &str) -> bool {
+        sqlx::query("DELETE FROM follow_up_queue WHERE id = ?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|r| r.rows_affected() > 0)
+            .unwrap_or(false)
+    }
+
+    /// Claim the branch's oldest queued message, removing it in the same step. The delete is what
+    /// makes the claim exclusive: if two drains race (two windows, or a status flap), only the one
+    /// whose delete affected a row gets the message, so it is never sent twice.
+    pub async fn take_next_queued(&self, branch_key: &str) -> Option<QueuedMessage> {
+        loop {
+            let next = self.list_queue(branch_key).await.into_iter().next()?;
+            if self.remove_queued(&next.id).await {
+                return Some(next);
+            }
+            // Lost the race for that one — try the next still in the queue.
+        }
     }
 
     /// Reconcile statuses left behind by a crash or a hard quit: any branch still recorded as
@@ -370,6 +516,81 @@ mod tests {
         let got = got.expect("status should be mirrored into the store");
         assert_eq!(got.status, "working");
         assert_eq!(got.session_id.as_deref(), Some("sid-9"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn drafts_round_trip_and_clear_when_emptied() {
+        let (store, dir) = open_temp("draft").await;
+        assert_eq!(store.get_draft("p::branch:d").await, (String::new(), vec![]));
+
+        let img = StoredImage { media_type: "image/png".into(), data: "AAEC".into() };
+        store.set_draft("p::branch:d", "half written", std::slice::from_ref(&img)).await.unwrap();
+        let (text, images) = store.get_draft("p::branch:d").await;
+        assert_eq!(text, "half written");
+        assert_eq!(images, vec![img]);
+
+        // Drafts are per branch — one branch's draft never leaks into another's composer.
+        assert_eq!(store.get_draft("p::branch:other").await.0, "");
+
+        // Emptying the composer clears the draft instead of leaving an empty row.
+        store.set_draft("p::branch:d", "", &[]).await.unwrap();
+        assert_eq!(store.get_draft("p::branch:d").await, (String::new(), vec![]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn queue_is_fifo_per_branch_and_removable() {
+        let (store, dir) = open_temp("queue").await;
+        let first = store.enqueue_follow_up("p::branch:q", "first", &[]).await.unwrap();
+        store.enqueue_follow_up("p::branch:q", "second", &[]).await.unwrap();
+        store.enqueue_follow_up("p::branch:elsewhere", "other", &[]).await.unwrap();
+
+        let q = store.list_queue("p::branch:q").await;
+        assert_eq!(q.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(), vec!["first", "second"]);
+        assert_eq!(store.list_queue("p::branch:elsewhere").await.len(), 1, "queues are per branch");
+
+        // Draining the head removes exactly it; a second removal reports false, which is how the
+        // drain avoids re-sending a message another client already took.
+        assert!(store.remove_queued(&first).await);
+        assert!(!store.remove_queued(&first).await);
+        assert_eq!(
+            store.list_queue("p::branch:q").await.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+            vec!["second"]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn take_next_queued_claims_each_message_exactly_once() {
+        let (store, dir) = open_temp("take").await;
+        store.enqueue_follow_up("p::branch:t", "one", &[]).await.unwrap();
+        store.enqueue_follow_up("p::branch:t", "two", &[]).await.unwrap();
+
+        // FIFO, and each take removes what it claimed.
+        assert_eq!(store.take_next_queued("p::branch:t").await.unwrap().text, "one");
+        assert_eq!(store.take_next_queued("p::branch:t").await.unwrap().text, "two");
+        assert!(store.take_next_queued("p::branch:t").await.is_none());
+
+        // Concurrent drains must not deliver the same message twice — the delete is the claim.
+        store.enqueue_follow_up("p::branch:t", "only", &[]).await.unwrap();
+        let (a, b) = tokio::join!(
+            store.take_next_queued("p::branch:t"),
+            store.take_next_queued("p::branch:t")
+        );
+        let claimed: Vec<_> = [a, b].into_iter().flatten().collect();
+        assert_eq!(claimed.len(), 1, "exactly one drain may claim a queued message");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn queued_images_survive_the_round_trip() {
+        let (store, dir) = open_temp("qimg").await;
+        let img = StoredImage { media_type: "image/png".into(), data: "Zm9v".into() };
+        store.enqueue_follow_up("p::branch:i", "look", std::slice::from_ref(&img)).await.unwrap();
+        let got = store.take_next_queued("p::branch:i").await.unwrap();
+        assert_eq!(got.text, "look");
+        assert_eq!(got.images, vec![img], "attachments must survive so a drained message can be sent");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

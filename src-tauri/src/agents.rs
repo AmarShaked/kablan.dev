@@ -523,7 +523,15 @@ impl Agents {
                         crate::persist_branch_session_id(&k, sid);
                     }
                     let _ = me.tx.send(json!({ "type":"agent-event","key":k,"event":raw }).to_string());
-                    if status_changed { me.emit_status(&k); }
+                    if status_changed {
+                        me.emit_status(&k);
+                        // The turn just ended — hand the next queued message to the agent. Doing
+                        // this server-side means a message parked while it was busy still gets
+                        // sent even if the user closed the window.
+                        if matches!(me.get(&k).map(|v| v.status), Some(AgentStatus::Idle)) {
+                            crate::drain_follow_up_queue(Arc::clone(&me), k.clone());
+                        }
+                    }
                 }
             });
         }

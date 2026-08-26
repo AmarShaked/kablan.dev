@@ -124,6 +124,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
         .route("/api/projects/:name/factory/agent/approval", post(post_branch_agent_approval))
         .route("/api/projects/:name/factory/agent", get(get_branch_agent))
+        .route("/api/projects/:name/factory/agent/draft", get(get_branch_draft).put(put_branch_draft))
+        .route("/api/projects/:name/factory/agent/queue", get(get_branch_queue).post(post_branch_queue))
+        .route("/api/projects/:name/factory/agent/queue/:id", axum::routing::delete(delete_branch_queued))
         .route("/api/projects/:name/worktrees", post(post_worktree))
         .route("/api/projects/:name/env", get(get_env).put(put_env))
         .route("/api/projects/:name/command", put(put_command))
@@ -525,6 +528,27 @@ fn parse_branch_agent_key(key: &str) -> Option<(&str, &str)> {
 /// This hook closes that gap. Idempotent (only writes when nothing is stored yet)
 /// and best-effort (never panics/propagates). Runs on the reader thread, so the
 /// blocking file I/O is fine — it does not touch the async runtime.
+/// A turn just finished on `key` — send the next queued message, if any. Called from the agent
+/// supervisor when a branch goes idle, so a message the user parked while the agent was busy is
+/// delivered by the server rather than depending on a browser tab still being open.
+///
+/// `take_next_queued` claims the message by deleting it, so two racing drains can't send it twice.
+/// Fire-and-forget: this runs on a reader thread, which must never block on disk.
+pub(crate) fn drain_follow_up_queue(agents: Arc<agents::Agents>, key: String) {
+    let Some((store, handle)) = store::global() else { return };
+    handle.spawn(async move {
+        let Some(msg) = store.take_next_queued(&key).await else { return };
+        let images: Vec<(String, String)> =
+            msg.images.iter().cloned().map(|i| (i.media_type, i.data)).collect();
+        if !agents.send(&key, &msg.text, &images) {
+            // The agent went away between going idle and this send (stopped, crashed). Put the
+            // message back — with its attachments — so it isn't silently swallowed; the next
+            // start drains it.
+            let _ = store.enqueue_follow_up(&key, &msg.text, &msg.images).await;
+        }
+    });
+}
+
 pub(crate) fn persist_branch_session_id(key: &str, session_id: &str) {
     let Some((name, branch)) = parse_branch_agent_key(key) else { return };
     // Dual-write: the store is the new home for session ids, factory.json stays written so an
@@ -1005,6 +1029,95 @@ async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, 
     // re-renders the open Approve/Deny gates instead of losing them.
     let approvals = st.agents.pending_approvals(&key);
     Ok(Json(json!({ "agent": agent, "events": events, "approvals": approvals })))
+}
+
+/// Parse a body's `images` into the store's shape. Same `{mediaType, data}` objects the send
+/// endpoint takes (see `parse_message_images`), so a drained queue message needs no conversion.
+fn parse_stored_images(b: &Value) -> Vec<store::StoredImage> {
+    parse_message_images(b)
+        .into_iter()
+        .map(|(media_type, data)| store::StoredImage { media_type, data })
+        .collect()
+}
+
+/// Resolve `?branch=` into the store key, erroring the same way the other agent routes do.
+fn branch_key_from_query(name: &str, q: &HashMap<String, String>) -> Result<String, ApiError> {
+    projects::project_path_from_name(name).map_err(bad)?;
+    let branch = q.get("branch").filter(|s| !s.is_empty()).ok_or_else(|| bad("branch is required"))?;
+    Ok(branch_agent_key(name, branch))
+}
+
+/// The store, or a 503 — these routes have no meaningful in-memory fallback (their whole point is
+/// that the data outlives the process), so they say so rather than pretending to succeed.
+fn store_or_err(st: &AppState) -> Result<&store::Store, ApiError> {
+    st.store
+        .as_ref()
+        .ok_or_else(|| ApiError(StatusCode::SERVICE_UNAVAILABLE, "agent store unavailable".into()))
+}
+
+/// `GET .../factory/agent/draft?branch=` — the branch's unsent composer contents.
+async fn get_branch_draft(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+) -> ApiResult {
+    let key = branch_key_from_query(&name, &q)?;
+    let (text, images) = store_or_err(&st)?.get_draft(&key).await;
+    Ok(Json(json!({ "text": text, "images": images })))
+}
+
+/// `PUT .../factory/agent/draft` — save (or, when empty, clear) the composer draft.
+/// Body: `{ branch, text, images? }`.
+async fn put_branch_draft(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("");
+    let images = parse_stored_images(&b);
+    store_or_err(&st)?
+        .set_draft(&branch_agent_key(&name, &branch), text, &images)
+        .await
+        .map_err(server_err)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// `GET .../factory/agent/queue?branch=` — messages waiting for the current turn to finish.
+async fn get_branch_queue(
+    State(st): State<AppState>,
+    Path(name): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+) -> ApiResult {
+    let key = branch_key_from_query(&name, &q)?;
+    let queued = store_or_err(&st)?.list_queue(&key).await;
+    Ok(Json(json!({ "queued": queued })))
+}
+
+/// `POST .../factory/agent/queue` — park a message until the agent goes idle.
+/// Body: `{ branch, text, images? }`.
+async fn post_branch_queue(State(st): State<AppState>, Path(name): Path<String>, body: Bytes) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let b = parse_body(&body);
+    let branch = branch_from_body(&b)?;
+    let text = b.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let images = parse_stored_images(&b);
+    if text.is_empty() && images.is_empty() {
+        return Err(bad("text or images required"));
+    }
+    let id = store_or_err(&st)?
+        .enqueue_follow_up(&branch_agent_key(&name, &branch), &text, &images)
+        .await
+        .map_err(server_err)?;
+    Ok(Json(json!({ "id": id })))
+}
+
+/// `DELETE .../factory/agent/queue/:id` — drop a queued message the user cancelled.
+async fn delete_branch_queued(
+    State(st): State<AppState>,
+    Path((name, id)): Path<(String, String)>,
+) -> ApiResult {
+    projects::project_path_from_name(&name).map_err(bad)?;
+    let removed = store_or_err(&st)?.remove_queued(&id).await;
+    Ok(Json(json!({ "removed": removed })))
 }
 
 async fn get_inbox(State(st): State<AppState>) -> ApiResult {
