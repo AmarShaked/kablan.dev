@@ -258,6 +258,13 @@ function isRunningStatus(status: AgentStatus | undefined): boolean {
   return status === "idle" || status === "working" || status === "awaitingInput";
 }
 
+/** True while a turn is actually in flight — i.e. there is a process to stop. Between turns the
+ * branch is `idle` with nothing running, so offering Stop there would be a button that does
+ * nothing. */
+function isTurnInFlight(status: AgentStatus | undefined): boolean {
+  return status === "working" || status === "awaitingInput";
+}
+
 /** A terse one-line label for a tool call — the tool name plus its most telling argument (a file
  * basename, a truncated command, a search pattern) so the transcript reads like Claude Code's
  * compact tool lines rather than dumping full inputs. */
@@ -1163,7 +1170,11 @@ export function AgentChat({
    * `opts.permissionMode` apply per-branch launch overrides — restarting resumes the persisted
    * session so context is kept. */
   onStart: (opts?: { model?: string; permissionMode?: string }) => Promise<unknown>;
-  onMessage: (text: string, images?: { mediaType: string; data: string }[]) => Promise<unknown>;
+  onMessage: (
+    text: string,
+    images?: { mediaType: string; data: string }[],
+    opts?: { model?: string; permissionMode?: string },
+  ) => Promise<unknown>;
   onStop: () => Promise<unknown>;
   /** EDIT / RETRY: fork the session and re-run from an earlier turn. `messageUuid` is the fork point
    * (a preceding assistant-message uuid, or null to start fresh when editing the very first turn),
@@ -1387,6 +1398,7 @@ export function AgentChat({
   const events = useMemo(() => [...backfill, ...live.events], [backfill, live.events]);
   const status = live.status ?? backfillStatus;
   const running = isRunningStatus(status);
+  const turnInFlight = isTurnInFlight(status);
 
   // Live "working" elapsed timer for the ThinkingRow, so a long turn visibly progresses.
   // The turn-start anchor (`live.workingSince`) lives in the stream store, not a local ref, so it
@@ -1612,14 +1624,13 @@ export function AgentChat({
     setTimeline((prev) => [...prev, { kind: "you", id: optimisticId, text: t, images: imgs.map((a) => a.url) }]);
     setBusy(true);
     try {
-      // Auto-start the agent on the first message so the user can just type — no explicit Start
-      // click. `running` is false until an agent process is alive for this branch; onStart()
-      // resolves once the process is spawned (stdin ready), then we deliver the message. The
-      // selected model / permission mode are applied at launch.
-      if (!running) await onStart({ model, permissionMode });
+      // No explicit start needed: every turn is its own process, and the server spawns one for
+      // this message (resuming the conversation) when nothing is running. Starting one here first
+      // would leave a process the message then queues behind — and nothing would drain it.
       await onMessage(
         outgoing,
         imgs.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+        { model, permissionMode },
       );
       return true;
     } catch (err) {
@@ -2015,7 +2026,7 @@ export function AgentChat({
             onChange={(v) => setThinking(v as keyof typeof THINKING_KEYWORD)}
             options={THINKING_OPTIONS}
           />
-          {running && (
+          {turnInFlight && (
             <button
               type="button"
               onClick={stop}

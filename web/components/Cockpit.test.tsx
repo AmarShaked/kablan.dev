@@ -265,8 +265,9 @@ describe("Cockpit", () => {
       expect(screen.getByText("Working")).toBeInTheDocument();
     });
 
-    it("auto-starts (factory.agentStart) then sends when the composer is used on a not-running agent", async () => {
-      renderWithSeed([]); // no agent running yet
+    it("sends straight to factory.agentMessage on a not-running agent — the server spawns the turn", async () => {
+      vi.mocked(api.factory.agentStart).mockClear(); // the spy is shared across tests in this file
+      renderWithSeed([]); // nothing running yet
       // Typing is driven via fireEvent.change: the composer lives inside a react-resizable-panels
       // panel, and userEvent.type's per-key path silently no-ops there under jsdom (real browsers
       // are unaffected). fireEvent.change fires the same onChange the component listens to.
@@ -274,13 +275,11 @@ describe("Cockpit", () => {
       fireEvent.change(box, { target: { value: "kick off" } });
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() => {
-        expect(api.factory.agentStart).toHaveBeenCalledWith(
-          "proj",
-          "feat/one",
-          expect.objectContaining({ model: "" }),
-        );
-        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off", []);
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "kick off", [], { model: "", permissionMode: "acceptEdits" });
       });
+      // Per-turn: the message endpoint launches the process, so the client must not start one
+      // first — that would leave a process the message queues behind, with nothing to drain it.
+      expect(api.factory.agentStart).not.toHaveBeenCalled();
     });
 
     it("calls factory.agentStop with (project, branch) when Stop is clicked", async () => {
@@ -295,7 +294,10 @@ describe("Cockpit", () => {
       fireEvent.change(box, { target: { value: "do the thing" } }); // see auto-starts test re: fireEvent
       await userEvent.click(screen.getByRole("button", { name: /send/i }));
       await vi.waitFor(() =>
-        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing", []),
+        expect(api.factory.agentMessage).toHaveBeenCalledWith("proj", "feat/one", "do the thing", [], {
+          model: "",
+          permissionMode: "acceptEdits",
+        }),
       );
     });
 

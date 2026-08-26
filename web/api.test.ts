@@ -29,7 +29,14 @@ describe("factory types", () => {
       [string, string, { copyNodeModules?: boolean; copyEnv?: boolean; model?: string; permissionMode?: string }?]
     >();
     expectTypeOf<typeof api.factory.agentMessage>().parameters.toEqualTypeOf<
-      [string, string, string, { mediaType: string; data: string }[]?]
+      [
+        string,
+        string,
+        string,
+        { mediaType: string; data: string }[]?,
+        // Per-turn: each message launches its own process, so the composer's overrides ride along.
+        { model?: string; permissionMode?: string }?,
+      ]
     >();
     expectTypeOf<typeof api.factory.agentStop>().parameters.toEqualTypeOf<[string, string]>();
     expectTypeOf<typeof api.factory.getAgent>().parameters.toEqualTypeOf<[string, string]>();

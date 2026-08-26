@@ -52,6 +52,17 @@ fn bad(msg: impl Into<String>) -> ApiError {
     ApiError(StatusCode::BAD_REQUEST, msg.into())
 }
 
+/// What `start_branch_agent` should do once the branch's working copy is ready.
+#[derive(Clone, Copy, PartialEq)]
+enum StartMode {
+    /// Make the branch ready (worktree, dev assets, session bookkeeping) WITHOUT spawning
+    /// anything. In the per-turn model nothing runs between turns, so "Start working" and RESET
+    /// prepare only — the first message spawns the first turn.
+    Prepare,
+    /// Spawn a process for one turn; the caller delivers the message immediately after.
+    Turn,
+}
+
 /// Ensure there is room to start one more agent under the concurrency cap. First prunes records
 /// whose process already exited (they inflated the count and made "agent limit reached" show up
 /// spuriously — clearing after an app restart), then reaps the oldest IDLE agent(s) to free slots.
@@ -587,7 +598,8 @@ async fn drain_next_turn(st: &AppState, key: &str) {
     let images: Vec<(String, String)> =
         msg.images.iter().cloned().map(|i| (i.media_type, i.data)).collect();
 
-    let started = start_branch_agent(st, &name, &branch, false, false, None, None, None, false, true).await;
+    let started =
+        start_branch_agent(st, &name, &branch, false, false, None, None, None, false, StartMode::Turn).await;
     let delivered = started.is_ok() && st.agents.send(key, &msg.text, &images);
     if !delivered {
         // Couldn't run it (spawn failed, agent limit, worktree gone). Put it back rather than
@@ -631,9 +643,8 @@ async fn start_branch_agent(
     // Start a brand-new conversation: ignore (and forget) any persisted session id, so nothing is
     // resumed. The chat RESET path. Overrides `resume_at`.
     fresh: bool,
-    // Per-turn execution: this process serves ONE turn and exits (the caller delivers the message
-    // right after). Opens an `execution_processes` row so the turn is recorded durably.
-    per_turn: bool,
+    // Whether to actually spawn a turn, or only make the branch ready. See `StartMode`.
+    mode: StartMode,
 ) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
     let mut cfg = config::load();
@@ -715,19 +726,29 @@ async fn start_branch_agent(
     let session_id = stored_session_id.or(factory_session_id);
     // `resume_at` is only meaningful when resuming a session (see build_agent_argv); when `fresh`
     // cleared the session id it's dropped automatically since `session_id` is None.
+    if mode == StartMode::Prepare {
+        // Ready, but nothing running — record that so the cockpit shows the branch as startable,
+        // and hand back a matching view.
+        if let Some(store) = &st.store {
+            let _ = store.upsert_session(&key, session_id.as_deref(), "idle", Some(&worktree_path)).await;
+        }
+        return Ok(agents::AgentView {
+            key,
+            status: agents::AgentStatus::Idle,
+            session_id,
+            pid: None,
+            started_at: 0,
+            exit_code: None,
+        });
+    }
     let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref(), resume_at.as_deref());
-    let view = if per_turn {
-        // Record the turn before it starts, so a crash mid-turn still leaves a row to reconcile.
-        let reason = if session_id.is_some() { "followUp" } else { "initial" };
-        let exec_id = match &st.store {
-            Some(s) => s.begin_execution(&key, reason, None).await.ok(),
-            None => None,
-        };
-        st.agents.start_turn(&key, &worktree_path, argv, session_id.as_deref(), exec_id)
-    } else {
-        st.agents.start(&key, &worktree_path, argv, session_id.as_deref())
+    // Record the turn before it starts, so a crash mid-turn still leaves a row to reconcile.
+    let reason = if session_id.is_some() { "followUp" } else { "initial" };
+    let exec_id = match &st.store {
+        Some(s) => s.begin_execution(&key, reason, None).await.ok(),
+        None => None,
     };
-    Ok(view)
+    Ok(st.agents.start_turn(&key, &worktree_path, argv, session_id.as_deref(), exec_id))
 }
 
 fn branch_from_body(b: &Value) -> Result<String, ApiError> {
@@ -747,7 +768,7 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
     let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
     let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
-    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode, None, false, false).await?;
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode, None, false, StartMode::Prepare).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 
@@ -786,11 +807,15 @@ async fn post_branch_agent_fork(State(st): State<AppState>, Path(name): Path<Str
     let fresh = reset || message_uuid.is_none();
     let resume_at = if fresh { None } else { message_uuid };
     // The worktree already exists for a session being forked, so don't reseed dev assets.
-    let view = start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, resume_at, fresh, false).await?;
+    // EDIT/RETRY delivers a new turn, so spawn one; RESET just rewinds the conversation and
+    // leaves the branch ready (a spawned process with no message would hang with stdin open).
+    let will_send = !reset && (!text.is_empty() || !images.is_empty());
+    let mode = if will_send { StartMode::Turn } else { StartMode::Prepare };
+    let view = start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, resume_at, fresh, mode).await?;
 
     // RESET just restarts the conversation; EDIT/RETRY (and first-turn edit) deliver the new turn.
     let key = branch_agent_key(&name, &branch);
-    let sent = if !reset && (!text.is_empty() || !images.is_empty()) {
+    let sent = if will_send {
         st.agents.send(&key, &text, &images)
     } else {
         false
@@ -1035,7 +1060,12 @@ async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<
         return Ok(Json(json!({ "ok": ok })));
     }
     // Nothing running: spawn a process for THIS turn (resuming the conversation) and deliver it.
-    start_branch_agent(&st, &name, &branch, false, false, None, None, None, false, true).await?;
+    // The composer's per-branch model/permission overrides ride along with the message — every
+    // turn is a fresh launch now, so dropping them here would silently ignore the user's choice.
+    let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
+    let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
+    start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, None, false, StartMode::Turn)
+        .await?;
     let ok = st.agents.send(&key, &text, &images);
     Ok(Json(json!({ "ok": ok })))
 }

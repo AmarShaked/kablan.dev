@@ -316,8 +316,11 @@ export function Cockpit({
 
   const startAgent = (opts?: { model?: string; permissionMode?: string }) =>
     api.factory.agentStart(project, branch, { model: opts?.model, permissionMode: opts?.permissionMode });
-  const messageAgent = (text: string, images?: { mediaType: string; data: string }[]) =>
-    api.factory.agentMessage(project, branch, text, images);
+  const messageAgent = (
+    text: string,
+    images?: { mediaType: string; data: string }[],
+    opts?: { model?: string; permissionMode?: string },
+  ) => api.factory.agentMessage(project, branch, text, images, opts);
   const stopAgent = () => api.factory.agentStop(project, branch);
   // EDIT / RETRY: fork the session at `messageUuid` (or fresh, when null) and re-run with `text`.
   // `opts` carries the composer's per-session model/permission overrides so the fork relaunches

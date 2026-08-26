@@ -73,7 +73,7 @@ describe("AgentChat", () => {
     await userEvent.type(box, "do the thing");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
-    expect(onMessage).toHaveBeenCalledWith("do the thing", []);
+    expect(onMessage).toHaveBeenCalledWith("do the thing", [], { model: "", permissionMode: "acceptEdits" });
     expect(screen.getByText("You")).toBeInTheDocument();
     expect(screen.getByText("do the thing")).toBeInTheDocument();
   });
@@ -103,14 +103,15 @@ describe("AgentChat", () => {
     expect(screen.queryByText("You")).not.toBeInTheDocument(); // no orphaned bubble left behind
   });
 
-  it("auto-starts the agent on the first message when it isn't running", async () => {
-    const { onStart, onMessage } = renderChat([]); // no status seed → agent not running
+  it("sends without starting a process first — the server spawns the turn", async () => {
+    const { onStart, onMessage } = renderChat([]); // no status seed → nothing running
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "kick off");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    // waitFor polls inside act(), flushing the async start→send→setBusy(false) chain.
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("kick off", []));
-    expect(onStart).toHaveBeenCalled();
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("kick off", [], { model: "", permissionMode: "acceptEdits" }));
+    // Per-turn: starting one here would leave a process the message then queues behind, and
+    // nothing would drain it.
+    expect(onStart).not.toHaveBeenCalled();
     expect(screen.getByText("kick off")).toBeInTheDocument();
   });
 
@@ -119,7 +120,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "another");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("another", []));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("another", [], { model: "", permissionMode: "acceptEdits" }));
     expect(onStart).not.toHaveBeenCalled();
   });
 
@@ -176,7 +177,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "do it");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    expect(onMessage).toHaveBeenCalledWith("do it\n\nthink hard", []);
+    expect(onMessage).toHaveBeenCalledWith("do it\n\nthink hard", [], { model: "", permissionMode: "acceptEdits" });
     expect(screen.getByText("do it")).toBeInTheDocument(); // bubble shows what the user typed
   });
 
@@ -235,11 +236,12 @@ describe("AgentChat", () => {
 
   // Regression: a freshly-started agent (status "idle") must NOT look busy before the user
   // has sent anything — no "thinking…", but the composer is enabled and Stop is available.
-  it("a freshly started (idle) agent is quiet but chattable", () => {
+  it("an idle branch is quiet and chattable, with no Stop to press", () => {
     renderChat([idleStatus]);
     expect(screen.queryByText("thinking…")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/message the agent/i)).toBeEnabled();
-    expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    // Between turns nothing is running, so Stop would be a button that does nothing.
+    expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument();
   });
 
   it("calls onStop when Stop is clicked", async () => {
@@ -375,9 +377,11 @@ describe("AgentChat", () => {
 
     await userEvent.type(box, "look at this");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    expect(onMessage).toHaveBeenCalledWith("look at this", [
-      expect.objectContaining({ mediaType: "image/png", data: expect.any(String) }),
-    ]);
+    expect(onMessage).toHaveBeenCalledWith(
+      "look at this",
+      [expect.objectContaining({ mediaType: "image/png", data: expect.any(String) })],
+      { model: "", permissionMode: "acceptEdits" },
+    );
   });
 
   function dropImage(target: HTMLElement, type = "image/png") {
@@ -395,9 +399,11 @@ describe("AgentChat", () => {
 
     await userEvent.type(box, "see this");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    expect(onMessage).toHaveBeenCalledWith("see this", [
-      expect.objectContaining({ mediaType: "image/png", data: expect.any(String) }),
-    ]);
+    expect(onMessage).toHaveBeenCalledWith(
+      "see this",
+      [expect.objectContaining({ mediaType: "image/png", data: expect.any(String) })],
+      { model: "", permissionMode: "acceptEdits" },
+    );
   });
 
   it("shows the drop overlay on dragover with files and hides it on dragleave", async () => {
@@ -700,7 +706,7 @@ describe("AgentChat", () => {
 
     // Flip the agent to idle → the head drains and is delivered.
     await userEvent.click(screen.getByRole("button", { name: /go idle/i }));
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("queued work", []));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("queued work", [], { model: "", permissionMode: "acceptEdits" }));
     // Chip is gone once drained.
     expect(screen.queryByText(/queued \(1\)/i)).not.toBeInTheDocument();
   });
@@ -802,7 +808,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "go now");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("go now", []));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("go now", [], { model: "", permissionMode: "acceptEdits" }));
     expect(screen.queryByText(/queued \(/i)).not.toBeInTheDocument();
   });
 
@@ -866,7 +872,7 @@ describe("AgentChat", () => {
     const box = screen.getByPlaceholderText(/message the agent/i);
     await userEvent.type(box, "just a message");
     await userEvent.keyboard("{Enter}");
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("just a message", []));
+    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("just a message", [], { model: "", permissionMode: "acceptEdits" }));
   });
 
   // ---- Message EDIT / RETRY / RESET (fork the Claude session) ----

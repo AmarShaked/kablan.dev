@@ -422,10 +422,19 @@ export const api = {
       branch: string,
       text: string,
       images: { mediaType: string; data: string }[] = [],
+      // Every turn is a fresh launch, so the composer's per-branch overrides travel with each
+      // message rather than only at start time.
+      opts: { model?: string; permissionMode?: string } = {},
     ) =>
-      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/message`, {
+      req<{ ok: boolean; queued?: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/message`, {
         method: "POST",
-        body: JSON.stringify(images.length ? { branch, text, images } : { branch, text }),
+        body: JSON.stringify({
+          branch,
+          text,
+          ...(images.length ? { images } : {}),
+          ...(opts.model ? { model: opts.model } : {}),
+          ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
+        }),
       }),
     agentStop: (name: string, branch: string) =>
       req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/stop`, {
