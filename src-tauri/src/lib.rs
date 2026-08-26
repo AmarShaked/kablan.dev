@@ -18,7 +18,10 @@ use axum::{
         Path, Query, State,
     },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -123,6 +126,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/projects/:name/factory/agent/fork", post(post_branch_agent_fork))
         .route("/api/projects/:name/factory/agent/stop", post(post_branch_agent_stop))
         .route("/api/projects/:name/factory/agent/approval", post(post_branch_agent_approval))
+        .route("/api/events", get(get_events))
         .route("/api/projects/:name/factory/agent", get(get_branch_agent))
         .route("/api/projects/:name/factory/agent/draft", get(get_branch_draft).put(put_branch_draft))
         .route("/api/projects/:name/factory/agent/queue", get(get_branch_queue).post(post_branch_queue))
@@ -1438,6 +1442,50 @@ async fn post_stop(State(st): State<AppState>, Path(name): Path<String>, body: B
 async fn ws_handler(ws: WebSocketUpgrade, State(st): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_ws(socket, st))
 }
+/// `GET /api/events` — the same live stream the WebSocket carries (hello, dev-server status/log,
+/// agent status/events), as Server-Sent Events. The client only ever receives on this channel, so
+/// SSE fits it exactly, and the browser reconnects on its own.
+///
+/// `/ws` is kept alongside it: the Node reference server speaks it, and the parity suite covers it.
+async fn get_events(State(st): State<AppState>) -> Sse<impl futures_util::Stream<Item = Result<Event, std::convert::Infallible>>> {
+    // Same reconnect resync as the WebSocket: drop agents whose process is gone, then send the
+    // current view so a stale "working" can't outlive the process it described.
+    st.agents.prune_dead();
+    let hello = json!({ "type": "hello", "servers": st.procs.get_all(), "agents": st.agents.get_all() });
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<String>(256);
+    let mut proc_rx = st.procs.subscribe();
+    let mut agent_rx = st.agents.subscribe();
+    tokio::spawn(async move {
+        if tx.send(hello.to_string()).await.is_err() {
+            return;
+        }
+        loop {
+            let msg = tokio::select! {
+                m = proc_rx.recv() => m,
+                m = agent_rx.recv() => m,
+            };
+            match msg {
+                Ok(text) => {
+                    if tx.send(text).await.is_err() {
+                        break; // client went away
+                    }
+                }
+                // Lagged under load: keep streaming rather than dropping the client — the next
+                // status frame re-syncs whatever was missed.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            }
+        }
+    });
+
+    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.map(|msg| (Ok(Event::default().data(msg)), rx))
+    });
+    // Keep-alive comments stop idle proxies from closing a quiet stream.
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 async fn handle_ws(mut socket: WebSocket, st: AppState) {
     // Prune agents whose process has already exited, then send the current agent views alongside
     // servers. A (re)connecting client rebuilds its statuses from this — so a stale "working" that

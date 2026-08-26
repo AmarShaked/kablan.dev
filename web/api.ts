@@ -200,6 +200,15 @@ export function wsUrl(): string {
   return `${proto}://${location.host}/ws`;
 }
 
+/** The live event stream (`/api/events`, Server-Sent Events) — dev-server status/log plus the
+ * agent stream. Replaces the WebSocket for the client, which only ever received on it. */
+export function eventsUrl(): string {
+  if (typeof window !== "undefined" && window.__KABLAN_PORT__) {
+    return `http://127.0.0.1:${window.__KABLAN_PORT__}/api/events`;
+  }
+  return `${location.origin}/api/events`;
+}
+
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(API_BASE + url, {
     ...opts,

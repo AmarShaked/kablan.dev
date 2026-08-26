@@ -33,3 +33,16 @@ Element.prototype.scrollIntoView ??= () => {};
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.setPointerCapture ??= () => {};
 Element.prototype.releasePointerCapture ??= () => {};
+
+// The app subscribes to `/api/events` (Server-Sent Events) for live dev-server + agent frames.
+// jsdom has no EventSource, so constructing one throws during render. An inert stub is enough:
+// tests that need live frames push them through `useAgentStream().ingest` directly rather than
+// over the wire.
+globalThis.EventSource ??= class {
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  onopen: ((ev: Event) => void) | null = null;
+  close() {}
+  addEventListener() {}
+  removeEventListener() {}
+} as unknown as typeof EventSource;

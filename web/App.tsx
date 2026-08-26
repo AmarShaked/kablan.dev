@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { FolderGit2, X, Download, ArrowUpCircle } from "lucide-react";
 import {
   api,
-  wsUrl,
+  eventsUrl,
   type RunningServer,
   type InboxEntry,
   type NotificationSettings,
@@ -157,16 +157,22 @@ function AppContent() {
     });
   }, []);
 
-  // --- WebSocket: live status (dev servers) + agent stream ---
+  // --- SSE: live status (dev servers) + agent stream ---
+  // The client only ever receives here, so Server-Sent Events fit exactly, and EventSource
+  // reconnects on its own (each reconnect re-sends `hello`, which resyncs agent statuses).
   useEffect(() => {
-    let ws: WebSocket | null = null;
+    let es: EventSource | null = null;
     let closed = false;
-    let retry: ReturnType<typeof setTimeout>;
 
     const connect = () => {
-      ws = new WebSocket(wsUrl());
-      ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
+      es = new EventSource(eventsUrl());
+      es.onmessage = (ev) => {
+        let msg: any;
+        try {
+          msg = JSON.parse(ev.data);
+        } catch {
+          return; // keep-alive comment or a malformed frame — nothing to apply
+        }
         if (msg.type === "hello") {
           // Servers are keyed by working-copy cwd (globally unique).
           const map: Record<string, RunningServer> = {};
@@ -230,15 +236,16 @@ function AppContent() {
           }
         }
       };
-      ws.onclose = () => {
-        if (!closed) retry = setTimeout(connect, 1500);
+      // EventSource retries by itself; this only guards against a permanently dead stream after
+      // the effect has been torn down.
+      es.onerror = () => {
+        if (closed) es?.close();
       };
     };
     connect();
     return () => {
       closed = true;
-      clearTimeout(retry);
-      ws?.close();
+      es?.close();
     };
   }, [ingest]);
 

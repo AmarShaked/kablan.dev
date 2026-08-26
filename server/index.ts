@@ -349,6 +349,32 @@ api.post("/projects/:name/server/stop", async (req, res) => {
   res.json({ stopped });
 });
 
+// --- SSE: the same live stream as /ws, which is what the web client consumes. The Rust server
+// serves the identical endpoint; /ws is kept in both for the parity suite.
+api.get("/events", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  const send = (payload: unknown) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  const onLog = (payload: { projectName: string; cwd: string; line: unknown }) =>
+    send({ type: "log", ...payload });
+  const onUpdate = ({ projectName, cwd }: { projectName: string; cwd: string }) =>
+    send({ type: "status", projectName, cwd, server: getServer(cwd) });
+  serverEvents.on("log", onLog);
+  serverEvents.on("update", onUpdate);
+  // This reference server owns no agents, so `agents` is always empty here.
+  send({ type: "hello", servers: getAllServers(), agents: [] });
+  // Keep idle proxies from closing a quiet stream.
+  const ping = setInterval(() => res.write(": ping\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(ping);
+    serverEvents.off("log", onLog);
+    serverEvents.off("update", onUpdate);
+  });
+});
+
 app.use("/api", api);
 
 // Serve built frontend in production.
