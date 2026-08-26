@@ -527,6 +527,10 @@ fn parse_branch_agent_key(key: &str) -> Option<(&str, &str)> {
 /// blocking file I/O is fine — it does not touch the async runtime.
 pub(crate) fn persist_branch_session_id(key: &str, session_id: &str) {
     let Some((name, branch)) = parse_branch_agent_key(key) else { return };
+    // Dual-write: the store is the new home for session ids, factory.json stays written so an
+    // older build (or a downgrade) still finds the id and can resume. The store write is
+    // fire-and-forget — this runs on the supervisor's reader thread.
+    store::mirror_session_id(key, session_id);
     let path = factory_store_path();
     let mut file = factory::load_file(&path);
     let needs_persist = factory::get_branch_state(&file, name, branch)
@@ -580,10 +584,22 @@ async fn start_branch_agent(
     // agent is genuinely busy. TODO: still checked-then-acted-on without a lock held across the
     // later `agents.start()`, so concurrent starts can race past the limit (small TOCTOU window).
     ensure_agent_slot(st, cfg.factory.max_concurrent_agents as usize)?;
+    // Resolve the resumable session id from the store — its new home — BEFORE the blocking closure
+    // below, because the store is async and that closure is not. RESET (`fresh`) must forget the id
+    // in BOTH places, or the cleared side would resurrect the old conversation on the next start.
+    let store_key = branch_agent_key(name, branch);
+    let stored_session_id: Option<String> = match (&st.store, fresh) {
+        (Some(s), true) => {
+            let _ = s.clear_session_id(&store_key).await;
+            None
+        }
+        (Some(s), false) => s.get_session(&store_key).await.and_then(|r| r.session_id),
+        (None, _) => None,
+    };
     let name2 = name.to_string();
     let branch2 = branch.to_string();
     let cfg2 = cfg.clone();
-    let (worktree_path, session_id) = blocking(move || {
+    let (worktree_path, factory_session_id) = blocking(move || {
         let wt_root = if cfg2.factory.worktree_root.trim().is_empty() {
             config::config_dir().join("worktrees")
         } else {
@@ -619,6 +635,10 @@ async fn start_branch_agent(
     .map_err(bad)?;
 
     let key = branch_agent_key(name, branch);
+    // Store first, factory.json as fallback: the store is authoritative, but a user upgrading from
+    // a build that only wrote factory.json still has their id there, so their conversation resumes
+    // instead of silently starting over. (On `fresh` both were cleared, so both are None.)
+    let session_id = stored_session_id.or(factory_session_id);
     // `resume_at` is only meaningful when resuming a session (see build_agent_argv); when `fresh`
     // cleared the session id it's dropped automatically since `session_id` is None.
     let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref(), resume_at.as_deref());

@@ -30,6 +30,18 @@ pub fn install_global(store: Store) -> bool {
     }
 }
 
+/// Record a newly-captured Claude session id from sync code (the supervisor's reader thread learns
+/// it from the stream's `init` event). Separate from `mirror_status` because the id often arrives
+/// on an event that doesn't change status, so the status hook alone would miss it — and missing it
+/// means the next launch can't `--resume` and the conversation silently starts over.
+pub fn mirror_session_id(branch_key: &str, session_id: &str) {
+    let Some((store, handle)) = GLOBAL.get() else { return };
+    let (store, key, sid) = (store.clone(), branch_key.to_string(), session_id.to_string());
+    handle.spawn(async move {
+        let _ = store.set_session_id(&key, &sid).await;
+    });
+}
+
 /// Mirror a branch's status (and session id, when newly learned) into the store from sync code.
 /// Fire-and-forget: the write is spawned on the runtime so an agent's reader thread never blocks
 /// on disk, and a storage hiccup can never stall or kill the stream.
@@ -118,6 +130,38 @@ impl Store {
         .execute(&self.pool)
         .await
         .map_err(|e| format!("store: upsert_session failed: {e}"))?;
+        Ok(())
+    }
+
+    /// Record the branch's Claude session id, keeping whatever status the row already has. Only
+    /// the FIRST id is kept: once a conversation has an id, later ids belong to restarts of the
+    /// same conversation and overwriting would lose the resumable thread.
+    pub async fn set_session_id(&self, branch_key: &str, session_id: &str) -> Result<(), String> {
+        sqlx::query(
+            "INSERT INTO sessions (branch_key, session_id, status, updated_at)
+             VALUES (?1, ?2, 'idle', ?3)
+             ON CONFLICT(branch_key) DO UPDATE SET
+               session_id = COALESCE(sessions.session_id, excluded.session_id),
+               updated_at = excluded.updated_at",
+        )
+        .bind(branch_key)
+        .bind(session_id)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("store: set_session_id failed: {e}"))?;
+        Ok(())
+    }
+
+    /// Forget the branch's session id so the next launch starts a brand-new conversation — the
+    /// chat RESET path. The row itself stays (status/worktree remain meaningful).
+    pub async fn clear_session_id(&self, branch_key: &str) -> Result<(), String> {
+        sqlx::query("UPDATE sessions SET session_id = NULL, updated_at = ?2 WHERE branch_key = ?1")
+            .bind(branch_key)
+            .bind(now_ms())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| format!("store: clear_session_id failed: {e}"))?;
         Ok(())
     }
 
@@ -237,6 +281,52 @@ mod tests {
         assert_eq!(got.status, "idle");
         assert_eq!(got.worktree_path.as_deref(), Some("/wt/x"));
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn set_session_id_keeps_the_first_id_and_preserves_status() {
+        let (store, dir) = open_temp("setsid").await;
+        store.upsert_session("p::branch:x", None, "working", None).await.unwrap();
+        store.set_session_id("p::branch:x", "sid-1").await.unwrap();
+        let got = store.get_session("p::branch:x").await.unwrap();
+        assert_eq!(got.session_id.as_deref(), Some("sid-1"));
+        assert_eq!(got.status, "working", "recording an id must not disturb status");
+
+        // A later id belongs to a restart of the SAME conversation; overwriting would lose the
+        // resumable thread, so the first id wins.
+        store.set_session_id("p::branch:x", "sid-2").await.unwrap();
+        assert_eq!(
+            store.get_session("p::branch:x").await.unwrap().session_id.as_deref(),
+            Some("sid-1")
+        );
+
+        // Recording an id for a branch with no row yet creates one.
+        store.set_session_id("p::branch:new", "sid-n").await.unwrap();
+        assert_eq!(
+            store.get_session("p::branch:new").await.unwrap().session_id.as_deref(),
+            Some("sid-n")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn clear_session_id_forgets_only_the_id() {
+        let (store, dir) = open_temp("clearsid").await;
+        store
+            .upsert_session("p::branch:r", Some("sid-1"), "idle", Some("/wt/r"))
+            .await
+            .unwrap();
+        store.clear_session_id("p::branch:r").await.unwrap();
+        let got = store.get_session("p::branch:r").await.unwrap();
+        assert_eq!(got.session_id, None, "RESET must forget the conversation");
+        assert_eq!(got.worktree_path.as_deref(), Some("/wt/r"), "row otherwise intact");
+        // And a fresh id can then be recorded (the next conversation).
+        store.set_session_id("p::branch:r", "sid-2").await.unwrap();
+        assert_eq!(
+            store.get_session("p::branch:r").await.unwrap().session_id.as_deref(),
+            Some("sid-2")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
