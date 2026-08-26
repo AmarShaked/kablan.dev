@@ -1198,7 +1198,12 @@ async fn ws_handler(ws: WebSocketUpgrade, State(st): State<AppState>) -> Respons
     ws.on_upgrade(move |socket| handle_ws(socket, st))
 }
 async fn handle_ws(mut socket: WebSocket, st: AppState) {
-    let hello = json!({ "type": "hello", "servers": st.procs.get_all() });
+    // Prune agents whose process has already exited, then send the current agent views alongside
+    // servers. A (re)connecting client rebuilds its statuses from this — so a stale "working" that
+    // survived a dropped connection (which otherwise sticks: runaway "thinking" timer, dead Stop)
+    // resyncs to reality instead of hanging until an app restart.
+    st.agents.prune_dead();
+    let hello = json!({ "type": "hello", "servers": st.procs.get_all(), "agents": st.agents.get_all() });
     if socket.send(Message::Text(hello.to_string())).await.is_err() {
         return;
     }

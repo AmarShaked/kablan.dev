@@ -9,6 +9,7 @@ import {
   type InboxEntry,
   type NotificationSettings,
   type LogLine,
+  type AgentView,
 } from "./api.ts";
 import { AgentStreamProvider, useAgentStream } from "./hooks/useAgentStream.tsx";
 import { consumeIntentionalStop } from "./lib/serverStopIntent.ts";
@@ -172,6 +173,14 @@ function AppContent() {
           for (const s of msg.servers as RunningServer[]) map[s.cwd] = s;
           serversRef.current = map;
           setServers(map);
+          // Resync agent statuses on every (re)connect so a stale "working" that outlived a dropped
+          // connection clears itself (otherwise: runaway "thinking" timer + a Stop that does nothing
+          // until an app restart). The server prunes dead agents before sending these.
+          if (Array.isArray(msg.agents)) {
+            for (const agent of msg.agents as AgentView[]) {
+              ingest({ type: "agent-status", key: agent.key, agent });
+            }
+          }
         } else if (msg.type === "status") {
           const s = msg.server as RunningServer | null;
           const cwd = (msg.cwd as string) ?? s?.cwd;
