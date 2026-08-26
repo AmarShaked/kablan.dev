@@ -9,6 +9,7 @@ pub mod gitlab;
 pub mod open;
 pub mod processes;
 pub mod projects;
+pub mod store;
 
 use axum::{
     body::Bytes,

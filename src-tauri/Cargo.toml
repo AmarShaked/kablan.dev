@@ -43,6 +43,11 @@ tauri-plugin-updater = { version = "2", optional = true }
 tauri-plugin-process = { version = "2", optional = true }
 tauri-plugin-notification = { version = "2", optional = true }
 ureq = { version = "2", features = ["json", "tls"] }
+# SQLite store (sessions, executions, logs, queue, drafts) — the source of truth for agent
+# state, so status can't drift in memory and survives a restart. `sqlite` bundles libsqlite3
+# so no system SQLite is needed on any target; runtime-tokio matches the axum/tokio runtime.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "json", "macros", "migrate"] }
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 httpmock = "0.7"
