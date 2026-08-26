@@ -158,6 +158,18 @@ pub fn status_str(s: AgentStatus) -> String {
     .to_string()
 }
 
+/// Inverse of `status_str`, for reading a status back out of the store. An unrecognised value
+/// reads as Idle — a branch we can't classify is better shown as ready than as broken.
+pub fn status_from_str(s: &str) -> AgentStatus {
+    match s {
+        "working" => AgentStatus::Working,
+        "awaitingInput" => AgentStatus::AwaitingInput,
+        "done" => AgentStatus::Done,
+        "failed" => AgentStatus::Failed,
+        _ => AgentStatus::Idle,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum EventKind {
     Init,
@@ -239,6 +251,13 @@ struct AgentRecord {
     generation: u64,
     /// Tool calls awaiting the human Approve/Deny gate (supervised mode), keyed by approval_id.
     pending: HashMap<String, PendingApproval>,
+    /// Per-turn mode: this process serves exactly ONE turn. Its stdin stays open while the turn
+    /// runs (the supervised approval protocol answers over it) and is closed the moment the
+    /// `result` event lands, which is what makes `claude --print` exit. A clean exit then leaves
+    /// the branch `Idle` — meaning "no turn running, ready for the next" — rather than `Done`.
+    per_turn: bool,
+    /// The store row for the turn this process is running, closed when it exits.
+    execution_id: Option<String>,
 }
 
 pub struct Agents {
@@ -414,14 +433,45 @@ impl Agents {
         let _ = self.tx.send(json!({ "type": "agent-status", "key": key, "agent": v }).to_string());
     }
 
-    pub fn start(self: &Arc<Self>, key: &str, cwd: &str, argv: Vec<String>, _resume: Option<&str>) -> AgentView {
+    pub fn start(self: &Arc<Self>, key: &str, cwd: &str, argv: Vec<String>, resume: Option<&str>) -> AgentView {
+        self.start_inner(key, cwd, argv, resume, false)
+    }
+
+    /// Spawn a process to serve exactly ONE turn (the per-turn execution model): it runs the
+    /// message it is given, emits its `result`, and exits. `execution_id` is the store row to
+    /// close when it does. Callers deliver the message with `send` right after this returns.
+    pub fn start_turn(
+        self: &Arc<Self>,
+        key: &str,
+        cwd: &str,
+        argv: Vec<String>,
+        resume: Option<&str>,
+        execution_id: Option<String>,
+    ) -> AgentView {
+        let view = self.start_inner(key, cwd, argv, resume, true);
+        if let Some(id) = execution_id {
+            if let Some(r) = self.registry.lock().unwrap().get_mut(key) {
+                r.execution_id = Some(id);
+            }
+        }
+        view
+    }
+
+    fn start_inner(
+        self: &Arc<Self>,
+        key: &str,
+        cwd: &str,
+        argv: Vec<String>,
+        _resume: Option<&str>,
+        per_turn: bool,
+    ) -> AgentView {
         self.stop(key); // one agent per task force
         let generation = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
         // A freshly-spawned agent is idle/ready, waiting for the user's first message — not
         // "working". It flips to Working when a message is sent (see `send`) or real turn output
         // arrives. This prevents the cockpit showing "thinking…" the instant you Start.
         let view = AgentView { key: key.into(), status: AgentStatus::Idle, session_id: None, pid: None, started_at: now_ms(), exit_code: None };
-        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation, pending: HashMap::new() });
+        self.registry.lock().unwrap().insert(key.into(), AgentRecord { view, events: vec![], stdin: Arc::new(Mutex::new(None)), generation, pending: HashMap::new(), per_turn, execution_id: None });
 
         let mut cmd = Command::new(&argv[0]);
         cmd.args(&argv[1..]).current_dir(cwd)
@@ -506,6 +556,14 @@ impl Agents {
                                     new_session_id = Some(sid.clone());
                                 }
                             }
+                            // Per-turn: the `result` event ends this turn. Closing stdin is what
+                            // makes `claude --print` exit (verified against the CLI: with stdin
+                            // held open it stays alive for further turns). We do it HERE rather
+                            // than before the turn, because supervised approvals are answered over
+                            // this same stdin while the turn is still running.
+                            if r.per_turn && matches!(ev.kind, EventKind::Result) {
+                                *r.stdin.lock().unwrap() = None;
+                            }
                             let next = next_status(r.view.status, &ev);
                             if next != r.view.status { r.view.status = next; status_changed = true; }
                             r.events.push(raw.clone());
@@ -523,15 +581,10 @@ impl Agents {
                         crate::persist_branch_session_id(&k, sid);
                     }
                     let _ = me.tx.send(json!({ "type":"agent-event","key":k,"event":raw }).to_string());
-                    if status_changed {
-                        me.emit_status(&k);
-                        // The turn just ended — hand the next queued message to the agent. Doing
-                        // this server-side means a message parked while it was busy still gets
-                        // sent even if the user closed the window.
-                        if matches!(me.get(&k).map(|v| v.status), Some(AgentStatus::Idle)) {
-                            crate::drain_follow_up_queue(Arc::clone(&me), k.clone());
-                        }
-                    }
+                    // The queue is drained by lib.rs's drain watcher, which listens to these
+                    // same status frames — starting the next turn needs to SPAWN a process, which
+                    // requires state this reader thread doesn't have.
+                    if status_changed { me.emit_status(&k); }
                 }
             });
         }
@@ -560,6 +613,7 @@ impl Agents {
             let status = child.wait();
             let code = status.as_ref().ok().and_then(|s| s.code());
             let mut fire = false;
+            let mut finished_execution: Option<String> = None;
             {
                 let mut reg = me.registry.lock().unwrap();
                 if let Some(r) = reg.get_mut(&k) {
@@ -567,10 +621,21 @@ impl Agents {
                         r.view.exit_code = code;
                         r.view.pid = None;
                         *r.stdin.lock().unwrap() = None;
-                        r.view.status = if code == Some(0) { AgentStatus::Done } else { AgentStatus::Failed };
+                        r.view.status = if code == Some(0) {
+                            // A per-turn process exiting cleanly means the TURN finished, not the
+                            // conversation: the branch is ready for the next message, so it reads
+                            // Idle. (Without per-turn, the process ending really is the end.)
+                            if r.per_turn { AgentStatus::Idle } else { AgentStatus::Done }
+                        } else {
+                            AgentStatus::Failed
+                        };
+                        finished_execution = r.execution_id.take();
                         fire = true;
                     }
                 }
+            }
+            if let Some(id) = finished_execution {
+                crate::store::finish_execution_async(id, code);
             }
             if fire { me.emit_status(&k); }
         });
@@ -992,6 +1057,47 @@ mod tests {
         agents.start("p::tf2", &std::env::temp_dir().to_string_lossy(), mock_argv(), None);
         agents.send("p::tf2", "please FAILME", &[]);
         assert!(wait_until(|| matches!(agents.get("p::tf2").map(|v| v.status), Some(AgentStatus::Failed))));
+    }
+
+    /// Per-turn model: the process serves ONE turn and exits, leaving the branch Idle — meaning
+    /// "no turn running, ready for the next message" — rather than Done. Closing stdin on `result`
+    /// is what makes it exit (verified against the real CLI: with stdin open it stays alive).
+    #[test]
+    fn per_turn_agent_exits_after_one_turn_and_leaves_the_branch_ready() {
+        let agents = Agents::new();
+        agents.start_turn("p::turn1", &std::env::temp_dir().to_string_lossy(), mock_argv(), None, None);
+        assert!(wait_until(|| agents.get("p::turn1").and_then(|v| v.pid).is_some()));
+        assert!(agents.send("p::turn1", "do a thing", &[]));
+
+        // The turn's result closes stdin, so the process exits on its own.
+        assert!(
+            wait_until(|| agents.get("p::turn1").map(|v| v.pid.is_none()).unwrap_or(false)),
+            "a per-turn process must exit once its turn produces a result"
+        );
+        assert_eq!(
+            agents.get("p::turn1").map(|v| v.status),
+            Some(AgentStatus::Idle),
+            "a clean per-turn exit means ready for the next turn, not Done"
+        );
+        assert_eq!(agents.get("p::turn1").and_then(|v| v.exit_code), Some(0));
+        // Nothing is left running, so a pile of idle agents can't accumulate.
+        assert_eq!(agents.running_count(), 0);
+    }
+
+    /// The default (non per-turn) path must be unchanged: the process stays alive between turns.
+    #[test]
+    fn a_normal_agent_stays_alive_after_a_turn() {
+        let agents = Agents::new();
+        agents.start("p::stay", &std::env::temp_dir().to_string_lossy(), mock_argv(), None);
+        assert!(wait_until(|| agents.get("p::stay").and_then(|v| v.pid).is_some()));
+        assert!(agents.send("p::stay", "hello", &[]));
+        // A successful result leaves the live agent AwaitingInput (see next_status) — the process
+        // is still there waiting for the next message.
+        assert!(wait_until(|| agents.get("p::stay").map(|v| v.status) == Some(AgentStatus::AwaitingInput)));
+        // Still alive and able to take another turn.
+        assert!(agents.get("p::stay").and_then(|v| v.pid).is_some());
+        assert!(agents.send("p::stay", "again", &[]));
+        agents.stop("p::stay");
     }
 
     #[test]

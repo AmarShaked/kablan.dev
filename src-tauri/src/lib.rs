@@ -528,25 +528,68 @@ fn parse_branch_agent_key(key: &str) -> Option<(&str, &str)> {
 /// This hook closes that gap. Idempotent (only writes when nothing is stored yet)
 /// and best-effort (never panics/propagates). Runs on the reader thread, so the
 /// blocking file I/O is fine — it does not touch the async runtime.
-/// A turn just finished on `key` — send the next queued message, if any. Called from the agent
-/// supervisor when a branch goes idle, so a message the user parked while the agent was busy is
-/// delivered by the server rather than depending on a browser tab still being open.
+/// Watches the agent stream and starts the next queued turn whenever a branch's turn ends.
 ///
-/// `take_next_queued` claims the message by deleting it, so two racing drains can't send it twice.
-/// Fire-and-forget: this runs on a reader thread, which must never block on disk.
-pub(crate) fn drain_follow_up_queue(agents: Arc<agents::Agents>, key: String) {
-    let Some((store, handle)) = store::global() else { return };
-    handle.spawn(async move {
-        let Some(msg) = store.take_next_queued(&key).await else { return };
-        let images: Vec<(String, String)> =
-            msg.images.iter().cloned().map(|i| (i.media_type, i.data)).collect();
-        if !agents.send(&key, &msg.text, &images) {
-            // The agent went away between going idle and this send (stopped, crashed). Put the
-            // message back — with its attachments — so it isn't silently swallowed; the next
-            // start drains it.
-            let _ = store.enqueue_follow_up(&key, &msg.text, &msg.images).await;
+/// In the per-turn model there is no process sitting between turns, so a queued message can't
+/// simply be written to stdin — the next turn has to be SPAWNED. That needs `AppState` (config,
+/// worktree, session id), which the supervisor's reader threads don't have, so the drain lives
+/// here instead: one task subscribed to the same status frames the WebSocket carries.
+///
+/// It fires only on `idle` with no pid — i.e. a turn just exited. A freshly-started turn reports
+/// `idle` *with* a pid, so starting one can't re-trigger the drain and loop.
+fn spawn_drain_watcher(st: AppState) {
+    let mut rx = st.agents.subscribe();
+    tokio::spawn(async move {
+        loop {
+            let frame = match rx.recv().await {
+                Ok(f) => f,
+                // Lagged: we dropped some frames under load. The next status frame re-triggers
+                // any drain we missed, so keep going rather than tearing the watcher down.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            };
+            let Ok(msg) = serde_json::from_str::<Value>(&frame) else { continue };
+            if msg.get("type").and_then(|v| v.as_str()) != Some("agent-status") {
+                continue;
+            }
+            let Some(key) = msg.get("key").and_then(|v| v.as_str()).map(str::to_string) else { continue };
+            let agent = msg.get("agent");
+            let status = agent.and_then(|a| a.get("status")).and_then(|v| v.as_str()).unwrap_or("");
+            let has_pid = agent.and_then(|a| a.get("pid")).map(|v| !v.is_null()).unwrap_or(false);
+            if status != "idle" || has_pid {
+                continue;
+            }
+            let st2 = st.clone();
+            tokio::spawn(async move {
+                drain_next_turn(&st2, &key).await;
+            });
         }
     });
+}
+
+/// Start the branch's next queued message as a fresh turn, if there is one. `take_next_queued`
+/// claims it by deleting it, so two racing drains can never send the same message twice.
+async fn drain_next_turn(st: &AppState, key: &str) {
+    let Some(store) = st.store.clone() else { return };
+    let Some((name, branch)) = parse_branch_agent_key(key).map(|(n, b)| (n.to_string(), b.to_string()))
+    else {
+        return;
+    };
+    // Don't start a turn on top of one already running (a message could have arrived in between).
+    if st.agents.get(key).map(|v| v.pid.is_some()).unwrap_or(false) {
+        return;
+    }
+    let Some(msg) = store.take_next_queued(key).await else { return };
+    let images: Vec<(String, String)> =
+        msg.images.iter().cloned().map(|i| (i.media_type, i.data)).collect();
+
+    let started = start_branch_agent(st, &name, &branch, false, false, None, None, None, false, true).await;
+    let delivered = started.is_ok() && st.agents.send(key, &msg.text, &images);
+    if !delivered {
+        // Couldn't run it (spawn failed, agent limit, worktree gone). Put it back rather than
+        // silently swallowing the user's message — the next idle transition retries it.
+        let _ = store.enqueue_follow_up(key, &msg.text, &msg.images).await;
+    }
 }
 
 pub(crate) fn persist_branch_session_id(key: &str, session_id: &str) {
@@ -584,6 +627,9 @@ async fn start_branch_agent(
     // Start a brand-new conversation: ignore (and forget) any persisted session id, so nothing is
     // resumed. The chat RESET path. Overrides `resume_at`.
     fresh: bool,
+    // Per-turn execution: this process serves ONE turn and exits (the caller delivers the message
+    // right after). Opens an `execution_processes` row so the turn is recorded durably.
+    per_turn: bool,
 ) -> Result<agents::AgentView, ApiError> {
     let dir = projects::project_path_from_name(name).map_err(bad)?;
     let mut cfg = config::load();
@@ -666,7 +712,17 @@ async fn start_branch_agent(
     // `resume_at` is only meaningful when resuming a session (see build_agent_argv); when `fresh`
     // cleared the session id it's dropped automatically since `session_id` is None.
     let argv = agents::build_agent_argv(&cfg.factory, session_id.as_deref(), resume_at.as_deref());
-    let view = st.agents.start(&key, &worktree_path, argv, session_id.as_deref());
+    let view = if per_turn {
+        // Record the turn before it starts, so a crash mid-turn still leaves a row to reconcile.
+        let reason = if session_id.is_some() { "followUp" } else { "initial" };
+        let exec_id = match &st.store {
+            Some(s) => s.begin_execution(&key, reason, None).await.ok(),
+            None => None,
+        };
+        st.agents.start_turn(&key, &worktree_path, argv, session_id.as_deref(), exec_id)
+    } else {
+        st.agents.start(&key, &worktree_path, argv, session_id.as_deref())
+    };
     Ok(view)
 }
 
@@ -687,7 +743,7 @@ async fn post_branch_agent_start(State(st): State<AppState>, Path(name): Path<St
     let copy_env = b.get("copyEnv").and_then(|v| v.as_bool()).unwrap_or(true);
     let model = b.get("model").and_then(|v| v.as_str()).map(str::to_string);
     let permission_mode = b.get("permissionMode").and_then(|v| v.as_str()).map(str::to_string);
-    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode, None, false).await?;
+    let view = start_branch_agent(&st, &name, &branch, copy_node_modules, copy_env, model, permission_mode, None, false, false).await?;
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 
@@ -726,7 +782,7 @@ async fn post_branch_agent_fork(State(st): State<AppState>, Path(name): Path<Str
     let fresh = reset || message_uuid.is_none();
     let resume_at = if fresh { None } else { message_uuid };
     // The worktree already exists for a session being forked, so don't reseed dev assets.
-    let view = start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, resume_at, fresh).await?;
+    let view = start_branch_agent(&st, &name, &branch, false, false, model, permission_mode, resume_at, fresh, false).await?;
 
     // RESET just restarts the conversation; EDIT/RETRY (and first-turn edit) deliver the new turn.
     let key = branch_agent_key(&name, &branch);
@@ -908,13 +964,21 @@ async fn post_new_session(State(st): State<AppState>, Path(name): Path<String>, 
             cfg_run.factory.permission_mode = pm.trim().to_string();
         }
     }
-    let argv = agents::build_agent_argv(&cfg_run.factory, None, None);
-    let _ = st.agents.start(&key, &worktree_path, argv, None);
-    // Deliver the first turn when there's a message and/or at least one image (agents.send renders
-    // the image content blocks). A turn with images but no text is valid.
+    // Per-turn model: only spawn when there's actually a first turn to run (a message and/or an
+    // image — `agents.send` renders the image blocks, so images with no text is a valid turn).
+    // With nothing to run we just leave the branch ready; its first message starts the first turn.
     if message.is_some() || !images.is_empty() {
+        let argv = agents::build_agent_argv(&cfg_run.factory, None, None);
+        let exec_id = match &st.store {
+            Some(s) => s.begin_execution(&key, "initial", None).await.ok(),
+            None => None,
+        };
+        let _ = st.agents.start_turn(&key, &worktree_path, argv, None, exec_id);
         let text = message.unwrap_or_default();
         st.agents.send(&key, &text, &images);
+    } else if let Some(s) = &st.store {
+        // Record the branch as ready so the cockpit shows it as startable rather than unknown.
+        let _ = s.upsert_session(&key, None, "idle", Some(&worktree_path)).await;
     }
 
     Ok(Json(json!({ "branch": new_branch })))
@@ -951,6 +1015,23 @@ async fn post_branch_agent_message(State(st): State<AppState>, Path(name): Path<
         return Err(bad("text or an image is required"));
     }
     let key = branch_agent_key(&name, &branch);
+    // Per-turn model: a live process means a turn is already in flight, so this message waits its
+    // turn in the durable queue (the server sends it when that turn ends — see `drain_watcher`).
+    if st.agents.get(&key).map(|v| v.pid.is_some()).unwrap_or(false) {
+        if let Some(store) = &st.store {
+            let imgs: Vec<store::StoredImage> = images
+                .iter()
+                .map(|(media_type, data)| store::StoredImage { media_type: media_type.clone(), data: data.clone() })
+                .collect();
+            store.enqueue_follow_up(&key, &text, &imgs).await.map_err(server_err)?;
+            return Ok(Json(json!({ "ok": true, "queued": true })));
+        }
+        // No store to queue into — fall back to writing straight to the live process.
+        let ok = st.agents.send(&key, &text, &images);
+        return Ok(Json(json!({ "ok": ok })));
+    }
+    // Nothing running: spawn a process for THIS turn (resuming the conversation) and deliver it.
+    start_branch_agent(&st, &name, &branch, false, false, None, None, None, false, true).await?;
     let ok = st.agents.send(&key, &text, &images);
     Ok(Json(json!({ "ok": ok })))
 }
@@ -993,16 +1074,32 @@ async fn get_branch_agent(State(st): State<AppState>, Path(name): Path<String>, 
         None => return Err(bad("branch is required")),
     };
     let key = branch_agent_key(&name, &branch);
-    let agent = st.agents.get(&key);
-    // In-memory events are the source of truth while an agent is live this
-    // session (they already include everything streamed so far). When the
-    // registry has none (fresh app start, or a reopened/restarted branch),
-    // fall back to the persisted transcript on disk so the UI backfill shows
-    // history instead of an empty pane.
-    let mut events = st.agents.events(&key);
+    // In the per-turn model nothing is running between turns, and after a restart the registry is
+    // empty entirely — so fall back to the store's record. Without this a branch that has a live
+    // conversation would read as "Not started" the moment its turn ended.
+    let agent = match st.agents.get(&key) {
+        Some(v) => Some(v),
+        None => match &st.store {
+            Some(s) => s.get_session(&key).await.map(|row| agents::AgentView {
+                key: key.clone(),
+                status: agents::status_from_str(&row.status),
+                session_id: row.session_id,
+                pid: None,
+                started_at: 0,
+                exit_code: None,
+            }),
+            None => None,
+        },
+    };
+    // The persisted transcript is the source of truth for the backfill: every event is appended
+    // to it as it streams, and it spans ALL turns. The in-memory buffer only covers the CURRENT
+    // turn's process — in the per-turn model that's a single turn, so preferring it would drop
+    // the earlier conversation whenever a branch was reopened. Fall back to memory only if the
+    // file is empty (e.g. history retention is off).
+    let key2 = key.clone();
+    let mut events = blocking(move || chat_history::load_events(&key2)).await;
     if events.is_empty() {
-        let key2 = key.clone();
-        events = blocking(move || chat_history::load_events(&key2)).await;
+        events = st.agents.events(&key);
     }
 
     // Lightweight reconcile: the session id arrives asynchronously via the
@@ -1406,6 +1503,9 @@ pub async fn serve_on_with(port: u16, procs: Arc<Processes>, agents: Arc<agents:
         }
     };
     let state = AppState { procs, agents, store };
+    // Starts the next queued turn whenever one finishes (per-turn model: nothing is listening on
+    // stdin between turns, so the follow-up has to be spawned).
+    spawn_drain_watcher(state.clone());
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.expect("bind");
     let actual = listener.local_addr().unwrap().port();

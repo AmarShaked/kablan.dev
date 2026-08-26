@@ -48,6 +48,16 @@ pub fn mirror_session_id(branch_key: &str, session_id: &str) {
     });
 }
 
+/// Close a turn's execution row from sync code (the supervisor's process-wait thread). Like the
+/// other mirrors this is fire-and-forget so bookkeeping can never stall process teardown.
+pub fn finish_execution_async(execution_id: String, exit_code: Option<i32>) {
+    let Some((store, handle)) = GLOBAL.get() else { return };
+    let store = store.clone();
+    handle.spawn(async move {
+        let _ = store.finish_execution(&execution_id, exit_code).await;
+    });
+}
+
 /// Mirror a branch's status (and session id, when newly learned) into the store from sync code.
 /// Fire-and-forget: the write is spawned on the runtime so an agent's reader thread never blocks
 /// on disk, and a storage hiccup can never stall or kill the stream.
@@ -434,13 +444,15 @@ impl Store {
         }
     }
 
-    /// Reconcile statuses left behind by a crash or a hard quit: any branch still recorded as
-    /// live ("idle"/"working"/"awaitingInput") cannot be, because no agent survives a restart.
-    /// Returns the keys that were corrected. Without this the UI would reopen showing agents that
-    /// stopped existing — the durable version of the drift this store exists to prevent.
+    /// Reconcile statuses left behind by a crash or a hard quit. A row claiming a turn is in
+    /// flight ("working"/"awaitingInput") cannot be true after a restart — no process survives —
+    /// so those become "idle", which in the per-turn model is the resting state: no turn running,
+    /// ready for the next message. Rows already "idle" are correct as-is and left alone (marking
+    /// them terminal would make a perfectly resumable branch read as finished).
+    /// Returns the keys that were corrected.
     pub async fn reconcile_stale_statuses(&self) -> Vec<String> {
         let keys: Vec<String> = sqlx::query(
-            "SELECT branch_key FROM sessions WHERE status IN ('idle','working','awaitingInput')",
+            "SELECT branch_key FROM sessions WHERE status IN ('working','awaitingInput')",
         )
         .fetch_all(&self.pool)
         .await
@@ -452,8 +464,8 @@ impl Store {
             return keys;
         }
         let _ = sqlx::query(
-            "UPDATE sessions SET status = 'done', updated_at = ?1
-             WHERE status IN ('idle','working','awaitingInput')",
+            "UPDATE sessions SET status = 'idle', updated_at = ?1
+             WHERE status IN ('working','awaitingInput')",
         )
         .bind(now_ms())
         .execute(&self.pool)
@@ -755,16 +767,19 @@ mod tests {
     async fn reconcile_clears_statuses_that_cannot_have_survived_a_restart() {
         let (store, dir) = open_temp("reconcile").await;
         store.upsert_session("p::branch:live", Some("s1"), "working", None).await.unwrap();
-        store.upsert_session("p::branch:also", None, "idle", None).await.unwrap();
+        store.upsert_session("p::branch:mid", None, "awaitingInput", None).await.unwrap();
+        store.upsert_session("p::branch:rest", None, "idle", None).await.unwrap();
         store.upsert_session("p::branch:over", None, "done", None).await.unwrap();
 
         let mut fixed = store.reconcile_stale_statuses().await;
         fixed.sort();
-        assert_eq!(fixed, vec!["p::branch:also", "p::branch:live"]);
-        assert_eq!(store.get_session("p::branch:live").await.unwrap().status, "done");
-        assert_eq!(store.get_session("p::branch:also").await.unwrap().status, "done");
-        // An already-terminal row is untouched, and the session id survives reconciliation so the
-        // branch can still be resumed.
+        assert_eq!(fixed, vec!["p::branch:live", "p::branch:mid"], "only in-flight turns");
+        // An in-flight turn can't have survived; the branch is simply ready again.
+        assert_eq!(store.get_session("p::branch:live").await.unwrap().status, "idle");
+        assert_eq!(store.get_session("p::branch:mid").await.unwrap().status, "idle");
+        // Resting and terminal rows are already correct — leaving them alone matters, or a
+        // resumable branch would reopen looking finished.
+        assert_eq!(store.get_session("p::branch:rest").await.unwrap().status, "idle");
         assert_eq!(store.get_session("p::branch:over").await.unwrap().status, "done");
         assert_eq!(store.get_session("p::branch:live").await.unwrap().session_id.as_deref(), Some("s1"));
 
