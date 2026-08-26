@@ -145,6 +145,19 @@ pub enum AgentStatus {
     Failed,
 }
 
+/// The wire/DB spelling of a status — identical to how `AgentStatus` serializes (camelCase), so
+/// the store, the WebSocket frames, and the frontend all agree on one vocabulary.
+pub fn status_str(s: AgentStatus) -> String {
+    match s {
+        AgentStatus::Idle => "idle",
+        AgentStatus::Working => "working",
+        AgentStatus::AwaitingInput => "awaitingInput",
+        AgentStatus::Done => "done",
+        AgentStatus::Failed => "failed",
+    }
+    .to_string()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum EventKind {
     Init,
@@ -392,6 +405,12 @@ impl Agents {
 
     fn emit_status(&self, key: &str) {
         let v = self.get(key);
+        // Mirror into the durable store on the way out. Every status change funnels through here,
+        // so this one hook keeps the DB in step with the registry (fire-and-forget — it must never
+        // block a reader thread).
+        if let Some(view) = &v {
+            crate::store::mirror_status(key, view.session_id.as_deref(), &status_str(view.status));
+        }
         let _ = self.tx.send(json!({ "type": "agent-status", "key": key, "agent": v }).to_string());
     }
 

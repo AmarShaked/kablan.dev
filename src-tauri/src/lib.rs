@@ -32,6 +32,10 @@ use tower_http::cors::CorsLayer;
 pub struct AppState {
     pub procs: Arc<Processes>,
     pub agents: Arc<agents::Agents>,
+    /// Durable agent state (sessions, executions, queue, drafts). `None` only if the database
+    /// could not be opened — the app still runs (falling back to the in-memory registry and
+    /// factory.json) rather than refusing to start over a storage problem.
+    pub store: Option<store::Store>,
 }
 
 type ApiResult = Result<Json<Value>, ApiError>;
@@ -323,6 +327,12 @@ async fn post_gitlab_mr(Path(name): Path<String>, body: Bytes) -> ApiResult {
 // --- Agent Factory ---
 fn factory_store_path() -> std::path::PathBuf {
     config::config_dir().join("factory.json")
+}
+
+/// The SQLite agent store (see `store.rs`). Sits beside factory.json so `KABLAN_CONFIG_DIR`
+/// relocates both together — tests depend on that.
+fn store_path() -> std::path::PathBuf {
+    config::config_dir().join("kablan.db")
 }
 
 async fn get_factory(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult {
@@ -1245,7 +1255,24 @@ pub async fn serve_on_with(port: u16, procs: Arc<Processes>, agents: Arc<agents:
     // Best-effort startup retention sweep: drop persisted chat transcripts older
     // than the configured window (0 = keep forever).
     chat_history::prune(config::load().factory.chat_history_days);
-    let state = AppState { procs, agents };
+    // Open the durable agent store and reconcile any status left behind by a crash or hard quit:
+    // no agent process survives a restart, so a row still marked live is by definition stale.
+    let store = match store::Store::open(&store_path()).await {
+        Ok(s) => {
+            let fixed = s.reconcile_stale_statuses().await;
+            if !fixed.is_empty() {
+                println!("  reconciled {} stale agent status(es) from a previous run", fixed.len());
+            }
+            // Publish it so the agent supervisor's sync reader threads can mirror status changes.
+            store::install_global(s.clone());
+            Some(s)
+        }
+        Err(e) => {
+            eprintln!("store: disabled ({e}) — falling back to in-memory agent state");
+            None
+        }
+    };
+    let state = AppState { procs, agents, store };
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.expect("bind");
     let actual = listener.local_addr().unwrap().port();

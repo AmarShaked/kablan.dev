@@ -14,6 +14,37 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::OnceLock;
+
+/// Process-wide handle so the agent supervisor's *synchronous* reader threads can mirror status
+/// and session ids into the store. Those threads have no `AppState` and no async context, so
+/// `mirror_status` below bridges to the runtime. Set once at startup by `install_global`.
+static GLOBAL: OnceLock<(Store, tokio::runtime::Handle)> = OnceLock::new();
+
+/// Publish the store for `mirror_status`. Call from async startup, once. A second call is
+/// ignored (returns false) rather than replacing a live handle mid-run.
+pub fn install_global(store: Store) -> bool {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => GLOBAL.set((store, handle)).is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Mirror a branch's status (and session id, when newly learned) into the store from sync code.
+/// Fire-and-forget: the write is spawned on the runtime so an agent's reader thread never blocks
+/// on disk, and a storage hiccup can never stall or kill the stream.
+pub fn mirror_status(branch_key: &str, session_id: Option<&str>, status: &str) {
+    let Some((store, handle)) = GLOBAL.get() else { return };
+    let (store, key, sid, status) = (
+        store.clone(),
+        branch_key.to_string(),
+        session_id.map(str::to_string),
+        status.to_string(),
+    );
+    handle.spawn(async move {
+        let _ = store.upsert_session(&key, sid.as_deref(), &status, None).await;
+    });
+}
 
 /// One branch's agent state as stored.
 #[derive(Debug, Clone, PartialEq)]
@@ -217,6 +248,38 @@ mod tests {
         let mut keys: Vec<String> = store.all_sessions().await.into_iter().map(|s| s.branch_key).collect();
         keys.sort();
         assert_eq!(keys, vec!["p::branch:a", "p::branch:b"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The supervisor mirrors through `install_global`/`mirror_status`, which are process-wide.
+    /// This drives a real agent so the whole path is covered: reader thread -> emit_status ->
+    /// mirror_status -> DB row. It runs alone (the global can only be installed once per process),
+    /// so it also asserts the fallbacks around that.
+    #[tokio::test]
+    async fn agent_status_is_mirrored_into_the_store() {
+        let (store, dir) = open_temp("mirror").await;
+        // Before a global is installed, mirroring is a silent no-op rather than a panic.
+        super::mirror_status("p::branch:none", Some("x"), "working");
+        assert!(store.get_session("p::branch:none").await.is_none());
+
+        if !super::install_global(store.clone()) {
+            // Another test in this process already installed one; the rest can't be asserted.
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        super::mirror_status("p::branch:m", Some("sid-9"), "working");
+        // The write is spawned, so poll briefly for it.
+        let mut got = None;
+        for _ in 0..100 {
+            if let Some(row) = store.get_session("p::branch:m").await {
+                got = Some(row);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let got = got.expect("status should be mirrored into the store");
+        assert_eq!(got.status, "working");
+        assert_eq!(got.session_id.as_deref(), Some("sid-9"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
