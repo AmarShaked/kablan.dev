@@ -705,6 +705,82 @@ describe("AgentChat", () => {
     expect(screen.queryByText(/queued \(1\)/i)).not.toBeInTheDocument();
   });
 
+  // --- Server-persisted draft + queue (Cockpit wires these; without them the queue stays local) ---
+
+  it("restores the server-persisted draft when the cockpit opens", async () => {
+    const onDraftLoad = vi.fn().mockResolvedValue({
+      text: "half written",
+      images: [{ mediaType: "image/png", data: "AAEC" }],
+    });
+    renderChat([idleStatus], { onDraftLoad, onDraftSave: vi.fn().mockResolvedValue({ ok: true }) });
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/message the agent/i)).toHaveValue("half written"),
+    );
+    // The stored attachment comes back as a thumbnail, rebuilt into a data URL.
+    const thumb = await screen.findByAltText("pasted attachment");
+    expect(thumb).toHaveAttribute("src", "data:image/png;base64,AAEC");
+  });
+
+  it("saves the draft as the user types (debounced)", async () => {
+    const onDraftSave = vi.fn().mockResolvedValue({ ok: true });
+    renderChat([idleStatus], {
+      onDraftLoad: vi.fn().mockResolvedValue({ text: "", images: [] }),
+      onDraftSave,
+    });
+    await userEvent.type(screen.getByPlaceholderText(/message the agent/i), "typing");
+    await waitFor(() => expect(onDraftSave).toHaveBeenCalledWith("typing", []));
+  });
+
+  it("a restored draft never overwrites what the user already typed", async () => {
+    // A slow load that resolves AFTER the user has started typing must not clobber their text.
+    let resolveLoad: (v: { text: string; images: never[] }) => void = () => {};
+    const onDraftLoad = vi.fn().mockReturnValue(new Promise((r) => (resolveLoad = r)));
+    renderChat([idleStatus], { onDraftLoad, onDraftSave: vi.fn().mockResolvedValue({ ok: true }) });
+    const box = screen.getByPlaceholderText(/message the agent/i);
+    await userEvent.type(box, "mine");
+    resolveLoad({ text: "stale stored draft", images: [] });
+    await waitFor(() => expect(onDraftLoad).toHaveBeenCalled());
+    expect(box).toHaveValue("mine");
+  });
+
+  it("parks a message on the SERVER queue and does not drain it client-side", async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    const onQueueAdd = vi.fn().mockResolvedValue({ id: "q1" });
+    // The server owns the list: it reports the message queued, then empty once it drains it.
+    const onQueueList = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ id: "q1", text: "later please", images: [] }]);
+    render(
+      <AgentStreamProvider>
+        <Seed messages={[workingStatus]} />
+        <LaterIngest messages={[idleStatus]} label="go idle" />
+        <AgentChat
+          project="proj"
+          agentKey="proj::wt:/wt/one"
+          onStart={vi.fn().mockResolvedValue(undefined)}
+          onMessage={onMessage}
+          onStop={vi.fn().mockResolvedValue(undefined)}
+          onQueueList={onQueueList}
+          onQueueAdd={onQueueAdd}
+          onQueueRemove={vi.fn().mockResolvedValue({ removed: true })}
+        />
+      </AgentStreamProvider>,
+    );
+    await userEvent.type(screen.getByPlaceholderText(/message the agent/i), "later please");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    // Went to the server queue, not to the agent.
+    await waitFor(() => expect(onQueueAdd).toHaveBeenCalledWith("later please", []));
+    expect(onMessage).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText("later please")).toBeInTheDocument());
+
+    // On idle the SERVER delivers it — this component must not also send, or it would arrive twice.
+    await userEvent.click(screen.getByRole("button", { name: /go idle/i }));
+    await waitFor(() => expect(onQueueList).toHaveBeenCalledTimes(3));
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
   it("cancels a queued message so it is never sent", async () => {
     const { onMessage } = renderQueueChat();
     const box = screen.getByPlaceholderText(/message the agent/i);

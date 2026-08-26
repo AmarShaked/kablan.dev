@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronLeft, Play } from "lucide-react";
-import { api, type RunningServer, type LogLine } from "../api.ts";
+import { api, type RunningServer, type LogLine, type StoredImage } from "../api.ts";
 import { useBranches, useWorktrees, useFactory, useFiles, useDeps, useGitlabHosts, qk } from "../queries.ts";
 import { branchKey } from "../lib/agentKey.ts";
 import { type Entry, branchToEntry, worktreeToEntry } from "../lib/entries.ts";
@@ -334,6 +334,15 @@ export function Cockpit({
   const backfillAgent = () => api.factory.getAgent(project, branch);
   const resolveApproval = (approvalId: string, decision: "allow" | "deny", reason?: string) =>
     api.factory.resolveApproval(project, branch, approvalId, decision, reason);
+  // Composer draft + follow-up queue live server-side, so an unsent message and anything parked
+  // while the agent was busy survive a reload/restart — and the server delivers the queue itself.
+  const loadDraft = () => api.factory.agentDraftGet(project, branch);
+  const saveDraft = (text: string, images: StoredImage[]) =>
+    api.factory.agentDraftSave(project, branch, text, images);
+  const listQueue = () => api.factory.agentQueueList(project, branch).then((r) => r.queued);
+  const addQueued = (text: string, images: StoredImage[]) =>
+    api.factory.agentQueueAdd(project, branch, text, images);
+  const removeQueued = (id: string) => api.factory.agentQueueRemove(project, id);
 
   // Which right-pane view the header tabs show. "logs" is dev-server-only, so it's Tauri-gated
   // alongside the rest of the server UI (the browser build has no processes).
@@ -425,6 +434,11 @@ export function Cockpit({
               onReset={resetAgent}
               onBackfill={backfillAgent}
               onResolveApproval={resolveApproval}
+              onDraftLoad={loadDraft}
+              onDraftSave={saveDraft}
+              onQueueList={listQueue}
+              onQueueAdd={addQueued}
+              onQueueRemove={removeQueued}
             />
           </div>
         </ResizablePanel>

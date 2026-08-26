@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import {
@@ -14,7 +14,7 @@ import {
   RotateCcw,
   RefreshCw,
 } from "lucide-react";
-import type { AgentStatus, AgentView, AgentApproval } from "../api.ts";
+import type { AgentStatus, AgentView, AgentApproval, StoredImage, QueuedMessage } from "../api.ts";
 import { useAgentStream } from "../hooks/useAgentStream.tsx";
 import { AgentKeyContext, useExpanded } from "../lib/chatExpand.ts";
 import { AgentDot } from "./AgentDot.tsx";
@@ -43,6 +43,12 @@ type TimelineItem =
 /** A pasted image staged in the composer, awaiting send. `data` is the raw base64 (no data-URL
  * prefix) for the API; `url` is the full data URL for the thumbnail preview. */
 type Attachment = { id: string; url: string; mediaType: string; data: string };
+
+/** Rebuild the thumbnail data URL for an image the server stored (it keeps the raw base64 and the
+ * media type separately, which is the shape the send endpoint wants). */
+function storedImageUrl(img: StoredImage): string {
+  return `data:${img.mediaType};base64,${img.data}`;
+}
 
 /** The composer footer's dropdowns (model / permission / thinking).
  *
@@ -1131,6 +1137,11 @@ export function AgentChat({
   onReset,
   onBackfill,
   onResolveApproval,
+  onDraftLoad,
+  onDraftSave,
+  onQueueList,
+  onQueueAdd,
+  onQueueRemove,
 }: {
   project: string;
   agentKey: string;
@@ -1171,6 +1182,17 @@ export function AgentChat({
   /** Resolves a supervised per-tool approval (Approve/Deny card). Optional so tests and non-
    * supervised callers can omit it — the cards only appear when there are pending approvals. */
   onResolveApproval?: (approvalId: string, decision: "allow" | "deny", reason?: string) => Promise<unknown>;
+  /** Server-persisted composer draft. When supplied, the unsent message + attachments are loaded
+   * on open and saved as you type, so they survive a reload, a branch switch, and a restart. */
+  onDraftLoad?: () => Promise<{ text: string; images: StoredImage[] }>;
+  onDraftSave?: (text: string, images: StoredImage[]) => Promise<unknown>;
+  /** Server-side follow-up queue. When `onQueueAdd` is supplied the queue lives on the server —
+   * it survives a reload and the SERVER delivers the next message when the agent goes idle, so
+   * this component must not also drain it (that would send twice). Without these props the queue
+   * stays client-local and is drained here, as before. */
+  onQueueList?: () => Promise<QueuedMessage[]>;
+  onQueueAdd?: (text: string, images: StoredImage[]) => Promise<unknown>;
+  onQueueRemove?: (id: string) => Promise<unknown>;
 }) {
   const { agentFor, setActiveKey, seedApprovals, ingest } = useAgentStream();
   const live = agentFor(agentKey);
@@ -1208,10 +1230,72 @@ export function AgentChat({
   // one. When the agent next goes idle, the HEAD is auto-dequeued and sent (one per idle
   // transition — see the effect below). Each item captures the composer text + staged attachments
   // at enqueue time; the thinking keyword is applied at SEND time (consistent with `sendMessage`).
-  const [queue, setQueue] = useState<{ id: string; text: string; images: Attachment[] }[]>([]);
+  const [queue, setQueue] = useState<QueuedMessage[]>([]);
   const queueSeq = useRef(0);
+  // The queue lives on the server whenever the caller wired it up; then the SERVER sends the next
+  // message on idle and this component only displays/edits the list.
+  const serverQueue = !!onQueueAdd;
+  const refreshQueue = useCallback(() => {
+    if (!onQueueList) return;
+    onQueueList()
+      .then(setQueue)
+      .catch(() => {});
+  }, [onQueueList]);
   // Monotonic id source for optimistic "You" bubbles, so a failed send can remove exactly its own.
   const sendSeq = useRef(0);
+
+  // Load this branch's persisted draft + queue when the cockpit opens on it. `draftLoaded` gates
+  // the save effect below so the initial empty state can't overwrite a stored draft before it
+  // arrives (that race would silently delete the very thing we're restoring).
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  useEffect(() => {
+    setDraftLoaded(false);
+    if (!onDraftLoad) {
+      setDraftLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    onDraftLoad()
+      .then(({ text: saved, images }) => {
+        if (cancelled) return;
+        // Don't clobber anything typed while the fetch was in flight.
+        setText((cur) => (cur ? cur : saved));
+        if (images.length > 0) {
+          setAttachments((cur) =>
+            cur.length > 0
+              ? cur
+              : images.map((i, n) => ({ id: `d-${n}`, url: storedImageUrl(i), mediaType: i.mediaType, data: i.data })),
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setDraftLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentKey]);
+
+  useEffect(() => {
+    refreshQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentKey]);
+
+  // Persist the draft as the user types, debounced so a fast typist doesn't write on every
+  // keystroke. Runs only after the load settled (see `draftLoaded`).
+  useEffect(() => {
+    if (!onDraftSave || !draftLoaded) return;
+    const id = setTimeout(() => {
+      void onDraftSave(
+        text,
+        attachments.map((a) => ({ mediaType: a.mediaType, data: a.data })),
+      ).catch(() => {});
+    }, 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, attachments, draftLoaded]);
   const transcriptRef = useRef<HTMLDivElement>(null);
   // Drag-and-drop overlay state. `dragDepth` counts enter/leave over nested children so the
   // "Drop images to attach" overlay doesn't flicker as the pointer crosses child elements.
@@ -1552,13 +1636,27 @@ export function AgentChat({
   const enqueue = () => {
     const t = text.trim();
     if (!t && attachments.length === 0) return;
-    const id = `q-${(queueSeq.current += 1)}`;
-    const imgs = attachments;
-    setQueue((prev) => [...prev, { id, text: t, images: imgs }]);
+    const imgs: StoredImage[] = attachments.map((a) => ({ mediaType: a.mediaType, data: a.data }));
     setText("");
     setAttachments([]);
+    if (onQueueAdd) {
+      // Server-side queue: park it durably, then re-read the authoritative list.
+      onQueueAdd(t, imgs)
+        .then(refreshQueue)
+        .catch((err) => {
+          toast.error(String(err));
+          // Put the text back so a failed queue-add doesn't silently eat the message.
+          setText(t);
+          setAttachments(attachments);
+        });
+      return;
+    }
+    setQueue((prev) => [...prev, { id: `q-${(queueSeq.current += 1)}`, text: t, images: imgs }]);
   };
-  const removeQueued = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
+  const removeQueued = (id: string) => {
+    setQueue((prev) => prev.filter((q) => q.id !== id));
+    if (onQueueRemove) onQueueRemove(id).then(refreshQueue).catch(() => refreshQueue());
+  };
   // Composer submit (Send button / Enter). While the agent is actively working, park the message
   // in the queue instead of sending — it drains on the next idle (see the effect below). Otherwise
   // send immediately (auto-starting the agent if needed), matching the prior behavior.
@@ -1639,12 +1737,21 @@ export function AgentChat({
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
     if (prev !== "working" || status === "working") return;
+    if (serverQueue) {
+      // The server drains its own queue on idle — sending here too would deliver the message
+      // twice. Just re-read the list so the UI drops what the server already took.
+      refreshQueue();
+      return;
+    }
     if (busy || queue.length === 0) return;
     const head = queue[0];
     setQueue((q) => q.slice(1));
-    void sendMessage(head.text, head.images);
+    void sendMessage(
+      head.text,
+      head.images.map((i, n) => ({ id: `qi-${n}`, url: storedImageUrl(i), mediaType: i.mediaType, data: i.data })),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, busy, queue]);
+  }, [status, busy, queue, serverQueue]);
 
   // Changing the model restarts a running agent with the new `--model` (resuming its session so
   // context is kept); for a not-yet-started agent it just records the choice for the next start.

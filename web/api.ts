@@ -115,6 +115,14 @@ export interface GitlabOverview {
 }
 
 export type AgentStatus = "idle" | "working" | "awaitingInput" | "done" | "failed";
+
+/** An attachment as the server stores it: raw base64 plus its media type (no data-URL prefix).
+ * Build a thumbnail src with `data:${mediaType};base64,${data}`. */
+export type StoredImage = { mediaType: string; data: string };
+
+/** A message parked while the agent was busy, waiting for it to go idle. Lives server-side, so it
+ * survives a reload and is delivered even if the window is closed. */
+export type QueuedMessage = { id: string; text: string; images: StoredImage[] };
 export interface AgentView {
   key: string;
   status: AgentStatus;
@@ -415,6 +423,33 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ branch }),
       }),
+
+    // --- Composer draft (server-persisted, so an unsent message survives a reload/restart) ---
+    agentDraftGet: (name: string, branch: string) =>
+      req<{ text: string; images: StoredImage[] }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/agent/draft?branch=${encodeURIComponent(branch)}`,
+      ),
+    agentDraftSave: (name: string, branch: string, text: string, images: StoredImage[] = []) =>
+      req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/draft`, {
+        method: "PUT",
+        body: JSON.stringify({ branch, text, images }),
+      }),
+
+    // --- Follow-up queue (server-side, drained when the agent goes idle) ---
+    agentQueueList: (name: string, branch: string) =>
+      req<{ queued: QueuedMessage[] }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/agent/queue?branch=${encodeURIComponent(branch)}`,
+      ),
+    agentQueueAdd: (name: string, branch: string, text: string, images: StoredImage[] = []) =>
+      req<{ id: string }>(`/api/projects/${encodeURIComponent(name)}/factory/agent/queue`, {
+        method: "POST",
+        body: JSON.stringify({ branch, text, images }),
+      }),
+    agentQueueRemove: (name: string, id: string) =>
+      req<{ removed: boolean }>(
+        `/api/projects/${encodeURIComponent(name)}/factory/agent/queue/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      ),
     // Fork the branch's Claude session to re-run the conversation from an earlier point — the chat
     // EDIT / RETRY actions. `messageUuid` is the fork point (the final assistant-message uuid of the
     // turn BEFORE the one being replaced); omit it to edit the very first turn (starts fresh). The
