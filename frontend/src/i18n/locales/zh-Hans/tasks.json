@@ -95,8 +95,6 @@
       "item1": "开发服务器是否成功启动？可能有一个您需要解决的错误，或者可能需要安装依赖项。",
       "item2": "您的开发服务器是否以格式打印 URL 和端口到终端",
       "item2Suffix": "？（这就是我们如何知道它正在运行）",
-      "item3": "您是否安装了 Web Companion（点击编辑所需）？如果没有，请",
-      "item3Link": "按照此处的安装说明操作",
       "fixScript": "修复开发脚本"
     },
     "noServer": {
@@ -104,8 +102,6 @@
       "startPrompt": "请启动开发服务器以查看预览",
       "setupTitle": "必须设置开发服务器脚本才能使用预览功能",
       "setupPrompt": "要使用实时预览和点击编辑，请为此项目添加开发服务器脚本。",
-      "companionPrompt": "要使用点击编辑功能，请将浏览器伴侣添加到您的项目。",
-      "companionLink": "查看安装指南",
       "startButton": "启动开发服务器",
       "configureButton": "配置",
       "stopAndEditButton": "停止开发服务器并解决问题",

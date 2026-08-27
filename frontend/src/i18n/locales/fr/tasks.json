@@ -82,8 +82,6 @@
       "item1": "Le serveur de développement a-t-il démarré correctement ? Il peut y avoir un bug à résoudre, ou peut-être que les dépendances doivent être installées.",
       "item2": "Votre serveur de développement a-t-il affiché l'URL et le port dans le terminal au format",
       "item2Suffix": " ? (c'est ainsi que nous savons qu'il fonctionne)",
-      "item3": "Avez-vous installé le Web Companion (requis pour le clic-pour-éditer) ? Sinon, veuillez",
-      "item3Link": "suivre les instructions d'installation ici",
       "fixScript": "Corriger le script de développement"
     },
     "noServer": {
@@ -91,8 +89,6 @@
       "startPrompt": "Veuillez démarrer un serveur de développement pour voir l'aperçu",
       "setupTitle": "Vous devez configurer un script de serveur de développement pour utiliser la fonction d'aperçu",
       "setupPrompt": "Pour utiliser l'aperçu en direct et le clic-pour-éditer, veuillez ajouter un script de serveur de développement à ce projet.",
-      "companionPrompt": "Pour la fonctionnalité clic-pour-éditer, ajoutez le browser companion à votre projet.",
-      "companionLink": "Voir le guide d'installation",
       "startButton": "Démarrer le serveur de développement",
       "configureButton": "Configurer",
       "stopAndEditButton": "Arrêter le serveur de développement et résoudre les problèmes",

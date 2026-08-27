@@ -95,8 +95,6 @@
       "item1": "開發伺服器是否成功啟動？可能有錯誤需要處理，或需要安裝相依套件。",
       "item2": "您的開發伺服器是否以格式將 URL 與連接埠輸出到終端機",
       "item2Suffix": "？（這是我們判斷它是否在執行的方式）",
-      "item3": "您是否安裝了 Web Companion（點擊編輯所需）？如果沒有，請",
-      "item3Link": "依照此處的安裝說明操作",
       "fixScript": "修復開發腳本"
     },
     "noServer": {
@@ -104,8 +102,6 @@
       "startPrompt": "請啟動開發伺服器以查看預覽",
       "setupTitle": "必須設定開發伺服器腳本才能使用預覽功能",
       "setupPrompt": "要使用即時預覽與點擊編輯，請為此專案新增開發伺服器腳本。",
-      "companionPrompt": "要使用點擊編輯功能，請將瀏覽器 Companion 加到您的專案。",
-      "companionLink": "查看安裝指南",
       "startButton": "啟動開發伺服器",
       "configureButton": "設定",
       "stopAndEditButton": "停止開發伺服器並解決問題",

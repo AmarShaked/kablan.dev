@@ -366,8 +366,6 @@
       "placeholder": "Ingresar URL..."
     },
     "noServer": {
-      "companionLink": "Ver guía de instalación",
-      "companionPrompt": "Para la funcionalidad de clic y editar, agrega el complemento del navegador a tu proyecto.",
       "configureButton": "Configurar",
       "setupTitle": "Debes configurar un script de servidor de desarrollo para usar la función de vista previa",
       "setupPrompt": "Para usar la vista previa en vivo y la función de hacer clic y editar, por favor agrega un script de servidor de desarrollo a este proyecto.",
@@ -405,8 +403,6 @@
       "item1": "¿Se inició correctamente el servidor de desarrollo? Puede haber un error que necesites resolver, o quizás sea necesario instalar dependencias.",
       "item2": "¿Tu servidor de desarrollo imprimió la URL y el puerto en la terminal en el formato",
       "item2Suffix": "? (así es como sabemos que está funcionando)",
-      "item3": "¿Has instalado el Web Companion (requerido para hacer clic y editar)? Si no, por favor",
-      "item3Link": "sigue las instrucciones de instalación aquí",
       "title": "Tenemos problemas al previsualizar tu aplicación:",
       "fixScript": "Corregir Script de Desarrollo"
     }
