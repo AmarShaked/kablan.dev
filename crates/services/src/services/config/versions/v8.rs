@@ -10,7 +10,8 @@ pub use v7::{
 use crate::services::config::versions::v7;
 
 fn default_git_branch_prefix() -> String {
-    "vk".to_string()
+    // Kablan fork: branches are created as "<prefix>/<id>-<slug>"; upstream's default was "vk".
+    "kablan".to_string()
 }
 
 fn default_pr_auto_description_enabled() -> bool {

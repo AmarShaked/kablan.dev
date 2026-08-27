@@ -1,21 +1,21 @@
 {
-  "name": "Vibe Kanban",
-  "short_name": "VK",
+  "name": "Kablan",
+  "short_name": "Kablan",
   "icons": [
     {
-      "src": "/favicon-vk-light.svg",
+      "src": "/favicon-kablan-light.svg",
       "sizes": "any",
       "purpose": "any",
       "type": "image/svg+xml"
     },
     {
-      "src": "/favicon-vk-light-maskable.svg",
+      "src": "/favicon-kablan-maskable.svg",
       "sizes": "any",
       "purpose": "maskable",
       "type": "image/svg+xml"
     }
   ],
-  "theme_color": "#ffffff",
+  "theme_color": "#c0673a",
   "background_color": "#ffffff",
   "display": "standalone"
 }

@@ -7,7 +7,9 @@ pub fn asset_dir() -> std::path::PathBuf {
     let path = if cfg!(debug_assertions) {
         std::path::PathBuf::from(PROJECT_ROOT).join("../../dev_assets")
     } else {
-        ProjectDirs::from("ai", "bloop", "vibe-kanban")
+        // Kablan fork: user data lives under Kablan's own identifier, not the original owner's
+        // (upstream used "ai"/"bloop"/"vibe-kanban"). Distinct product, distinct data directory.
+        ProjectDirs::from("dev", "kablan", "Kablan")
             .expect("OS didn't give us a home directory")
             .data_dir()
             .to_path_buf()
