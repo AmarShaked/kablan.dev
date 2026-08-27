@@ -17,7 +17,6 @@ use services::services::{
     filesystem::FilesystemService,
     image::ImageService,
     oauth_credentials::OAuthCredentials,
-    auto_fetch::AutoFetchService,
     pr_monitor::PrMonitorService,
     project::ProjectService,
     queued_message::QueuedMessageService,
@@ -200,10 +199,6 @@ impl Deployment for LocalDeployment {
             let rc = remote_client.clone().ok();
             PrMonitorService::spawn(db, analytics, container, rc).await;
         }
-
-        // Keeps branch lists and remote-tracking state current in the background. Opt-in via
-        // config, so this is a no-op loop until the user enables it.
-        AutoFetchService::spawn(db.clone(), config.clone());
 
         let deployment = Self {
             config,

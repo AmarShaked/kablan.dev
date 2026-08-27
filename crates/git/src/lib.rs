@@ -1713,13 +1713,6 @@ impl GitService {
             .map_err(GitServiceError::from)
     }
 
-    /// Fetch all remotes for the repo at `repo_path`, pruning deleted remote branches.
-    pub fn fetch_all_remotes(&self, repo_path: &Path) -> Result<(), GitServiceError> {
-        GitCli::new()
-            .fetch_all(repo_path)
-            .map_err(GitServiceError::from)
-    }
-
     pub fn resolve_remote_for_branch(
         &self,
         repo_path: &Path,
