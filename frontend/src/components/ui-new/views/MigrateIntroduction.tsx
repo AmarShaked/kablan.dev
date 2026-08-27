@@ -23,7 +23,7 @@ const features = [
       <>
         Access your projects from anywhere.{' '}
         <a
-          href="https://github.com/BloopAI/vibe-kanban"
+          href="https://github.com/AmarShaked/kablan.dev"
           target="_blank"
           rel="noopener noreferrer"
           className="text-brand hover:underline"

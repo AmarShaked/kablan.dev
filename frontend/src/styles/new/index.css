@@ -9,27 +9,27 @@
   /* Light defaults - New Design */
   .new-design {
     color-scheme: light;
-    --_background: 0 0% 95%;
-    --_foreground: 0 0% 5%;
-    --_primary: 0 0% 5%;
-    --_primary-foreground: 0 0% 100%;
-    --_secondary: 0 0% 95%;
-    --_secondary-foreground: 0 0% 16%;
-    --_muted: 0 0% 89%;
-    --_muted-foreground: 0 0% 56%;
-    --_accent: 0 0% 92%;
-    --_accent-foreground: 0 0% 5%;
-    --_destructive: 0 59% 57%;
-    --_destructive-foreground: 0 0% 100%;
-    --_border: 0 0% 85%;
-    --_input: 0 0% 96%;
-    --_ring: 0 0% 5%;
+    --_background: 44 40% 98%;
+    --_foreground: 31 9% 15%;
+    --_primary: 20 55% 48%;
+    --_primary-foreground: 37 75% 98%;
+    --_secondary: 44 18% 94%;
+    --_secondary-foreground: 31 7% 20%;
+    --_muted: 44 18% 94%;
+    --_muted-foreground: 34 4% 42%;
+    --_accent: 44 18% 91%;
+    --_accent-foreground: 31 8% 18%;
+    --_destructive: 1 64% 48%;
+    --_destructive-foreground: 37 65% 98%;
+    --_border: 44 8% 86%;
+    --_input: 44 8% 86%;
+    --_ring: 20 55% 48%;
     --_radius: 0.125rem;
 
     /* Status (light) */
-    --_success: 117 38% 50%;
+    --_success: 150 69% 32%;
     --_success-foreground: 117 38% 20%;
-    --_warning: 32 95% 44%;
+    --_warning: 35 66% 42%;
     --_warning-foreground: 32 95% 14%;
     --_info: 217 91% 60%;
     --_info-foreground: 0 0% 5%;
@@ -87,26 +87,26 @@
     color-scheme: dark;
 
     /* Internal variables (dark) - needed for public tokens */
-    --_background: 0 0% 13%;
-    --_foreground: 0 0% 96%;
-    --_primary: 240 4.8% 95.9%;
-    --_primary-foreground: 240 5.9% 10%;
-    --_secondary: 0 0% 12%;
-    --_secondary-foreground: 0 0% 77%;
-    --_muted: 0 0% 16%;
-    --_muted-foreground: 0 0% 64%;
-    --_accent: 0 0% 20%;
-    --_accent-foreground: 0 0% 96%;
-    --_destructive: 0 59% 57%;
-    --_destructive-foreground: 0 0% 96%;
-    --_border: 0 0% 20%;
-    --_input: 0 0% 20%;
-    --_ring: 0 0% 77%;
+    --_background: 44 5% 13%;
+    --_foreground: 44 17% 91%;
+    --_primary: 20 58% 59%;
+    --_primary-foreground: 37 68% 97%;
+    --_secondary: 44 4% 20%;
+    --_secondary-foreground: 44 17% 91%;
+    --_muted: 44 4% 20%;
+    --_muted-foreground: 44 4% 59%;
+    --_accent: 44 4% 22%;
+    --_accent-foreground: 44 21% 93%;
+    --_destructive: 3 57% 58%;
+    --_destructive-foreground: 37 54% 97%;
+    --_border: 44 4% 24%;
+    --_input: 44 4% 26%;
+    --_ring: 20 58% 59%;
 
     /* Status (dark) */
-    --_success: 117 38% 50%;
+    --_success: 142 34% 58%;
     --_success-foreground: 117 38% 90%;
-    --_warning: 32.2 95% 44.1%;
+    --_warning: 38 59% 63%;
     --_warning-foreground: 32.2 95% 90%;
     --_info: 217.2 91.2% 59.8%;
     --_info-foreground: 217.2 91.2% 90%;

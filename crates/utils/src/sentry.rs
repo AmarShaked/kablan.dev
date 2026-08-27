@@ -3,8 +3,10 @@ use std::sync::OnceLock;
 use sentry_tracing::{EventFilter, SentryLayer};
 use tracing::Level;
 
-const SENTRY_DSN_DEFAULT: &str = "https://1065a1d276a581316999a07d5dffee26@o4509603705192449.ingest.de.sentry.io/4509605576441937";
-const SENTRY_DSN_REMOTE: &str = "https://d6e4c45af2b081fadb10fb0ba726ccaf@o4509603705192449.ingest.de.sentry.io/4510305669283920";
+// Kablan fork: upstream hardcoded Bloop AI's Sentry DSNs here, so an unmodified fork would ship
+// its users' crash reports to them. Telemetry is opt-in via KABLAN_SENTRY_DSN; empty = disabled.
+const SENTRY_DSN_DEFAULT: &str = "";
+const SENTRY_DSN_REMOTE: &str = "";
 
 static INIT_GUARD: OnceLock<sentry::ClientInitGuard> = OnceLock::new();
 
@@ -24,10 +26,15 @@ impl SentrySource {
         }
     }
 
-    fn dsn(self) -> &'static str {
+    fn dsn(self) -> String {
+        if let Ok(dsn) = std::env::var("KABLAN_SENTRY_DSN") {
+            if !dsn.trim().is_empty() {
+                return dsn;
+            }
+        }
         match self {
-            SentrySource::Remote => SENTRY_DSN_REMOTE,
-            _ => SENTRY_DSN_DEFAULT,
+            SentrySource::Remote => SENTRY_DSN_REMOTE.to_string(),
+            _ => SENTRY_DSN_DEFAULT.to_string(),
         }
     }
 }

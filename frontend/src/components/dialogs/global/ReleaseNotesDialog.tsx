@@ -13,7 +13,10 @@ import { useTheme } from '@/components/ThemeProvider';
 import { getActualTheme } from '@/utils/theme';
 import { defineModal, type NoProps } from '@/lib/modals';
 
-const RELEASE_NOTES_BASE_URL = 'https://vibekanban.com/release-notes';
+// Kablan fork: upstream embedded their own release-notes site in an iframe here. Pointed at
+// Kablan's releases instead, so the app never loads content from the original owner.
+const RELEASE_NOTES_BASE_URL =
+  'https://github.com/AmarShaked/kablan.dev/releases';
 
 const ReleaseNotesDialogImpl = NiceModal.create<NoProps>(() => {
   const modal = useModal();
@@ -45,7 +48,7 @@ const ReleaseNotesDialogImpl = NiceModal.create<NoProps>(() => {
       <DialogContent className="flex flex-col w-full h-full max-w-7xl max-h-[calc(100dvh-1rem)] p-0">
         <DialogHeader className="p-4 border-b flex-shrink-0">
           <DialogTitle className="text-xl font-semibold">
-            We've updated Vibe Kanban! Check out what's new...
+            We've updated Kablan! Check out what's new...
           </DialogTitle>
         </DialogHeader>
 

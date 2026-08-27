@@ -1,5 +1,4 @@
 // vite.config.ts
-import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { createLogger, defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -99,13 +98,18 @@ export default defineConfig({
         ],
       },
     }),
-    sentryVitePlugin({ org: 'bloop-ai', project: 'vibe-kanban' }),
     executorSchemasPlugin(),
   ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
       shared: path.resolve(__dirname, '../shared'),
+      // Kablan fork: analytics/crash-reporting are removed. Aliasing the packages themselves
+      // (rather than editing each call site) guarantees nothing is sent, including from code
+      // added later that imports them.
+      'posthog-js/react': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
+      'posthog-js': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
+      '@sentry/react': path.resolve(__dirname, './src/lib/noop/sentry.ts'),
     },
   },
   server: {

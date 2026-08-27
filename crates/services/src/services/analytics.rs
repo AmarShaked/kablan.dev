@@ -20,18 +20,12 @@ pub struct AnalyticsConfig {
 }
 
 impl AnalyticsConfig {
+    /// Kablan fork: product analytics are removed. Upstream enabled PostHog whenever
+    /// POSTHOG_API_KEY/ENDPOINT were baked in at build time or present in the environment;
+    /// returning None unconditionally means no build — release or local — can turn it back on,
+    /// and every `track_event` call site downstream becomes inert without needing to be touched.
     pub fn new() -> Option<Self> {
-        let api_key = option_env!("POSTHOG_API_KEY")
-            .map(|s| s.to_string())
-            .or_else(|| std::env::var("POSTHOG_API_KEY").ok())?;
-        let api_endpoint = option_env!("POSTHOG_API_ENDPOINT")
-            .map(|s| s.to_string())
-            .or_else(|| std::env::var("POSTHOG_API_ENDPOINT").ok())?;
-
-        Some(Self {
-            posthog_api_key: api_key,
-            posthog_api_endpoint: api_endpoint,
-        })
+        None
     }
 }
 
@@ -52,6 +46,12 @@ impl AnalyticsService {
     }
 
     pub fn track_event(&self, user_id: &str, event_name: &str, properties: Option<Value>) {
+        // Kablan fork: analytics removed — nothing leaves the machine. Kept as a no-op so the
+        // ~50 call sites across the codebase still compile.
+        let _ = (user_id, event_name, properties);
+        #[allow(unreachable_code)]
+        return;
+        #[allow(unreachable_code)]
         let endpoint = format!(
             "{}/capture/",
             self.config.posthog_api_endpoint.trim_end_matches('/')

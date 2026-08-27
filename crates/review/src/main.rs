@@ -18,7 +18,9 @@ use tempfile::TempDir;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_API_URL: &str = "https://api.vibekanban.com";
+// Kablan fork: upstream defaulted to their hosted API. A fork must not call it, so there is no
+// default — set REVIEW_API_URL to point at your own service.
+const DEFAULT_API_URL: &str = "";
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 const TIMEOUT: Duration = Duration::from_secs(600); // 10 minutes
 
