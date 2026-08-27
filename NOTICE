@@ -1,0 +1,16 @@
+Kablan Board
+Copyright 2026 Shaked Amar
+
+This product is a derivative work of Vibe Kanban
+(https://github.com/BloopAI/vibe-kanban), Copyright Bloop AI,
+licensed under the Apache License, Version 2.0.
+
+Forked at upstream tag v0.1.8-20260210143125.
+
+Modifications made in this fork (Apache-2.0 section 4b):
+  - Rebranded to Kablan (name, colors, product identity).
+  - Added a branch list view.
+  - Added automatic fetching for configured projects.
+  - Packaged and shipped as a Tauri desktop application.
+
+The Apache License 2.0 text is in LICENSE and applies to this work.

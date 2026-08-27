@@ -86,3 +86,6 @@ vibe-kanban-cloud/
 
 .jj
 .sisyphus/
+
+# Kablan fork: local build/test scratch
+/target
