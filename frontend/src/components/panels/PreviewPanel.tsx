@@ -13,19 +13,16 @@ import { useClickedElements } from '@/contexts/ClickedElementsProvider';
 import { Alert } from '@/components/ui/alert';
 import { useProject } from '@/contexts/ProjectContext';
 import { DevServerLogsView } from '@/components/tasks/TaskDetails/preview/DevServerLogsView';
-import { PreviewToolbar } from '@/components/tasks/TaskDetails/preview/PreviewToolbar';
 import { NoServerContent } from '@/components/tasks/TaskDetails/preview/NoServerContent';
 import { ReadyContent } from '@/components/tasks/TaskDetails/preview/ReadyContent';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 
 export function PreviewPanel() {
-  const [iframeError, setIframeError] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [loadingTimeFinished, setLoadingTimeFinished] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
-  const [customUrl, setCustomUrl] = useState<string | null>(null);
   const listenerRef = useRef<ClickToComponentListener | null>(null);
 
   const { t } = useTranslation('tasks');
@@ -58,19 +55,11 @@ export function PreviewPanel() {
   });
 
   // Compute effective URL - custom URL overrides auto-detected
-  const effectiveUrl = customUrl ?? previewState.url;
+  const effectiveUrl = previewState.url;
 
-  const handleRefresh = () => {
-    setIframeError(false);
-  };
 
   const { addElement } = useClickedElements();
 
-  const handleCopyUrl = async () => {
-    if (effectiveUrl) {
-      await navigator.clipboard.writeText(effectiveUrl);
-    }
-  };
 
   useEffect(() => {
     if (previewState.status !== 'ready' || !previewState.url || !addElement) {
@@ -137,16 +126,12 @@ export function PreviewPanel() {
   ]);
 
   const isPreviewReady =
-    (previewState.status === 'ready' && Boolean(previewState.url)) ||
-    (customUrl !== null && hasRunningDevServer);
-  const isPreviewReadyWithoutError = isPreviewReady && !iframeError;
-  const mode = iframeError
-    ? 'error'
-    : isPreviewReadyWithoutError
-      ? 'ready'
-      : hasRunningDevServer
-        ? 'searching'
-        : 'noServer';
+    previewState.status === 'ready' && Boolean(previewState.url);
+  const mode = isPreviewReady
+    ? 'ready'
+    : hasRunningDevServer
+      ? 'searching'
+      : 'noServer';
   const toggleLogs = () => {
     setShowLogs((v) => !v);
   };
@@ -199,18 +184,11 @@ export function PreviewPanel() {
       <div className={`flex-1 flex flex-col min-h-0`}>
         {mode === 'ready' ? (
           <>
-            <PreviewToolbar
-              mode={mode}
+            <ReadyContent
               url={effectiveUrl}
-              onRefresh={handleRefresh}
-              onCopyUrl={handleCopyUrl}
               onStop={stopDevServer}
               isStopping={isStoppingDevServer}
-              customUrl={customUrl}
-              detectedUrl={lastKnownUrl?.url}
-              onUrlChange={setCustomUrl}
             />
-            <ReadyContent url={effectiveUrl} />
           </>
         ) : (
           <NoServerContent
