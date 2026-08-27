@@ -962,6 +962,7 @@ export const Actions = {
           ...task,
           has_in_progress_attempt: false,
           last_attempt_failed: false,
+          has_running_dev_server: false,
           executor: '',
         },
         repoId,

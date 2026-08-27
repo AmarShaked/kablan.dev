@@ -1,4 +1,4 @@
-import { Loader2, XCircle } from 'lucide-react';
+import { Loader2, SquareTerminal, XCircle } from 'lucide-react';
 
 import type { TaskWithAttemptStatus } from 'shared/types';
 
@@ -13,8 +13,22 @@ import type { TaskWithAttemptStatus } from 'shared/types';
  * Shared by the board card and the list row so the two can't drift apart.
  */
 export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
+  // Attempt state and dev-server state are independent — a task can be idle while still holding
+  // the project's port — so the server badge renders alongside rather than instead.
+  const server = task.has_running_dev_server ? (
+    <span
+      className="font-ibm-plex-mono inline-flex shrink-0 items-center gap-1 bg-success/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-success"
+      title="A dev server is running for this task"
+    >
+      <SquareTerminal className="h-3 w-3" aria-hidden />
+      Server
+    </span>
+  ) : null;
+
   if (task.has_in_progress_attempt) {
     return (
+      <>
+      {server}
       <span
         className="font-ibm-plex-mono inline-flex shrink-0 items-center gap-1 bg-info/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-info"
         title="An attempt is running for this task"
@@ -22,11 +36,14 @@ export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
         <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
         Running
       </span>
+      </>
     );
   }
 
   if (task.last_attempt_failed) {
     return (
+      <>
+      {server}
       <span
         className="font-ibm-plex-mono inline-flex shrink-0 items-center gap-1 bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-destructive"
         title="The last attempt for this task failed"
@@ -34,10 +51,11 @@ export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
         <XCircle className="h-3 w-3" aria-hidden />
         Failed
       </span>
+      </>
     );
   }
 
-  return null;
+  return server;
 }
 
 /** True when the task is worth marking out in a list — used for the row/card edge stripe. */

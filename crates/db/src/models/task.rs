@@ -41,6 +41,10 @@ pub struct TaskWithAttemptStatus {
     pub task: Task,
     pub has_in_progress_attempt: bool,
     pub last_attempt_failed: bool,
+    /// A dev server is running for this task. Only one can hold the project's port, so this also
+    /// answers "which task is using it" — the reason it's worth surfacing per task rather than
+    /// only inside the preview panel.
+    pub has_running_dev_server: bool,
     pub executor: String,
 }
 
@@ -139,6 +143,17 @@ impl Task {
      LIMIT 1
   ) THEN 1 ELSE 0 END            AS "has_in_progress_attempt!: i64",
 
+  CASE WHEN EXISTS (
+    SELECT 1
+      FROM workspaces w
+      JOIN sessions s ON s.workspace_id = w.id
+      JOIN execution_processes ep ON ep.session_id = s.id
+     WHERE w.task_id       = t.id
+       AND ep.status        = 'running'
+       AND ep.run_reason    = 'devserver'
+     LIMIT 1
+  ) THEN 1 ELSE 0 END            AS "has_running_dev_server!: i64",
+
   CASE WHEN (
     SELECT ep.status
       FROM workspaces w
@@ -182,6 +197,7 @@ ORDER BY t.created_at DESC"#,
                 },
                 has_in_progress_attempt: rec.has_in_progress_attempt != 0,
                 last_attempt_failed: rec.last_attempt_failed != 0,
+                has_running_dev_server: rec.has_running_dev_server != 0,
                 executor: rec.executor,
             })
             .collect();
