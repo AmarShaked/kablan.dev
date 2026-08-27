@@ -1272,9 +1272,20 @@ pub async fn continue_rebase_task_attempt(
     Ok(ResponseJson(ApiResponse::success(())))
 }
 
+/// Query for `start_dev_server`. Only one dev server can hold the project's port, so starting
+/// one here means stopping any other. That used to happen silently — someone else's preview would
+/// die with no explanation. Now the caller has to say `?replace=true`, and without it the request
+/// is refused with the name of the task currently holding the server.
+#[derive(Debug, Deserialize, Default)]
+pub struct StartDevServerQuery {
+    #[serde(default)]
+    pub replace: bool,
+}
+
 #[axum::debug_handler]
 pub async fn start_dev_server(
     Extension(workspace): Extension<Workspace>,
+    Query(query): Query<StartDevServerQuery>,
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<Vec<ExecutionProcess>>>, ApiError> {
     let pool = &deployment.db().pool;
@@ -1306,6 +1317,26 @@ pub async fn start_dev_server(
                 )));
             }
         };
+
+    // Refuse rather than silently killing someone else's server, unless replacement was asked for.
+    // Name the task holding it where we can: "something else is using the port" is only actionable
+    // if you know what that something is.
+    if !existing_dev_servers.is_empty() && !query.replace {
+        let holder_title = match existing_dev_servers.first() {
+            Some(proc) => async {
+                let session = Session::find_by_id(pool, proc.session_id).await.ok()??;
+                let holder_ws = Workspace::find_by_id(pool, session.workspace_id).await.ok()??;
+                let holder_task = holder_ws.parent_task(pool).await.ok()??;
+                Some(holder_task.title)
+            }
+            .await,
+            None => None,
+        };
+        return Err(ApiError::Conflict(match holder_title {
+            Some(title) => format!("A dev server is already running for \"{title}\"."),
+            None => "A dev server is already running for this project.".to_string(),
+        }));
+    }
 
     for dev_server in existing_dev_servers {
         tracing::info!(

@@ -707,9 +707,14 @@ export const attemptsApi = {
     return handleApiResponseAsResult<string, PrError>(response);
   },
 
-  startDevServer: async (attemptId: string): Promise<ExecutionProcess[]> => {
+  startDevServer: async (
+    attemptId: string,
+    // Only one dev server can hold the project's port. Without this the server refuses rather
+    // than silently stopping whichever task is already using it.
+    replace = false
+  ): Promise<ExecutionProcess[]> => {
     const response = await makeRequest(
-      `/api/task-attempts/${attemptId}/start-dev-server`,
+      `/api/task-attempts/${attemptId}/start-dev-server${replace ? '?replace=true' : ''}`,
       {
         method: 'POST',
       }

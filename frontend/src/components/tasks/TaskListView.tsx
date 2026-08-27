@@ -1,8 +1,10 @@
-import { Loader2, XCircle } from 'lucide-react';
-
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { statusBoardColors, statusLabels } from '@/utils/statusLabels';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
+import {
+  TaskActivityBadge,
+  taskAccentClass,
+} from '@/components/tasks/TaskActivityBadge';
 
 type Props = {
   columns: Record<TaskStatus, TaskWithAttemptStatus[]>;
@@ -35,6 +37,7 @@ export function TaskListView({
         // Skip empty groups: an empty column is meaningful on a board, but empty headings in a
         // list are just noise to scroll past.
         if (!tasks || tasks.length === 0) return null;
+        const running = tasks.filter((t) => t.has_in_progress_attempt).length;
 
         return (
           <section key={status} className="mb-8">
@@ -50,6 +53,12 @@ export function TaskListView({
               <span className="font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
                 {tasks.length}
               </span>
+              {/* Surfaced on the heading so activity is visible without reading every row. */}
+              {running > 0 && (
+                <span className="font-ibm-plex-mono text-[11px] tabular-nums text-info">
+                  · {running} running
+                </span>
+              )}
             </div>
 
             <ul>
@@ -65,9 +74,9 @@ export function TaskListView({
                         onViewTaskDetails(task);
                       }
                     }}
-                    className={`flex items-center gap-3 border-b border-border px-2 py-3 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                      selectedTaskId === task.id ? 'bg-accent' : ''
-                    }`}
+                    className={`flex items-center gap-3 border-b border-border py-3 pl-3 pr-2 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring ${taskAccentClass(
+                      task
+                    )} ${selectedTaskId === task.id ? 'bg-accent' : ''}`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{task.title}</p>
@@ -78,18 +87,7 @@ export function TaskListView({
                       )}
                     </div>
 
-                    {task.has_in_progress_attempt && (
-                      <Loader2
-                        className="h-4 w-4 shrink-0 animate-spin text-info"
-                        aria-label="Attempt running"
-                      />
-                    )}
-                    {task.last_attempt_failed && (
-                      <XCircle
-                        className="h-4 w-4 shrink-0 text-destructive"
-                        aria-label="Last attempt failed"
-                      />
-                    )}
+                    <TaskActivityBadge task={task} />
 
                     <span
                       className="hidden shrink-0 text-xs text-muted-foreground sm:inline"

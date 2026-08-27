@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KanbanCard } from '@/components/ui/shadcn-io/kanban';
-import { Link, Loader2, XCircle } from 'lucide-react';
+import { Link } from 'lucide-react';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
+import { TaskActivityBadge } from '@/components/tasks/TaskActivityBadge';
 import { Button } from '@/components/ui/button';
 import { useNavigateWithSearch } from '@/hooks';
 import { paths } from '@/lib/paths';
@@ -90,12 +91,7 @@ export function TaskCard({
           title={task.title}
           right={
             <>
-              {task.has_in_progress_attempt && (
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-              )}
-              {task.last_attempt_failed && (
-                <XCircle className="h-4 w-4 text-destructive" />
-              )}
+              <TaskActivityBadge task={task} />
               {task.parent_workspace_id && (
                 <Button
                   variant="icon"

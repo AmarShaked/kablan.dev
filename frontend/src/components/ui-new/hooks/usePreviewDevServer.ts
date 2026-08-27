@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { attemptsApi, executionProcessesApi } from '@/lib/api';
+import { executionProcessesApi } from '@/lib/api';
+import { startDevServerWithReplacePrompt } from '@/lib/startDevServer';
 import { useAttemptExecution } from '@/hooks/useAttemptExecution';
 import { workspaceSummaryKeys } from '@/components/ui-new/hooks/useWorkspaces';
 import {
@@ -40,7 +41,7 @@ export function usePreviewDevServer(
     mutationKey: ['startDevServer', attemptId],
     mutationFn: async () => {
       if (!attemptId) return;
-      await attemptsApi.startDevServer(attemptId);
+      await startDevServerWithReplacePrompt(attemptId);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({

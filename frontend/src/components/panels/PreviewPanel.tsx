@@ -24,7 +24,6 @@ export function PreviewPanel() {
   const [isReady, setIsReady] = useState(false);
   const [loadingTimeFinished, setLoadingTimeFinished] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [showLogs, setShowLogs] = useState(false);
   const [customUrl, setCustomUrl] = useState<string | null>(null);
   const listenerRef = useRef<ClickToComponentListener | null>(null);
@@ -63,10 +62,6 @@ export function PreviewPanel() {
 
   const handleRefresh = () => {
     setIframeError(false);
-    setRefreshKey((prev) => prev + 1);
-  };
-  const handleIframeError = () => {
-    setIframeError(true);
   };
 
   const { addElement } = useClickedElements();
@@ -215,11 +210,7 @@ export function PreviewPanel() {
               detectedUrl={lastKnownUrl?.url}
               onUrlChange={setCustomUrl}
             />
-            <ReadyContent
-              url={effectiveUrl}
-              iframeKey={`${effectiveUrl}-${refreshKey}`}
-              onIframeError={handleIframeError}
-            />
+            <ReadyContent url={effectiveUrl} />
           </>
         ) : (
           <NoServerContent
