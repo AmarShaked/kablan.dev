@@ -478,6 +478,45 @@ export function GeneralSettings() {
           </div>
 
           <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="auto-fetch-enabled"
+                checked={draft?.auto_fetch_enabled ?? false}
+                onCheckedChange={(checked) =>
+                  updateDraft({ auto_fetch_enabled: checked === true })
+                }
+              />
+              <Label htmlFor="auto-fetch-enabled">
+                Automatically fetch repositories
+              </Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Runs <code className="text-xs bg-muted px-1 py-0.5 rounded">git fetch --all --prune</code>{' '}
+              on every configured repository in the background, so branches and remote state stay
+              current without fetching by hand.
+            </p>
+            {draft?.auto_fetch_enabled && (
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="auto-fetch-interval">Fetch every (minutes)</Label>
+                <Input
+                  id="auto-fetch-interval"
+                  type="number"
+                  min={1}
+                  value={draft?.auto_fetch_interval_minutes ?? 10}
+                  onChange={(e) => {
+                    // Clamp to >= 1: zero would make the background loop spin continuously.
+                    const n = parseInt(e.target.value, 10);
+                    updateDraft({
+                      auto_fetch_interval_minutes: Number.isFinite(n) && n > 0 ? n : 1,
+                    });
+                  }}
+                  className="w-32"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="workspace-dir">
               {t('settings.general.git.workspaceDir.label')}
             </Label>

@@ -364,6 +364,25 @@ impl GitCli {
         }
     }
 
+    /// Fetch every remote and prune deleted remote branches, using native git authentication.
+    ///
+    /// GIT_TERMINAL_PROMPT=0 matters here more than anywhere else: this runs unattended on a
+    /// timer, and a repo whose credentials have expired would otherwise hang forever waiting on
+    /// a prompt nobody can answer.
+    pub fn fetch_all(&self, repo_path: &Path) -> Result<(), GitCliError> {
+        let envs = vec![(OsString::from("GIT_TERMINAL_PROMPT"), OsString::from("0"))];
+        let args = [
+            OsString::from("fetch"),
+            OsString::from("--all"),
+            OsString::from("--prune"),
+        ];
+        match self.git_with_env(repo_path, args, &envs) {
+            Ok(_) => Ok(()),
+            Err(GitCliError::CommandFailed(msg)) => Err(self.classify_cli_error(msg)),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Push a branch to the given remote using native git authentication.
     pub fn push(
         &self,

@@ -22,6 +22,16 @@ fn default_commit_reminder_enabled() -> bool {
     true
 }
 
+fn default_auto_fetch_enabled() -> bool {
+    false
+}
+
+/// Ten minutes: frequent enough that branch lists feel current, rare enough that it isn't a
+/// constant background load on every configured repo.
+fn default_auto_fetch_interval_minutes() -> u32 {
+    10
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
 pub enum SendMessageShortcut {
     #[default]
@@ -57,6 +67,13 @@ pub struct Config {
     pub beta_workspaces: bool,
     #[serde(default)]
     pub beta_workspaces_invitation_sent: bool,
+    /// Periodically run `git fetch --all --prune` on every configured repo, so branches and
+    /// remote state stay current without the user fetching by hand. Off by default: it touches
+    /// the network on the user's behalf, which should be opt-in.
+    #[serde(default = "default_auto_fetch_enabled")]
+    pub auto_fetch_enabled: bool,
+    #[serde(default = "default_auto_fetch_interval_minutes")]
+    pub auto_fetch_interval_minutes: u32,
     #[serde(default = "default_commit_reminder_enabled")]
     pub commit_reminder_enabled: bool,
     #[serde(default)]
@@ -72,6 +89,8 @@ impl Config {
 
         Self {
             config_version: "v8".to_string(),
+            auto_fetch_enabled: default_auto_fetch_enabled(),
+            auto_fetch_interval_minutes: default_auto_fetch_interval_minutes(),
             theme: old_config.theme,
             executor_profile: old_config.executor_profile,
             disclaimer_acknowledged: old_config.disclaimer_acknowledged,
@@ -127,6 +146,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             config_version: "v8".to_string(),
+            auto_fetch_enabled: default_auto_fetch_enabled(),
+            auto_fetch_interval_minutes: default_auto_fetch_interval_minutes(),
             theme: ThemeMode::System,
             executor_profile: ExecutorProfileId::new(BaseCodingAgent::ClaudeCode),
             disclaimer_acknowledged: false,
