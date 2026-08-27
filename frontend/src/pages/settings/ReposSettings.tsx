@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { EnvFilesSection } from '@/components/settings/EnvFilesSection';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -466,6 +467,19 @@ export function ReposSettings() {
                   </Button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Environment Files</CardTitle>
+              <CardDescription>
+                Edit this repository's .env files. They are gitignored, so they
+                reach a worktree through Copy Files above.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EnvFilesSection repoId={selectedRepo.id} />
             </CardContent>
           </Card>
         </>

@@ -23,6 +23,8 @@ import {
   CreateProject,
   CreateProjectRepo,
   UpdateRepo,
+  EnvFile,
+  SaveEnvFile,
   SearchMode,
   SearchResult,
   Task,
@@ -864,6 +866,19 @@ export const repoApi = {
   getById: async (repoId: string): Promise<Repo> => {
     const response = await makeRequest(`/api/repos/${repoId}`);
     return handleApiResponse<Repo>(response);
+  },
+
+  listEnvFiles: async (repoId: string): Promise<EnvFile[]> => {
+    const response = await makeRequest(`/api/repos/${repoId}/env-files`);
+    return handleApiResponse<EnvFile[]>(response);
+  },
+
+  saveEnvFile: async (repoId: string, data: SaveEnvFile): Promise<EnvFile> => {
+    const response = await makeRequest(`/api/repos/${repoId}/env-files`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<EnvFile>(response);
   },
 
   update: async (repoId: string, data: UpdateRepo): Promise<Repo> => {

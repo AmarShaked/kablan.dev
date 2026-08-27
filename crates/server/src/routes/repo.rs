@@ -1,5 +1,5 @@
 use axum::{
-    Router,
+    Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json as ResponseJson,
@@ -293,6 +293,92 @@ pub async fn list_open_prs(
     }
 }
 
+
+/// The env files Kablan will read or write in a repository root.
+///
+/// A fixed allowlist, deliberately: the filename arrives from the client, and joining an
+/// arbitrary one onto the repo path would let a caller read or overwrite anything on disk
+/// (`../../.ssh/id_rsa`). Matching against this list means a traversal attempt simply isn't found.
+const ENV_FILE_NAMES: [&str; 6] = [
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+    ".env.test",
+    ".env.example",
+];
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct EnvFile {
+    pub name: String,
+    /// False when the repo has no such file yet — the UI still offers it, so you can create one.
+    pub exists: bool,
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct SaveEnvFile {
+    pub name: String,
+    pub content: String,
+}
+
+/// `GET /repos/{repo_id}/env-files` — every known env file in the repo root, with its contents.
+pub async fn get_repo_env_files(
+    State(deployment): State<DeploymentImpl>,
+    Path(repo_id): Path<Uuid>,
+) -> Result<ResponseJson<ApiResponse<Vec<EnvFile>>>, ApiError> {
+    let repo = deployment
+        .repo()
+        .get_by_id(&deployment.db().pool, repo_id)
+        .await?;
+
+    let files = ENV_FILE_NAMES
+        .iter()
+        .map(|name| {
+            let path = repo.path.join(name);
+            // Unreadable (permissions, or a directory of that name) is reported as absent rather
+            // than failing the whole request — one odd file shouldn't hide the others.
+            match std::fs::read_to_string(&path) {
+                Ok(content) => EnvFile { name: name.to_string(), exists: true, content },
+                Err(_) => EnvFile { name: name.to_string(), exists: false, content: String::new() },
+            }
+        })
+        .collect();
+
+    Ok(ResponseJson(ApiResponse::success(files)))
+}
+
+/// `PUT /repos/{repo_id}/env-files` — write one env file in the repo root.
+pub async fn save_repo_env_file(
+    State(deployment): State<DeploymentImpl>,
+    Path(repo_id): Path<Uuid>,
+    Json(payload): Json<SaveEnvFile>,
+) -> Result<ResponseJson<ApiResponse<EnvFile>>, ApiError> {
+    if !ENV_FILE_NAMES.contains(&payload.name.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "unsupported env file: {}",
+            payload.name
+        )));
+    }
+
+    let repo = deployment
+        .repo()
+        .get_by_id(&deployment.db().pool, repo_id)
+        .await?;
+
+    let path = repo.path.join(&payload.name);
+    std::fs::write(&path, &payload.content)
+        .map_err(|e| ApiError::BadRequest(format!("could not write {}: {e}", payload.name)))?;
+
+    Ok(ResponseJson(ApiResponse::success(EnvFile {
+        name: payload.name,
+        exists: true,
+        content: payload.content,
+    })))
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/repos", get(get_repos).post(register_repo))
@@ -302,6 +388,10 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/repos/{repo_id}", get(get_repo).put(update_repo))
         .route("/repos/{repo_id}/branches", get(get_repo_branches))
         .route("/repos/{repo_id}/remotes", get(get_repo_remotes))
+        .route(
+            "/repos/{repo_id}/env-files",
+            get(get_repo_env_files).put(save_repo_env_file),
+        )
         .route("/repos/{repo_id}/prs", get(list_open_prs))
         .route("/repos/{repo_id}/search", get(search_repo))
         .route("/repos/{repo_id}/open-editor", post(open_repo_in_editor))

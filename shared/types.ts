@@ -22,6 +22,14 @@ export type Repo = { id: string, path: string, name: string, display_name: strin
 
 export type UpdateRepo = { display_name?: string | null, setup_script?: string | null, cleanup_script?: string | null, archive_script?: string | null, copy_files?: string | null, parallel_setup_script?: boolean | null, dev_server_script?: string | null, default_target_branch?: string | null, default_working_dir?: string | null, };
 
+export type EnvFile = { name: string, 
+/**
+ * False when the repo has no such file yet — the UI still offers it, so you can create one.
+ */
+exists: boolean, content: string, };
+
+export type SaveEnvFile = { name: string, content: string, };
+
 export type ProjectRepo = { id: string, project_id: string, repo_id: string, };
 
 export type CreateProjectRepo = { display_name: string, git_repo_path: string, };
