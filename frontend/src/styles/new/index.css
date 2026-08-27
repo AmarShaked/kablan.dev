@@ -1,3 +1,18 @@
+/* Kablan design language, matched to nitur.dev: Geist for text, Geist Mono for the
+   uppercase micro-labels and controls. Self-hosted (no external font CDN at runtime). */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:ital,wght@0,100..700;1,100..700&family=Noto+Emoji:wght@300..700&display=swap');
 
 @tailwind base;
@@ -9,22 +24,22 @@
   /* Light defaults - New Design */
   .new-design {
     color-scheme: light;
-    --_background: 0 0% 95%;
-    --_foreground: 0 0% 5%;
-    --_primary: 0 0% 5%;
-    --_primary-foreground: 0 0% 100%;
-    --_secondary: 0 0% 95%;
-    --_secondary-foreground: 0 0% 16%;
-    --_muted: 0 0% 89%;
-    --_muted-foreground: 0 0% 56%;
-    --_accent: 0 0% 92%;
-    --_accent-foreground: 0 0% 5%;
+    --_background: 42 30% 97%;
+    --_foreground: 0 0% 8%;
+    --_primary: 0 0% 8%;
+    --_primary-foreground: 42 30% 97%;
+    --_secondary: 42 18% 93%;
+    --_secondary-foreground: 0 0% 12%;
+    --_muted: 42 18% 93%;
+    --_muted-foreground: 39 6% 42%;
+    --_accent: 42 18% 90%;
+    --_accent-foreground: 0 0% 8%;
     --_destructive: 0 59% 57%;
     --_destructive-foreground: 0 0% 100%;
-    --_border: 0 0% 85%;
-    --_input: 0 0% 96%;
-    --_ring: 0 0% 5%;
-    --_radius: 0.125rem;
+    --_border: 42 10% 85%;
+    --_input: 42 10% 85%;
+    --_ring: 34 100% 45%;
+    --_radius: 0rem;
 
     /* Status (light) */
     --_success: 117 38% 50%;
@@ -87,21 +102,21 @@
     color-scheme: dark;
 
     /* Internal variables (dark) - needed for public tokens */
-    --_background: 0 0% 13%;
-    --_foreground: 0 0% 96%;
-    --_primary: 240 4.8% 95.9%;
-    --_primary-foreground: 240 5.9% 10%;
-    --_secondary: 0 0% 12%;
-    --_secondary-foreground: 0 0% 77%;
-    --_muted: 0 0% 16%;
-    --_muted-foreground: 0 0% 64%;
-    --_accent: 0 0% 20%;
-    --_accent-foreground: 0 0% 96%;
+    --_background: 0 0% 8%;
+    --_foreground: 42 21% 91%;
+    --_primary: 42 21% 91%;
+    --_primary-foreground: 0 0% 8%;
+    --_secondary: 0 0% 13%;
+    --_secondary-foreground: 42 21% 91%;
+    --_muted: 0 0% 13%;
+    --_muted-foreground: 39 6% 58%;
+    --_accent: 0 0% 16%;
+    --_accent-foreground: 42 21% 91%;
     --_destructive: 0 59% 57%;
     --_destructive-foreground: 0 0% 96%;
     --_border: 0 0% 20%;
-    --_input: 0 0% 20%;
-    --_ring: 0 0% 77%;
+    --_input: 0 0% 18%;
+    --_ring: 34 100% 50%;
 
     /* Status (dark) */
     --_success: 117 38% 50%;
@@ -415,6 +430,19 @@
     font-family:
       'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji',
       'Android Emoji', 'EmojiSymbols', sans-serif;
+  }
+}
+
+@layer base {
+  /* nitur.dev's type treatment: Geist throughout, headings set tight (-0.03em) and micro-labels
+     in mono with wide tracking. */
+  .new-design {
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  }
+  .new-design h1,
+  .new-design h2,
+  .new-design h3 {
+    letter-spacing: -0.03em;
   }
 }
 

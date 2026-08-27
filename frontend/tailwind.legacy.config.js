@@ -124,7 +124,9 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        'chivo-mono': ['Chivo Mono', 'Noto Emoji', 'monospace'],
+        'chivo-mono': ['Geist', 'Chivo Mono', 'Noto Emoji', 'monospace'],
+        geist: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        'geist-mono': ['"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       keyframes: {
         "accordion-down": {

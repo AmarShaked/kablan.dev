@@ -1,4 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:ital,wght@0,100..900;1,100..900&family=Noto+Emoji:wght@300..700&display=swap');
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Kablan: Geist is self-hosted (see the new design's @font-face); only Noto Emoji is remote. */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@300..700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,22 +23,22 @@
   /* Light defaults */
   .legacy-design {
     color-scheme: light;
-    --_background: 48 33% 97%;
-    --_foreground: 222.2 84% 4.9%;
+    --_background: 42 30% 97%;
+    --_foreground: 0 0% 8%;
     --_primary: var(--_muted);
     --_primary-foreground: var(--_muted-foreground);
-    --_secondary: var(--_muted);
-    --_secondary-foreground: 215.4 16.3% 70.9%;
-    --_muted: 0 0% 100%;
-    --_muted-foreground: var(--_foreground);
-    --_accent: var(--_background);
-    --_accent-foreground: 222.2 84% 4.9%;
+    --_secondary: 42 18% 93%;
+    --_secondary-foreground: 0 0% 12%;
+    --_muted: 42 18% 93%;
+    --_muted-foreground: 39 6% 42%;
+    --_accent: 42 18% 90%;
+    --_accent-foreground: 0 0% 8%;
     --_destructive: 0 84.2% 60.2%;
     --_destructive-foreground: var(--_background);
-    --_border: 214.3 31.8% 91.4%;
-    --_input: var(--_border);
-    --_ring: 222.2 84% 4.9%;
-    --_radius: 0.5rem;
+    --_border: 42 10% 85%;
+    --_input: 42 10% 85%;
+    --_ring: 34 100% 45%;
+    --_radius: 0rem;
 
     /* Status (light) */
     --_success: 142.1 76.2% 36.3%;
@@ -58,21 +72,21 @@
   .legacy-design.dark,
   .dark .legacy-design {
     color-scheme: dark;
-    --_background: 48 4% 16%;
-    --_foreground: 48 7% 85%;
+    --_background: 0 0% 8%;
+    --_foreground: 42 21% 91%;
     --_primary: var(--_muted);
     --_primary-foreground: var(--_muted-foreground);
-    --_secondary: var(--_muted);
-    --_secondary-foreground: 48 2% 65%;
-    --_muted: 60 2% 18%;
-    --_muted-foreground: var(--_foreground);
-    --_accent: var(--_background);
-    --_accent-foreground: 210 40% 98%;
+    --_secondary: 0 0% 13%;
+    --_secondary-foreground: 42 21% 91%;
+    --_muted: 0 0% 13%;
+    --_muted-foreground: 39 6% 58%;
+    --_accent: 0 0% 16%;
+    --_accent-foreground: 42 21% 91%;
     --_destructive: 0 45% 55%;
     --_destructive-foreground: var(--_background-foreground);
-    --_border: 60 2% 25%;
-    --_input: var(--_border);
-    --_ring: 212.7 26.8% 83.9%;
+    --_border: 0 0% 20%;
+    --_input: 0 0% 18%;
+    --_ring: 34 100% 50%;
 
     /* Status (dark) */
     --_success: 138.5 76.5% 47.7%;
@@ -210,7 +224,7 @@
   }
 
   .legacy-design {
-    @apply bg-background text-foreground font-chivo-mono;
+    @apply bg-background text-foreground font-geist;
   }
 
   .legacy-design *:focus {
