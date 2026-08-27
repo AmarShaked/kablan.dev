@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Project } from 'shared/types';
 import { ProjectFormDialog } from '@/components/dialogs/projects/ProjectFormDialog';
 import { AlertCircle, LayoutGrid, List, Loader2, Plus } from 'lucide-react';
 import ProjectCard from '@/components/projects/ProjectCard.tsx';
 import ProjectRow from '@/components/projects/ProjectRow.tsx';
+import { ProjectsEmptyState } from '@/components/projects/ProjectsEmptyState';
 import { useKeyCreate, Scope } from '@/keyboard';
 import { useProjects } from '@/hooks/useProjects';
 
@@ -121,21 +121,7 @@ export function ProjectList() {
           {t('loading')}
         </div>
       ) : projects.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-              <Plus className="h-6 w-6" />
-            </div>
-            <h3 className="mt-4 text-lg font-semibold">{t('empty.title')}</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t('empty.description')}
-            </p>
-            <Button className="mt-4" onClick={handleCreateProject}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t('empty.createFirst')}
-            </Button>
-          </CardContent>
-        </Card>
+        <ProjectsEmptyState onCreate={handleCreateProject} />
       ) : (
         <div
           className={
