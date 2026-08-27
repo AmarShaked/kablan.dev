@@ -18,7 +18,17 @@
   "empty": {
     "noTasks": "No tasks found for this project.",
     "createFirst": "Create First Task",
-    "noSearchResults": "No tasks match your search."
+    "noSearchResults": "No tasks match your search.",
+    "eyebrow": "NO TASKS YET",
+    "headline": "Give the agent something to do.",
+    "body": "A task is a piece of work you hand to a coding agent. It runs on its own branch, so nothing it does touches your working copy until you review it.",
+    "steps": {
+      "describe": "Describe what you want changed, in plain language.",
+      "isolate": "The agent works on its own branch and worktree.",
+      "review": "Review the diff, then merge it or throw it away."
+    },
+    "noSearchResultsHint": "Try a different search, or clear the filters to see everything.",
+    "clearFilters": "Clear filters"
   },
   "actions": {
     "addTask": "Add task"

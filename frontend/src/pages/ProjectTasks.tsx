@@ -2,12 +2,10 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   AlertTriangle,
   Cloud,
   ExternalLink,
-  Plus,
   Sparkles,
 } from 'lucide-react';
 import { Loader } from '@/components/ui/loader';
@@ -52,6 +50,10 @@ import {
 import TaskKanbanBoard, {
   type KanbanColumns,
 } from '@/components/tasks/TaskKanbanBoard';
+import {
+  NoTasksEmptyState,
+  NoSearchResultsEmptyState,
+} from '@/components/tasks/TasksEmptyState';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -169,7 +171,7 @@ export function ProjectTasks() {
       openTaskForm({ mode: 'create', projectId });
     }
   }, [projectId]);
-  const { query: searchQuery, focusInput } = useSearch();
+  const { query: searchQuery, focusInput, clear: clearSearch } = useSearch();
 
   const {
     tasks,
@@ -761,27 +763,9 @@ export function ProjectTasks() {
 
   const kanbanContent =
     tasks.length === 0 ? (
-      <div className="max-w-7xl mx-auto mt-8">
-        <Card>
-          <CardContent className="text-center py-8">
-            <p className="text-muted-foreground">{t('empty.noTasks')}</p>
-            <Button className="mt-4" onClick={handleCreateNewTask}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('empty.createFirst')}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <NoTasksEmptyState onCreate={handleCreateNewTask} />
     ) : !hasVisibleTasks ? (
-      <div className="max-w-7xl mx-auto mt-8">
-        <Card>
-          <CardContent className="text-center py-8">
-            <p className="text-muted-foreground">
-              {t('empty.noSearchResults')}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
     ) : (
       <div className="w-full h-full overflow-x-auto overflow-y-auto overscroll-x-contain">
         <TaskKanbanBoard
