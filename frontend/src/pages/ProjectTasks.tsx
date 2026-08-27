@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import {
   AlertTriangle,
   Cloud,
+  Columns3,
   ExternalLink,
+  List,
   Sparkles,
 } from 'lucide-react';
 import { Loader } from '@/components/ui/loader';
@@ -52,6 +54,7 @@ import {
   NoTasksEmptyState,
   NoSearchResultsEmptyState,
 } from '@/components/tasks/TasksEmptyState';
+import { TaskListView } from '@/components/tasks/TaskListView';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -78,6 +81,8 @@ import { useSelectedOrgId } from '@/stores/useOrganizationStore';
 import type { TaskWithAttemptStatus, TaskStatus } from 'shared/types';
 
 type Task = TaskWithAttemptStatus;
+
+const TASK_VIEW_KEY = 'kablan.tasks.view';
 
 const TASK_STATUSES = [
   'todo',
@@ -354,6 +359,23 @@ export function ProjectTasks() {
     },
     { scope: Scope.KANBAN }
   );
+
+  // Board vs list, remembered across visits.
+  const [taskView, setTaskView] = useState<'board' | 'list'>(() => {
+    try {
+      return localStorage.getItem(TASK_VIEW_KEY) === 'list' ? 'list' : 'board';
+    } catch {
+      return 'board';
+    }
+  });
+  const changeTaskView = (next: 'board' | 'list') => {
+    setTaskView(next);
+    try {
+      localStorage.setItem(TASK_VIEW_KEY, next);
+    } catch {
+      // Blocked storage: the choice just won't persist.
+    }
+  };
 
   const hasSearch = Boolean(searchQuery.trim());
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -745,15 +767,54 @@ export function ProjectTasks() {
     ) : !hasVisibleTasks ? (
       <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
     ) : (
-      <div className="w-full h-full overflow-x-auto overflow-y-auto overscroll-x-contain">
-        <TaskKanbanBoard
-          columns={kanbanColumns}
-          onDragEnd={handleDragEnd}
-          onViewTaskDetails={handleViewTaskDetails}
-          selectedTaskId={selectedTask?.id}
-          onCreateTask={handleCreateNewTask}
-          projectId={projectId!}
-        />
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* Board vs list. Sits with the content rather than in the page chrome, because the
+            chrome is shared with the task-detail view where the choice is meaningless. */}
+        <div className="flex shrink-0 justify-end px-6 pt-3">
+          <div className="flex items-center border border-border p-0.5">
+            <Button
+              variant={taskView === 'board' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => changeTaskView('board')}
+              aria-label="Board view"
+              aria-pressed={taskView === 'board'}
+              title="Board view"
+            >
+              <Columns3 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={taskView === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => changeTaskView('list')}
+              aria-label="List view"
+              aria-pressed={taskView === 'list'}
+              title="List view"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
+        {taskView === 'list' ? (
+          <TaskListView
+            columns={kanbanColumns}
+            order={TASK_STATUSES}
+            selectedTaskId={selectedTask?.id}
+            onViewTaskDetails={handleViewTaskDetails}
+          />
+        ) : (
+          <TaskKanbanBoard
+            columns={kanbanColumns}
+            onDragEnd={handleDragEnd}
+            onViewTaskDetails={handleViewTaskDetails}
+            selectedTaskId={selectedTask?.id}
+            onCreateTask={handleCreateNewTask}
+            projectId={projectId!}
+          />
+        )}
+        </div>
       </div>
     );
 
