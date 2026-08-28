@@ -23,6 +23,7 @@ import {
   CreateProject,
   CreateProjectRepo,
   UpdateRepo,
+  ProjectWithStats,
   EnvFile,
   SaveEnvFile,
   SearchMode,
@@ -334,6 +335,15 @@ export const projectsApi = {
 
 // Task Management APIs
 export const tasksApi = {
+  /** One-shot fetch of a project's tasks. The board streams over WS; this is for places that
+   *  just need a snapshot, like expanding a project row. */
+  listByProject: async (projectId: string): Promise<TaskWithAttemptStatus[]> => {
+    const response = await makeRequest(
+      `/api/tasks?project_id=${encodeURIComponent(projectId)}`
+    );
+    return handleApiResponse<TaskWithAttemptStatus[]>(response);
+  },
+
   getById: async (taskId: string): Promise<Task> => {
     const response = await makeRequest(`/api/tasks/${taskId}`);
     return handleApiResponse<Task>(response);
@@ -857,6 +867,14 @@ export const fileSystemApi = {
 };
 
 // Repo APIs
+export const projectStatsApi = {
+  /** Projects plus task counts — one query, so the list doesn't fan out per project. */
+  listWithStats: async (): Promise<ProjectWithStats[]> => {
+    const response = await makeRequest('/api/projects/with-stats');
+    return handleApiResponse<ProjectWithStats[]>(response);
+  },
+};
+
 export const repoApi = {
   list: async (): Promise<Repo[]> => {
     const response = await makeRequest('/api/repos');

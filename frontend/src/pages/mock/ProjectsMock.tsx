@@ -127,7 +127,10 @@ function ProjectActions({ onOpen }: { onOpen: () => void }) {
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onClick={(e) => e.stopPropagation()}
+      >
         <DropdownMenuItem onClick={onOpen}>
           <ExternalLink className="mr-2 h-4 w-4" />
           View Project

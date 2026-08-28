@@ -22,6 +22,8 @@ pub struct Project {
     pub id: Uuid,
     pub name: String,
     pub default_agent_working_dir: Option<String>,
+    /// Lucide icon key chosen by the user (see the frontend's icon picker). None = default glyph.
+    pub icon: Option<String>,
     pub remote_project_id: Option<Uuid>,
     #[ts(type = "Date")]
     pub created_at: DateTime<Utc>,
@@ -38,6 +40,19 @@ pub struct CreateProject {
 #[derive(Debug, Deserialize, TS)]
 pub struct UpdateProject {
     pub name: Option<String>,
+    pub icon: Option<String>,
+}
+
+/// A project plus the counts the list view needs.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ProjectWithStats {
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub project: Project,
+    pub task_count: i64,
+    /// Tasks in this project with an attempt currently running.
+    pub running_count: i64,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -70,6 +85,7 @@ impl Project {
             r#"SELECT id as "id!: Uuid",
                       name,
                       default_agent_working_dir,
+               icon,
                       remote_project_id as "remote_project_id: Uuid",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
@@ -80,6 +96,56 @@ impl Project {
         .await
     }
 
+    /// Projects with their task counts, for the projects list.
+    ///
+    /// Counted in one query rather than a request per project: the list renders every project at
+    /// once, so per-project fetches would mean N round trips before the page settles.
+    pub async fn find_all_with_stats(
+        pool: &SqlitePool,
+    ) -> Result<Vec<ProjectWithStats>, sqlx::Error> {
+        let rows = sqlx::query!(
+            r#"SELECT p.id           as "id!: Uuid",
+                      p.name,
+                      p.default_agent_working_dir,
+                      p.icon,
+                      p.remote_project_id as "remote_project_id: Uuid",
+                      p.created_at   as "created_at!: DateTime<Utc>",
+                      p.updated_at   as "updated_at!: DateTime<Utc>",
+                      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id)
+                        as "task_count!: i64",
+                      (SELECT COUNT(*)
+                         FROM tasks t
+                         JOIN workspaces w  ON w.task_id = t.id
+                         JOIN sessions s    ON s.workspace_id = w.id
+                         JOIN execution_processes ep ON ep.session_id = s.id
+                        WHERE t.project_id = p.id
+                          AND ep.status = 'running'
+                          AND ep.run_reason IN ('setupscript','cleanupscript','codingagent'))
+                        as "running_count!: i64"
+               FROM projects p
+               ORDER BY p.created_at DESC"#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| ProjectWithStats {
+                project: Project {
+                    id: r.id,
+                    name: r.name,
+                    default_agent_working_dir: r.default_agent_working_dir,
+                    icon: r.icon,
+                    remote_project_id: r.remote_project_id,
+                    created_at: r.created_at,
+                    updated_at: r.updated_at,
+                },
+                task_count: r.task_count,
+                running_count: r.running_count,
+            })
+            .collect())
+    }
+
     /// Find the most actively used projects based on recent task activity
     pub async fn find_most_active(pool: &SqlitePool, limit: i32) -> Result<Vec<Self>, sqlx::Error> {
         sqlx::query_as!(
@@ -87,6 +153,7 @@ impl Project {
             r#"
             SELECT p.id as "id!: Uuid", p.name,
                    p.default_agent_working_dir,
+        p.icon,
                    p.remote_project_id as "remote_project_id: Uuid",
                    p.created_at as "created_at!: DateTime<Utc>", p.updated_at as "updated_at!: DateTime<Utc>"
             FROM projects p
@@ -110,6 +177,7 @@ impl Project {
             r#"SELECT id as "id!: Uuid",
                       name,
                       default_agent_working_dir,
+               icon,
                       remote_project_id as "remote_project_id: Uuid",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
@@ -127,6 +195,7 @@ impl Project {
             r#"SELECT id as "id!: Uuid",
                       name,
                       default_agent_working_dir,
+               icon,
                       remote_project_id as "remote_project_id: Uuid",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
@@ -147,6 +216,7 @@ impl Project {
             r#"SELECT id as "id!: Uuid",
                       name,
                       default_agent_working_dir,
+               icon,
                       remote_project_id as "remote_project_id: Uuid",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
@@ -175,6 +245,7 @@ impl Project {
                 RETURNING id as "id!: Uuid",
                           name,
                           default_agent_working_dir,
+               icon,
                           remote_project_id as "remote_project_id: Uuid",
                           created_at as "created_at!: DateTime<Utc>",
                           updated_at as "updated_at!: DateTime<Utc>""#,
@@ -195,20 +266,25 @@ impl Project {
             .ok_or(sqlx::Error::RowNotFound)?;
 
         let name = payload.name.clone().unwrap_or(existing.name);
+        // `None` means "not supplied" here, so an omitted icon keeps the current one rather than
+        // clearing it — the same rule the name already follows.
+        let icon = payload.icon.clone().or(existing.icon);
 
         sqlx::query_as!(
             Project,
             r#"UPDATE projects
-               SET name = $2
+               SET name = $2, icon = $3
                WHERE id = $1
                RETURNING id as "id!: Uuid",
                          name,
                          default_agent_working_dir,
+               icon,
                          remote_project_id as "remote_project_id: Uuid",
                          created_at as "created_at!: DateTime<Utc>",
                          updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             name,
+            icon,
         )
         .fetch_one(pool)
         .await

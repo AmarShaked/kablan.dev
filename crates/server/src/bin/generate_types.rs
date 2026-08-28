@@ -16,6 +16,7 @@ fn generate_types_content() -> String {
         db::models::project::UpdateProject::decl(),
         db::models::project::SearchResult::decl(),
         db::models::project::SearchMatchType::decl(),
+        db::models::project::ProjectWithStats::decl(),
         db::models::repo::Repo::decl(),
         db::models::repo::UpdateRepo::decl(),
         server::routes::repo::EnvFile::decl(),

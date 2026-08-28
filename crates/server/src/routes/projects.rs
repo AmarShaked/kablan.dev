@@ -13,7 +13,9 @@ use axum::{
     routing::{get, post},
 };
 use db::models::{
-    project::{CreateProject, Project, ProjectError, SearchResult, UpdateProject},
+    project::{
+        CreateProject, Project, ProjectError, ProjectWithStats, SearchResult, UpdateProject,
+    },
     project_repo::{CreateProjectRepo, ProjectRepo},
     repo::Repo,
 };
@@ -29,6 +31,14 @@ pub async fn get_projects(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<Vec<Project>>>, ApiError> {
     let projects = Project::find_all(&deployment.db().pool).await?;
+    Ok(ResponseJson(ApiResponse::success(projects)))
+}
+
+/// `GET /projects/with-stats` — projects plus their task counts, for the list view.
+pub async fn get_projects_with_stats(
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<ProjectWithStats>>>, ApiError> {
+    let projects = Project::find_all_with_stats(&deployment.db().pool).await?;
     Ok(ResponseJson(ApiResponse::success(projects)))
 }
 
@@ -452,6 +462,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
 
     let projects_router = Router::new()
         .route("/", get(get_projects).post(create_project))
+        .route("/with-stats", get(get_projects_with_stats))
         .route(
             "/{project_id}/repositories/{repo_id}",
             get(get_project_repository).delete(delete_project_repository),

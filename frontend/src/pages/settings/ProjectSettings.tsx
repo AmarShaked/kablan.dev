@@ -292,6 +292,8 @@ export function ProjectSettings() {
     try {
       const updateData: UpdateProject = {
         name: draft.name.trim(),
+        // null means "unchanged" server-side, so renaming here can't wipe the project's icon.
+        icon: null,
       };
 
       updateProject.mutate({
