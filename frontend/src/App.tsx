@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '@/i18n';
 import { Projects } from '@/pages/Projects';
+import { ProjectsMock } from '@/pages/mock/ProjectsMock';
 import { ProjectTasks } from '@/pages/ProjectTasks';
 import { FullAttemptLogsPage } from '@/pages/FullAttemptLogs';
 import { Migration } from '@/pages/Migration';
@@ -161,6 +162,8 @@ function AppContent() {
               <Route path="/local-projects" element={<Projects />} />
               <Route path="/local-projects/:projectId" element={<Projects />} />
               <Route path="/migration" element={<Migration />} />
+              {/* Design mock, hardcoded data — see ProjectsMock. */}
+              <Route path="/mock/projects" element={<ProjectsMock />} />
               <Route
                 path="/local-projects/:projectId/tasks"
                 element={<ProjectTasks />}
