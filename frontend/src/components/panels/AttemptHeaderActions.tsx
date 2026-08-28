@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Eye, FileDiff, X } from 'lucide-react';
+import { FileDiff, PanelRight, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
 import {
@@ -43,13 +43,7 @@ export const AttemptHeaderActions = ({
               const newMode = (v as LayoutMode) || null;
 
               // Track view navigation
-              if (newMode === 'preview') {
-                posthog?.capture('preview_navigated', {
-                  trigger: 'button',
-                  timestamp: new Date().toISOString(),
-                  source: 'frontend',
-                });
-              } else if (newMode === 'diffs') {
+              if (newMode === 'diffs') {
                 posthog?.capture('diffs_navigated', {
                   trigger: 'button',
                   timestamp: new Date().toISOString(),
@@ -73,15 +67,15 @@ export const AttemptHeaderActions = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <ToggleGroupItem
-                  value="preview"
-                  aria-label="Preview"
-                  active={mode === 'preview'}
+                  value="details"
+                  aria-label="Task details"
+                  active={mode === 'details'}
                 >
-                  <Eye className="h-4 w-4" />
+                  <PanelRight className="h-4 w-4" />
                 </ToggleGroupItem>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                {t('attemptHeaderActions.preview')}
+                {t('attemptHeaderActions.details', 'Details')}
               </TooltipContent>
             </Tooltip>
 

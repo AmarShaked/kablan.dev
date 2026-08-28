@@ -9,7 +9,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-export type LayoutMode = 'preview' | 'diffs' | null;
+export type LayoutMode = 'details' | 'diffs' | null;
 
 interface TasksLayoutProps {
   kanban: ReactNode;
@@ -62,7 +62,7 @@ function RightWorkArea({
   rightHeader?: ReactNode;
 }) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    groupId: 'tasksLayout-attemptAux',
+    groupId: 'tasksLayout-attemptAux-v2',
     storage: localStorage,
   });
   const [isAttemptCollapsed, setIsAttemptCollapsed] = useState(false);
@@ -90,7 +90,7 @@ function RightWorkArea({
           >
             <Panel
               id="attempt"
-              defaultSize={34}
+              defaultSize={62}
               minSize={MIN_PANEL_SIZE}
               collapsible
               collapsedSize={COLLAPSED_SIZE}
@@ -123,11 +123,11 @@ function RightWorkArea({
 
             <Panel
               id="aux"
-              defaultSize={66}
+              defaultSize={38}
               minSize={MIN_PANEL_SIZE}
               className="min-w-0 min-h-0 overflow-hidden"
               role="region"
-              aria-label={mode === 'preview' ? 'Preview' : 'Diffs'}
+              aria-label={mode === 'details' ? 'Task details' : 'Diffs'}
             >
               <AuxRouter mode={mode} aux={aux} />
             </Panel>
@@ -157,7 +157,7 @@ function DesktopSimple({
   rightHeader?: ReactNode;
 }) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    groupId: 'tasksLayout-kanbanAttempt',
+    groupId: 'tasksLayout-listAttempt',
     storage: localStorage,
   });
   const [isKanbanCollapsed, setIsKanbanCollapsed] = useState(false);
@@ -166,19 +166,8 @@ function DesktopSimple({
     setIsKanbanCollapsed(size.asPercentage === COLLAPSED_SIZE);
   };
 
-  // When preview/diffs is open, hide Kanban entirely and render only RightWorkArea
-  if (mode !== null) {
-    return (
-      <RightWorkArea
-        attempt={attempt}
-        aux={aux}
-        mode={mode}
-        rightHeader={rightHeader}
-      />
-    );
-  }
-
-  // When only viewing attempt logs, show Kanban | Attempt (no aux)
+  // The aux pane used to take the whole window, hiding the task list. In the three-column view
+  // the list stays put whatever the aux pane is showing, so this always renders Kanban | Right.
   return (
     <Group
       orientation="horizontal"
@@ -188,7 +177,7 @@ function DesktopSimple({
     >
       <Panel
         id="kanban"
-        defaultSize={66}
+        defaultSize={26}
         minSize={MIN_PANEL_SIZE}
         collapsible
         collapsedSize={COLLAPSED_SIZE}
@@ -221,7 +210,7 @@ function DesktopSimple({
 
       <Panel
         id="right"
-        defaultSize={34}
+        defaultSize={74}
         minSize={MIN_PANEL_SIZE}
         className="min-w-0 min-h-0 overflow-hidden"
       >

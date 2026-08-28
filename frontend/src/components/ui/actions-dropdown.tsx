@@ -10,13 +10,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal } from 'lucide-react';
 import type { TaskWithAttemptStatus } from 'shared/types';
-import { useOpenInEditor } from '@/hooks/useOpenInEditor';
 import { DeleteTaskConfirmationDialog } from '@/components/dialogs/tasks/DeleteTaskConfirmationDialog';
 import { ViewProcessesDialog } from '@/components/dialogs/tasks/ViewProcessesDialog';
 import { ViewRelatedTasksDialog } from '@/components/dialogs/tasks/ViewRelatedTasksDialog';
-import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
-import { GitActionsDialog } from '@/components/dialogs/tasks/GitActionsDialog';
-import { EditBranchNameDialog } from '@/components/dialogs/tasks/EditBranchNameDialog';
 import { useProject } from '@/contexts/ProjectContext';
 import { openTaskForm } from '@/lib/openTaskForm';
 
@@ -31,7 +27,6 @@ interface ActionsDropdownProps {
 export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
   const { t } = useTranslation('tasks');
   const { projectId } = useProject();
-  const openInEditor = useOpenInEditor(attempt?.id);
   const navigate = useNavigate();
 
   const hasAttemptActions = Boolean(attempt);
@@ -62,11 +57,6 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
     }
   };
 
-  const handleOpenInEditor = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!attempt?.id) return;
-    openInEditor();
-  };
 
   const handleViewProcesses = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -89,44 +79,9 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
     });
   };
 
-  const handleCreateNewAttempt = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!task?.id) return;
-    CreateAttemptDialog.show({
-      taskId: task.id,
-    });
-  };
 
-  const handleCreateSubtask = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!projectId || !attempt) return;
-    const baseBranch = attempt.branch;
-    if (!baseBranch) return;
-    openTaskForm({
-      mode: 'subtask',
-      projectId,
-      parentTaskAttemptId: attempt.id,
-      initialBaseBranch: baseBranch,
-    });
-  };
 
-  const handleGitActions = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!attempt?.id || !task) return;
-    GitActionsDialog.show({
-      attemptId: attempt.id,
-      task,
-    });
-  };
 
-  const handleEditBranchName = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!attempt?.id) return;
-    EditBranchNameDialog.show({
-      attemptId: attempt.id,
-      currentBranchName: attempt.branch,
-    });
-  };
 
   return (
     <>
@@ -143,15 +98,11 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {/* Open in IDE, new attempt, subtask, branch rename and the git actions moved to the
+              details column beside the conversation; only what has no home there is left. */}
           {hasAttemptActions && (
             <>
               <DropdownMenuLabel>{t('actionsMenu.attempt')}</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={!attempt?.id}
-                onClick={handleOpenInEditor}
-              >
-                {t('actionsMenu.openInIde')}
-              </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!attempt?.id}
                 onClick={handleViewProcesses}
@@ -163,27 +114,6 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
                 onClick={handleViewRelatedTasks}
               >
                 {t('actionsMenu.viewRelatedTasks')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCreateNewAttempt}>
-                {t('actionsMenu.createNewAttempt')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!projectId || !attempt}
-                onClick={handleCreateSubtask}
-              >
-                {t('actionsMenu.createSubtask')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!attempt?.id || !task}
-                onClick={handleGitActions}
-              >
-                {t('actionsMenu.gitActions')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!attempt?.id}
-                onClick={handleEditBranchName}
-              >
-                {t('actionsMenu.editBranchName')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>

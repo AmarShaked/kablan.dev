@@ -77,10 +77,6 @@ export {
   type ViewRelatedTasksDialogProps,
 } from './tasks/ViewRelatedTasksDialog';
 export {
-  GitActionsDialog,
-  type GitActionsDialogProps,
-} from './tasks/GitActionsDialog';
-export {
   EditBranchNameDialog,
   type EditBranchNameDialogResult,
 } from './tasks/EditBranchNameDialog';

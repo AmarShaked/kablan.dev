@@ -13,7 +13,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ViewProcessesDialog } from '@/components/dialogs/tasks/ViewProcessesDialog';
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
-import { GitActionsDialog } from '@/components/dialogs/tasks/GitActionsDialog';
 import { useOpenInEditor } from '@/hooks/useOpenInEditor';
 import { useDiffSummary } from '@/hooks/useDiffSummary';
 import { useDevServer } from '@/hooks/useDevServer';
@@ -53,7 +52,6 @@ export function NextActionCard({
   containerRef,
   failed,
   execution_processes,
-  task,
   needsSetup,
 }: NextActionCardProps) {
   const { t } = useTranslation('tasks');
@@ -123,13 +121,11 @@ export function NextActionCard({
     });
   }, [attempt?.task_id]);
 
+  // Git actions live in the details column now, so this reveals that column rather than
+  // opening a second copy of the same controls in a dialog.
   const handleGitActions = useCallback(() => {
-    if (!attemptId) return;
-    GitActionsDialog.show({
-      attemptId,
-      task,
-    });
-  }, [attemptId, task]);
+    navigate({ search: '' });
+  }, [navigate]);
 
   const handleRunSetup = useCallback(async () => {
     if (!attemptId || !attempt?.session?.executor) return;

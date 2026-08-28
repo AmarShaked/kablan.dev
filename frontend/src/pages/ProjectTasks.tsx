@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Loader } from '@/components/ui/loader';
 import { tasksApi } from '@/lib/api';
-import type { RepoBranchStatus, Workspace } from 'shared/types';
+import type { Workspace } from 'shared/types';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { BetaWorkspacesDialog } from '@/components/dialogs/global/BetaWorkspacesDialog';
 import { useUserSystem } from '@/components/ConfigProvider';
@@ -24,7 +24,6 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { useTaskAttemptWithSession } from '@/hooks/useTaskAttempt';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { useBranchStatus, useAttemptExecution } from '@/hooks';
 import { paths } from '@/lib/paths';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { ClickedElementsProvider } from '@/contexts/ClickedElementsProvider';
@@ -61,7 +60,7 @@ import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { TasksLayout, type LayoutMode } from '@/components/layout/TasksLayout';
-import { PreviewPanel } from '@/components/panels/PreviewPanel';
+import { AttemptDetailsPanel } from '@/components/panels/AttemptDetailsPanel';
 import { DiffsPanel } from '@/components/panels/DiffsPanel';
 import TaskAttemptPanel from '@/components/panels/TaskAttemptPanel';
 import TaskPanel from '@/components/panels/TaskPanel';
@@ -108,36 +107,10 @@ function GitErrorBanner() {
   );
 }
 
-function DiffsPanelContainer({
-  attempt,
-  selectedTask,
-  branchStatus,
-  branchStatusError,
-}: {
-  attempt: Workspace | null;
-  selectedTask: TaskWithAttemptStatus | null;
-  branchStatus: RepoBranchStatus[] | null;
-  branchStatusError?: Error | null;
-}) {
-  const { isAttemptRunning } = useAttemptExecution(attempt?.id);
-
-  return (
-    <DiffsPanel
-      key={attempt?.id}
-      selectedAttempt={attempt}
-      gitOps={
-        attempt && selectedTask
-          ? {
-              task: selectedTask,
-              branchStatus: branchStatus ?? null,
-              branchStatusError,
-              isAttemptRunning,
-              selectedBranch: branchStatus?.[0]?.target_branch_name ?? null,
-            }
-          : undefined
-      }
-    />
-  );
+// The diff view used to carry its own copy of the git toolbar. Merge, rebase and push live in
+// the details column now — one toggle away — so the diff shows only the diff.
+function DiffsPanelContainer({ attempt }: { attempt: Workspace | null }) {
+  return <DiffsPanel key={attempt?.id} selectedAttempt={attempt} />;
 }
 
 export function ProjectTasks() {
@@ -299,18 +272,28 @@ export function ProjectTasks() {
   const isTaskView = !!taskId && !effectiveAttemptId;
   const { data: attempt } = useTaskAttemptWithSession(effectiveAttemptId);
 
-  const { data: branchStatus, error: branchStatusError } = useBranchStatus(
-    attempt?.id
-  );
+  const rawMode = searchParams.get('view');
+  // The details column is the default company for an open attempt — you almost always want the
+  // attempt's branch, dev server and git state in sight while the agent works. `view=chat` is
+  // how "I closed the column" is spelled, since the absent param now means the default.
+  const mode: LayoutMode = !effectiveAttemptId
+    ? null
+    : rawMode === 'diffs'
+      ? 'diffs'
+      : rawMode === 'chat'
+        ? null
+        : 'details';
 
-  const rawMode = searchParams.get('view') as LayoutMode;
-  const mode: LayoutMode =
-    rawMode === 'preview' || rawMode === 'diffs' ? rawMode : null;
-
-  // TODO: Remove this redirect after v0.1.0 (legacy URL support for bookmarked links)
-  // Migrates old `view=logs` to `view=diffs`
+  // Legacy URL support for bookmarked links: `view=logs` was renamed to `view=diffs`, and
+  // `view=preview` named a pane this fork folded into the details column.
   useEffect(() => {
     const view = searchParams.get('view');
+    if (view === 'preview') {
+      const params = new URLSearchParams(searchParams);
+      params.delete('view');
+      setSearchParams(params, { replace: true });
+      return;
+    }
     if (view === 'logs') {
       const params = new URLSearchParams(searchParams);
       params.set('view', 'diffs');
@@ -322,6 +305,8 @@ export function ProjectTasks() {
     (newMode: LayoutMode) => {
       const params = new URLSearchParams(searchParams);
       if (newMode === null) {
+        params.set('view', 'chat');
+      } else if (newMode === 'details') {
         params.delete('view');
       } else {
         params.set('view', newMode);
@@ -490,11 +475,11 @@ export function ProjectTasks() {
   /**
    * Cycle the attempt area view.
    * - When panel is closed: opens task details (if a task is selected)
-   * - When panel is open: cycles among [attempt, preview, diffs]
+   * - When panel is open: cycles among [details, diffs, chat only]
    */
   const cycleView = useCallback(
     (direction: 'forward' | 'backward' = 'forward') => {
-      const order: LayoutMode[] = [null, 'preview', 'diffs'];
+      const order: LayoutMode[] = ['details', 'diffs', null];
       const idx = order.indexOf(mode);
       const next =
         direction === 'forward'
@@ -518,18 +503,11 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = [null, 'preview', 'diffs'];
+        const order: LayoutMode[] = ['details', 'diffs', null];
         const idx = order.indexOf(mode);
         const next = order[(idx + 1) % order.length];
 
-        if (next === 'preview') {
-          posthog?.capture('preview_navigated', {
-            trigger: 'keyboard',
-            direction: 'forward',
-            timestamp: new Date().toISOString(),
-            source: 'frontend',
-          });
-        } else if (next === 'diffs') {
+        if (next === 'diffs') {
           posthog?.capture('diffs_navigated', {
             trigger: 'keyboard',
             direction: 'forward',
@@ -551,18 +529,11 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = [null, 'preview', 'diffs'];
+        const order: LayoutMode[] = ['details', 'diffs', null];
         const idx = order.indexOf(mode);
         const next = order[(idx - 1 + order.length) % order.length];
 
-        if (next === 'preview') {
-          posthog?.capture('preview_navigated', {
-            trigger: 'keyboard',
-            direction: 'backward',
-            timestamp: new Date().toISOString(),
-            source: 'frontend',
-          });
-        } else if (next === 'diffs') {
+        if (next === 'diffs') {
           posthog?.capture('diffs_navigated', {
             trigger: 'keyboard',
             direction: 'backward',
@@ -921,14 +892,15 @@ export function ProjectTasks() {
   const auxContent =
     selectedTask && attempt ? (
       <div className="relative h-full w-full">
-        {mode === 'preview' && <PreviewPanel />}
-        {mode === 'diffs' && (
-          <DiffsPanelContainer
+        {mode === 'details' && (
+          <AttemptDetailsPanel
             attempt={attempt}
-            selectedTask={selectedTask}
-            branchStatus={branchStatus ?? null}
-            branchStatusError={branchStatusError}
+            task={selectedTask}
+            onOpenDiffs={() => setMode('diffs')}
           />
+        )}
+        {mode === 'diffs' && (
+          <DiffsPanelContainer attempt={attempt} />
         )}
       </div>
     ) : (
