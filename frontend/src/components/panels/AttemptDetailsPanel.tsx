@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
+  Bot,
   Check,
   Copy,
   ExternalLink,
@@ -38,6 +39,7 @@ import { useDiffSummary } from '@/hooks/useDiffSummary';
 import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { paths } from '@/lib/paths';
+import { agentLabel } from '@/utils/agentLabels';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 
@@ -247,8 +249,8 @@ export function AttemptDetailsPanel({
       )}
 
       {attempt.session?.executor && (
-        <Row icon={ArrowUpRight} title="Agent">
-          {attempt.session.executor}
+        <Row icon={Bot} title="The agent running this attempt">
+          {agentLabel(attempt.session.executor)}
         </Row>
       )}
 
