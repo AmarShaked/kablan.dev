@@ -55,6 +55,7 @@ import {
   NoSearchResultsEmptyState,
 } from '@/components/tasks/TasksEmptyState';
 import { TaskListView } from '@/components/tasks/TaskListView';
+import { TaskSidebarList } from '@/components/tasks/TaskSidebarList';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -761,8 +762,17 @@ export function ProjectTasks() {
       : `${truncated}...`;
   };
 
-  const kanbanContent =
-    tasks.length === 0 ? (
+  // With a task open the left pane becomes the task list: the board's columns are unreadable at
+  // sidebar width, and losing sight of the other tasks was the point of the redesign. The centre
+  // (the agent conversation) is untouched.
+  const kanbanContent = isPanelOpen ? (
+    <TaskSidebarList
+      tasksByStatus={visibleTasksByStatus}
+      order={TASK_STATUSES}
+      selectedTaskId={selectedTask?.id}
+      onSelect={handleViewTaskDetails}
+    />
+  ) : tasks.length === 0 ? (
       <NoTasksEmptyState onCreate={handleCreateNewTask} />
     ) : !hasVisibleTasks ? (
       <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
