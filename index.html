@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kablan — a board for your coding agents</title>
+<meta name="description" content="Run Claude Code, Codex, Gemini CLI and other coding agents against your repositories from a board. Each task gets its own git worktree, so several agents work at once without colliding." />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+
+<meta property="og:title" content="Kablan — a board for your coding agents" />
+<meta property="og:description" content="Each task gets its own git worktree and branch, so several agents work at once without standing on each other." />
+<meta property="og:type" content="website" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  /* Kablan's own tokens, the same values the app ships — a warm cream ground with an ink
+     foreground, and amber reserved for the one thing on screen that wants attention. */
+  :root {
+    --bg: hsl(42 30% 97%);
+    --fg: hsl(0 0% 8%);
+    --muted: hsl(42 18% 93%);
+    --muted-fg: hsl(39 6% 42%);
+    --border: hsl(42 10% 85%);
+    --accent: hsl(34 100% 45%);
+    --success: hsl(142 71% 34%);
+    --info: hsl(217 75% 46%);
+    --radius: 2px;
+  }
+
+  :root:not([data-theme="light"]) { }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: hsl(0 0% 8%);
+      --fg: hsl(42 21% 91%);
+      --muted: hsl(0 0% 13%);
+      --muted-fg: hsl(39 6% 58%);
+      --border: hsl(0 0% 20%);
+      --accent: hsl(34 100% 50%);
+      --success: hsl(138 60% 52%);
+      --info: hsl(217 91% 66%);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: hsl(0 0% 8%);
+    --fg: hsl(42 21% 91%);
+    --muted: hsl(0 0% 13%);
+    --muted-fg: hsl(39 6% 58%);
+    --border: hsl(0 0% 20%);
+    --accent: hsl(34 100% 50%);
+    --success: hsl(138 60% 52%);
+    --info: hsl(217 91% 66%);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+
+  .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* Uppercase mono labels are the page's structural device: they mark a section the way the
+     app's own column headers do, so the site reads as the same product. */
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted-fg);
+    margin: 0 0 12px;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- header ---------- */
+  header {
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+  }
+  .bar { display: flex; align-items: center; gap: 20px; height: 56px; }
+  .wordmark {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600; font-size: 17px;
+    text-transform: uppercase; letter-spacing: 0.18em;
+    text-decoration: none;
+  }
+  .bar nav { margin-left: auto; display: flex; gap: 20px; align-items: center; }
+  .bar nav a { font-size: 14px; color: var(--muted-fg); text-decoration: none; }
+  .bar nav a:hover { color: var(--fg); }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 88px 0 56px; }
+  h1 {
+    font-size: clamp(34px, 5.4vw, 54px);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    font-weight: 500;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    max-width: 17ch;
+  }
+  .lede {
+    font-size: 18px; color: var(--muted-fg);
+    max-width: 62ch; margin: 0 0 32px;
+  }
+  .lede strong { color: var(--fg); font-weight: 500; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+  .cmd {
+    display: inline-flex; align-items: center; gap: 12px;
+    border: 1px solid var(--border); background: var(--muted);
+    padding: 11px 14px; border-radius: var(--radius);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px;
+  }
+  .cmd button {
+    font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    border: 0; background: none; color: var(--muted-fg); cursor: pointer; padding: 0;
+  }
+  .cmd button:hover { color: var(--accent); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--fg); background: var(--fg); color: var(--bg);
+    padding: 11px 18px; border-radius: var(--radius);
+    font-size: 14px; font-weight: 500; text-decoration: none;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn.ghost { background: none; color: var(--fg); border-color: var(--border); }
+  .btn.ghost:hover { border-color: var(--fg); opacity: 1; }
+
+  .note { margin-top: 14px; font-size: 13px; color: var(--muted-fg); }
+
+  /* ---------- the three columns ---------- */
+  .figure {
+    margin: 64px 0 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--muted);
+  }
+  .figure-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+  .figure-bar .t {
+    margin-left: 6px; font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; color: var(--muted-fg);
+  }
+  .cols { display: grid; grid-template-columns: 1fr 1.5fr 1fr; min-height: 340px; }
+  .col { padding: 14px; border-right: 1px solid var(--border); }
+  .col:last-child { border-right: 0; }
+  .col h4 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted-fg);
+    margin: 0 0 12px;
+  }
+  .row { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; font-size: 13px; }
+  .row + .row { border-top: 1px solid var(--border); }
+  .row .glyph { font-size: 10px; width: 12px; flex: none; color: var(--muted-fg); }
+  .row .glyph.run { color: var(--info); }
+  .row .glyph.ok { color: var(--success); }
+  .row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .sub { display: block; font-size: 11px; color: var(--muted-fg); }
+  .row.sel { background: var(--bg); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+
+  .msg { font-size: 13px; margin-bottom: 14px; }
+  .who {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.18em; color: var(--muted-fg); display: block; margin-bottom: 4px;
+  }
+  .tool {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted-fg);
+    border-left: 2px solid var(--border); padding: 2px 0 2px 8px; margin: 3px 0;
+  }
+  .prop { display: flex; gap: 8px; font-size: 12px; padding: 5px 0; }
+  .prop .k { color: var(--muted-fg); width: 74px; flex: none; }
+  .prop .v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .caption { font-size: 13px; color: var(--muted-fg); margin: 14px 0 0; }
+
+  /* ---------- sections ---------- */
+  section { padding: 72px 0; border-top: 1px solid var(--border); }
+  section:first-of-type { border-top: 0; }
+  h2 {
+    font-size: 26px; font-weight: 500; letter-spacing: -0.02em;
+    margin: 0 0 12px; text-wrap: balance;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 32px 40px; margin-top: 36px; }
+  .grid h3 { font-size: 15px; font-weight: 500; margin: 0 0 6px; }
+  .grid p { font-size: 14px; color: var(--muted-fg); margin: 0; }
+
+  .agents { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+  .agent {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; color: var(--muted-fg);
+  }
+
+  .downloads { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 32px; }
+  .dl {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px; text-decoration: none; display: block;
+    background: var(--muted);
+  }
+  .dl:hover { border-color: var(--fg); }
+  .dl .os { font-size: 15px; font-weight: 500; margin-bottom: 3px; }
+  .dl .f { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted-fg); }
+
+  .ways {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px 32px;
+    margin: 32px 0 8px; align-items: start;
+  }
+  .way h3 { font-size: 15px; font-weight: 500; margin: 0 0 12px; }
+  .way p { font-size: 14px; color: var(--muted-fg); margin: 12px 0 0; }
+  .way .cmd { width: 100%; justify-content: space-between; }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-fg);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 7px; margin-left: 6px; vertical-align: 1px;
+  }
+  @media (max-width: 700px) { .ways { grid-template-columns: 1fr; } }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 40px 0 64px;
+    font-size: 13px; color: var(--muted-fg);
+  }
+  footer a { color: var(--muted-fg); }
+  footer p { margin: 0 0 8px; max-width: 70ch; }
+
+  @media (max-width: 760px) {
+    .cols { grid-template-columns: 1fr; }
+    .col { border-right: 0; border-bottom: 1px solid var(--border); }
+    .col:last-child { border-bottom: 0; }
+    .hero { padding: 56px 0 40px; }
+    .bar nav a.hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="wordmark" href="/">Kablan</a>
+    <nav>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#agents">Agents</a>
+      <a href="#download">Install</a>
+      <a href="https://github.com/AmarShaked/kablan.dev">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <p class="eyebrow">Open source · Apache-2.0</p>
+    <h1>A board for your coding agents.</h1>
+    <p class="lede">
+      Run Claude Code, Codex, Gemini CLI and others against your repositories, and watch them
+      work. <strong>Each task gets its own git worktree and branch</strong>, so several agents run
+      at once without standing on each other.
+    </p>
+
+    <div class="actions">
+      <div class="cmd">
+        <span>npx kablan</span>
+        <button class="copy" data-cmd="npx kablan" type="button">Copy</button>
+      </div>
+      <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Source</a>
+    </div>
+    <p class="note">
+      No account and no telemetry. Kablan drives each agent&rsquo;s own CLI, so it uses the
+      subscription you already have and never sees your model credentials.
+    </p>
+
+    <!-- The product's actual layout, drawn rather than screenshotted, so it stays legible in
+         both themes and at any width. -->
+    <div class="figure">
+      <div class="figure-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Kablan — sweet/frontend</span>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <h4>Tasks</h4>
+          <div class="row">
+            <span class="glyph ok">✓</span>
+            <span class="title">Wire projects to real data<span class="sub">Merged into main</span></span>
+          </div>
+          <div class="row sel">
+            <span class="glyph run">◐</span>
+            <span class="title">Rename Argocd to Argo CD<span class="sub">Agent is working…</span></span>
+          </div>
+          <div class="row">
+            <span class="glyph">○</span>
+            <span class="title">Icon picker for projects<span class="sub">In review</span></span>
+          </div>
+          <div class="row">
+            <span class="glyph">○</span>
+            <span class="title">Empty states<span class="sub">To do</span></span>
+          </div>
+        </div>
+
+        <div class="col">
+          <h4>Conversation</h4>
+          <div class="msg">
+            <span class="who">You</span>
+            Change the installation label from &ldquo;Argocd&rdquo; to &ldquo;Argo CD&rdquo;.
+          </div>
+          <div class="msg">
+            <span class="who">Claude Code</span>
+            I&rsquo;ll find every occurrence and replace it.
+            <div class="tool">Grep &nbsp;&ldquo;Argocd&rdquo;</div>
+            <div class="tool">Edit &nbsp;HeroSection.jsx &nbsp;+2 −2</div>
+            <div class="tool">Edit &nbsp;SupportedAgents.jsx &nbsp;+9 −1</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <h4>Attempt</h4>
+          <div class="prop"><span class="k">Agent</span><span class="v">Claude Code</span></div>
+          <div class="prop"><span class="k">Branch</span><span class="v mono">kablan/7b7c-argo-cd</span></div>
+          <div class="prop"><span class="k">Base</span><span class="v mono">main</span></div>
+          <div class="prop"><span class="k">Worktree</span><span class="v mono">~/…/7b7c-argo-cd</span></div>
+          <div class="prop"><span class="k">Dev server</span><span class="v mono">localhost:3000</span></div>
+          <div class="prop"><span class="k">Changes</span><span class="v mono">2 files &nbsp;+11 −3</span></div>
+          <div class="prop"><span class="k">Git</span><span class="v">Merge · Rebase · PR</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">
+      Every task on the left, the agent&rsquo;s conversation in the middle, and the attempt&rsquo;s
+      branch, worktree, dev server and git actions on the right.
+    </p>
+  </div>
+
+  <section id="how">
+    <p class="eyebrow">How it works</p>
+    <h2>Parallelism you can actually review.</h2>
+    <div class="grid">
+      <div>
+        <h3>A worktree per task</h3>
+        <p>Each attempt is checked out into its own git worktree on its own branch. Agents never
+          share a working copy, so one rewriting a file cannot break another mid-edit.</p>
+      </div>
+      <div>
+        <h3>Attempts, not one shot</h3>
+        <p>Unhappy with a run? Start another attempt on a fresh branch and compare. The earlier
+          one stays exactly where it was.</p>
+      </div>
+      <div>
+        <h3>Run it before you merge</h3>
+        <p>Start the project&rsquo;s dev server from the task, read its logs, and open it in a real
+          browser — with devtools and your own session.</p>
+      </div>
+      <div>
+        <h3>Finish in place</h3>
+        <p>Read the diff, then merge, rebase, push or open a pull request without leaving the
+          task, with the ahead/behind count in view.</p>
+      </div>
+      <div>
+        <h3>Board or list</h3>
+        <p>See the project as a kanban board, or as a dense list when there is too much on to fit
+          in columns.</p>
+      </div>
+      <div>
+        <h3>Your machine, your keys</h3>
+        <p>Everything runs locally against repositories you already have. No account, no data
+          leaving the machine, nothing phoning home.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="agents">
+    <p class="eyebrow">Agents</p>
+    <h2>Bring the agent you already pay for.</h2>
+    <p class="lede" style="margin-bottom:0">
+      Kablan launches each agent&rsquo;s own CLI, so authentication, models and limits stay
+      whatever you have configured. Switch between them per task.
+    </p>
+    <div class="agents">
+      <span class="agent">Claude Code</span>
+      <span class="agent">Codex</span>
+      <span class="agent">Gemini</span>
+      <span class="agent">Amp</span>
+      <span class="agent">OpenCode</span>
+      <span class="agent">Cursor Agent</span>
+      <span class="agent">Qwen Code</span>
+      <span class="agent">Copilot</span>
+      <span class="agent">Droid</span>
+    </div>
+  </section>
+
+  <section id="download">
+    <p class="eyebrow">Install</p>
+    <h2>Run it, or keep it.</h2>
+    <p class="lede">
+      Both fetch the same binary for your platform and cache it under
+      <span class="mono">~/.kablan/bin</span>, so only the first run downloads.
+    </p>
+
+    <div class="ways">
+      <div class="way">
+        <h3>Just run it</h3>
+        <div class="cmd">
+          <span>npx kablan</span>
+          <button class="copy" data-cmd="npx kablan" type="button">Copy</button>
+        </div>
+        <p>Nothing installed, nothing left behind. Kablan opens in your browser.</p>
+      </div>
+
+      <div class="way">
+        <h3>Install it as an app <span class="badge">macOS</span></h3>
+        <div class="cmd">
+          <span>npx kablan --install</span>
+          <button class="copy" data-cmd="npx kablan --install" type="button">Copy</button>
+        </div>
+        <p>
+          Puts Kablan in your Applications folder. Opening it starts Kablan in the background —
+          no terminal — and opens your browser. Because the app is assembled on your machine
+          rather than downloaded, macOS raises no unidentified-developer warning and there is
+          nothing to sign.
+        </p>
+      </div>
+    </div>
+
+    <p class="note">
+      Needs Node 18 or newer. macOS on Apple silicon and Intel, Linux x64, Windows x64.
+      Update with <span class="mono">npx kablan@latest</span>; remove the app with
+      <span class="mono">npx kablan --uninstall</span>.
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>
+      Kablan is a fork of <a href="https://github.com/BloopAI/vibe-kanban">Vibe Kanban</a> by
+      Bloop AI, used under the Apache License 2.0. It is not affiliated with or endorsed by
+      Bloop AI. See the NOTICE file for the changes this fork makes.
+    </p>
+    <p class="mono" style="font-size:11px;letter-spacing:0.06em">
+      © 2026 Shaked Amar · <a href="https://github.com/AmarShaked/kablan.dev">GitHub</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  for (const btn of document.querySelectorAll('.copy')) {
+    btn.addEventListener('click', async (e) => {
+      try {
+        await navigator.clipboard.writeText(e.target.dataset.cmd);
+        e.target.textContent = 'Copied';
+        setTimeout(() => { e.target.textContent = 'Copy'; }, 1600);
+      } catch {
+        e.target.textContent = 'Press \u2318C';
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
