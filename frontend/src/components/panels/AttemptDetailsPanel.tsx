@@ -122,14 +122,11 @@ function IconAction({
   label,
   onClick,
   disabled,
-  detail,
 }: {
   icon: typeof GitBranch;
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  /** A second line under the label — used for the worktree path, which is too long to show. */
-  detail?: string;
 }) {
   return (
     <Tooltip>
@@ -144,13 +141,8 @@ function IconAction({
           <Icon className="h-3.5 w-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-xs px-2 py-1 text-xs">
+      <TooltipContent side="bottom" className="px-2 py-1 text-xs">
         {label}
-        {detail && (
-          <span className="font-ibm-plex-mono mt-0.5 block break-all text-[10px] text-muted-foreground">
-            {detail}
-          </span>
-        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -252,9 +244,6 @@ export function AttemptDetailsPanel({
             <IconAction
               icon={copiedPath ? Check : Copy}
               label="Copy worktree path"
-              // The path is long and was truncated even on its own row, so the tooltip carries
-              // it in full on a second line.
-              detail={attempt.container_ref}
               onClick={() => {
                 navigator.clipboard.writeText(attempt.container_ref!);
                 setCopiedPath(true);
