@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 
 export type LayoutMode = 'details' | 'diffs' | 'logs' | null;
 
+// The header component draws its own bottom rule, so the wrappers below deliberately have no
+// border of their own — two a pixel apart read as a rendering fault rather than a divider.
 interface TasksLayoutProps {
   kanban: ReactNode;
   attempt: ReactNode;
@@ -74,7 +76,7 @@ function RightWorkArea({
   return (
     <div className="h-full min-h-0 flex flex-col">
       {rightHeader && (
-        <div className="shrink-0 sticky top-0 z-20 bg-background border-b">
+        <div className="shrink-0 sticky top-0 z-20 bg-background">
           {rightHeader}
         </div>
       )}
@@ -251,7 +253,7 @@ export function TasksLayout({
       <div className="h-full min-h-0 flex flex-col">
         {/* Header is visible when panel is open */}
         {isPanelOpen && rightHeader && (
-          <div className="shrink-0 sticky top-0 z-20 bg-background border-b">
+          <div className="shrink-0 sticky top-0 z-20 bg-background">
             {rightHeader}
           </div>
         )}

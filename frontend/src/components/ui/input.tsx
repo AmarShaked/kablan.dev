@@ -41,7 +41,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         onKeyDown={handleKeyDown}
         className={twMerge(
           cn(
-            'flex h-10 w-full border px-3 py-2 text-sm ring-offset-background file:border-0 bg-transparent file:text-sm file:font-medium focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+            // A field needs its own ground and its own text colour. Transparent on a tinted card, with
+            // the card's muted text inherited, is exactly how a disabled control looks — and these
+            // were being read as disabled.
+            'flex h-10 w-full border px-3 py-2 text-sm ring-offset-background file:border-0 bg-background text-foreground placeholder:text-muted-foreground file:text-sm file:font-medium focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50',
             className
           )
         )}

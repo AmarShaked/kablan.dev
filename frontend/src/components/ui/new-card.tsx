@@ -19,10 +19,10 @@ const NewCardHeader = React.forwardRef<HTMLDivElement, NewCardHeaderProps>(
     <div
       ref={ref}
       className={cn(
-        'relative bg-background text-foreground text-base flex items-center gap-2 px-3 border-b border-dashed',
-        // add a solid top line via ::before, except on the first header
-        'before:content-[""] before:absolute before:top-0 before:left-0 before:right-0 ' +
-          'before:h-px before:bg-border first:before:hidden',
+        // One plain rule underneath. It used to be dashed, with a solid line drawn on top of
+        // the next header by a pseudo-element, so wherever a header sat inside a bordered
+        // container two lines stacked a pixel apart and read as a rendering fault.
+        'relative bg-background text-foreground text-base flex items-center gap-2 px-3 border-b',
         actions && 'justify-between',
         className
       )}
