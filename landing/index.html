@@ -270,12 +270,8 @@
     </p>
 
     <div class="actions">
-      <div class="cmd">
-        <span>npx kablan</span>
-        <button id="copy" type="button">Copy</button>
-      </div>
       <a class="btn" href="#download">Download the app</a>
-      <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Source</a>
+      <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Build from source</a>
     </div>
     <p class="note">
       No account and no telemetry. Kablan drives each agent&rsquo;s own CLI, so it uses the
@@ -404,8 +400,9 @@
     <p class="eyebrow">Download</p>
     <h2>Install it, or just run it.</h2>
     <p class="lede">
-      The desktop app updates itself when a new version ships. Prefer the terminal?
-      <span class="mono">npx kablan</span> needs nothing installed.
+      The desktop app updates itself when a new version ships. There is no npm package yet —
+      to run it from a terminal today, clone the repository and use
+      <span class="mono">pnpm dev</span>.
     </p>
 
     <div class="downloads">
@@ -444,17 +441,6 @@
 </footer>
 
 <script>
-  // Copy the install command.
-  document.getElementById('copy').addEventListener('click', async (e) => {
-    try {
-      await navigator.clipboard.writeText('npx kablan');
-      e.target.textContent = 'Copied';
-      setTimeout(() => { e.target.textContent = 'Copy'; }, 1600);
-    } catch {
-      e.target.textContent = 'Press ⌘C';
-    }
-  });
-
   // Point the download cards at the newest release's actual assets. If the request fails — rate
   // limited, offline, no release yet — the links already point at the releases page, so nothing
   // here can leave a dead button behind.

@@ -12,9 +12,12 @@ See [NOTICE](NOTICE) for what this fork changes.
 
 ## Install
 
-```bash
-npx kablan
-```
+Download the desktop app from [Releases](https://github.com/AmarShaked/kablan.dev/releases). It
+updates itself when a new version ships.
+
+There is no published npm package yet: the `npx-cli` wrapper in this repository still expects the
+upstream project's binary host, so `npx kablan` does not work. To run Kablan from a terminal,
+build from source — see Development below.
 
 Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
 not hold your model credentials.
