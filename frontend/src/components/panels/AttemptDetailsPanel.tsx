@@ -27,6 +27,12 @@ import { DevServerLogsView } from '@/components/tasks/TaskDetails/preview/DevSer
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
 import { EditBranchNameDialog } from '@/components/dialogs/tasks/EditBranchNameDialog';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useProject } from '@/contexts/ProjectContext';
 import { useAttemptExecution, useBranchStatus } from '@/hooks';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
@@ -84,7 +90,10 @@ function Row({
 
   if (!onClick) {
     return (
-      <div className="flex w-full items-center gap-2 px-2 py-1.5 text-sm" title={title}>
+      <div
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
+        title={title}
+      >
         {content}
       </div>
     );
@@ -113,25 +122,37 @@ function IconAction({
   label,
   onClick,
   disabled,
-  title,
+  detail,
 }: {
   icon: typeof GitBranch;
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  title?: string;
+  /** A second line under the label — used for the worktree path, which is too long to show. */
+  detail?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={title ?? label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs px-2 py-1 text-xs">
+        {label}
+        {detail && (
+          <span className="font-ibm-plex-mono mt-0.5 block break-all text-[10px] text-muted-foreground">
+            {detail}
+          </span>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -160,7 +181,8 @@ export function AttemptDetailsPanel({
   const { repos, selectedRepoId } = useAttemptRepo(attempt.id);
   const openInEditor = useOpenInEditor(attempt.id);
   const { fileCount, added, deleted } = useDiffSummary(attempt.id);
-  const { data: projectHasDevScript = false } = useHasDevServerScript(projectId);
+  const { data: projectHasDevScript = false } =
+    useHasDevServerScript(projectId);
 
   const {
     start: startDevServer,
@@ -219,33 +241,35 @@ export function AttemptDetailsPanel({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-border bg-background p-2">
-      <div className="flex items-center justify-end gap-0.5 border-b border-border px-1 pb-1.5">
-        <IconAction
-          icon={ExternalLink}
-          label="Open in IDE"
-          onClick={() => openInEditor()}
-        />
-        {attempt.container_ref && (
+      <TooltipProvider delayDuration={200} skipDelayDuration={400}>
+        <div className="flex items-center justify-end gap-0.5 border-b border-border px-1 pb-1.5">
           <IconAction
-            icon={copiedPath ? Check : Copy}
-            label="Copy worktree path"
-            // The path is long and was truncated even on its own row, so it lives in the
-            // tooltip where it can be read in full.
-            title={`Copy worktree path\n${attempt.container_ref}`}
-            onClick={() => {
-              navigator.clipboard.writeText(attempt.container_ref!);
-              setCopiedPath(true);
-              setTimeout(() => setCopiedPath(false), 1500);
-            }}
+            icon={ExternalLink}
+            label="Open in IDE"
+            onClick={() => openInEditor()}
           />
-        )}
-        <IconAction
-          icon={GitBranchPlus}
-          label="Create subtask"
-          onClick={handleCreateSubtask}
-          disabled={!projectId || !attempt.branch}
-        />
-      </div>
+          {attempt.container_ref && (
+            <IconAction
+              icon={copiedPath ? Check : Copy}
+              label="Copy worktree path"
+              // The path is long and was truncated even on its own row, so the tooltip carries
+              // it in full on a second line.
+              detail={attempt.container_ref}
+              onClick={() => {
+                navigator.clipboard.writeText(attempt.container_ref!);
+                setCopiedPath(true);
+                setTimeout(() => setCopiedPath(false), 1500);
+              }}
+            />
+          )}
+          <IconAction
+            icon={GitBranchPlus}
+            label="Create subtask"
+            onClick={handleCreateSubtask}
+            disabled={!projectId || !attempt.branch}
+          />
+        </div>
+      </TooltipProvider>
 
       <SectionLabel>Task</SectionLabel>
       {/* The glyph is the control, exactly as in the board, the list and the sidebar. */}
@@ -275,8 +299,7 @@ export function AttemptDetailsPanel({
               <DropdownMenuItem
                 key={a.id}
                 onClick={() =>
-                  projectId &&
-                  navigate(paths.attempt(projectId, task.id, a.id))
+                  projectId && navigate(paths.attempt(projectId, task.id, a.id))
                 }
               >
                 <span className="min-w-0 flex-1 truncate">
@@ -290,7 +313,9 @@ export function AttemptDetailsPanel({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Row icon={Play}>Attempt {Math.max(attemptNumber, 1)} of {Math.max(ordered.length, 1)}</Row>
+        <Row icon={Play}>
+          Attempt {Math.max(attemptNumber, 1)} of {Math.max(ordered.length, 1)}
+        </Row>
       )}
 
       {attempt.session?.executor && (
@@ -392,7 +417,9 @@ export function AttemptDetailsPanel({
             isStoppingDevServer ||
             (!hasRunningDevServer && !projectHasDevScript)
           }
-          onClick={() => (hasRunningDevServer ? stopDevServer() : startDevServer())}
+          onClick={() =>
+            hasRunningDevServer ? stopDevServer() : startDevServer()
+          }
         >
           {isStartingDevServer || isStoppingDevServer ? (
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
@@ -466,7 +493,6 @@ export function AttemptDetailsPanel({
           layout="vertical"
         />
       </div>
-
     </div>
   );
 }
