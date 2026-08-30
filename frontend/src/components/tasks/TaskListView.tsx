@@ -1,7 +1,10 @@
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
-import { statusBoardColors, statusLabels } from '@/utils/statusLabels';
+import { statusLabels } from '@/utils/statusLabels';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
-import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
+import {
+  StatusGlyph,
+  TaskStatusControl,
+} from '@/components/tasks/TaskStatusControl';
 import {
   TaskActivityBadge,
   taskAccentClass,
@@ -43,12 +46,13 @@ export function TaskListView({
 
         return (
           <section key={status} className="mb-8">
-            <div className="flex items-baseline gap-2 border-b border-border pb-2">
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: `hsl(var(${statusBoardColors[status]}))` }}
-                aria-hidden
-              />
+            {/* Mirrors a row exactly: the same left padding, the same 24px glyph box, and the
+                same 2px accent stripe the rows carry — transparent here, but it occupies the
+                width, and without it the heading's glyph sits 2px left of the rows'. */}
+            <div className="flex items-center gap-3 border-b border-border border-l-2 border-l-transparent pb-2 pl-3">
+              <span className="-ml-1 inline-flex w-6 shrink-0 justify-center">
+                <StatusGlyph status={status} />
+              </span>
               <h3 className="font-ibm-plex-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                 {statusLabels[status]}
               </h3>

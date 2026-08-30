@@ -92,7 +92,7 @@ export function TaskCard({
           title={
             <span className="inline-flex items-start gap-1.5">
               {/* -my-1 keeps the button's padding from adding a row of height to the card. */}
-              <TaskStatusControl task={task} className="-my-1 -ml-1" size={14} />
+              <TaskStatusControl task={task} className="-my-1 -ml-1" />
               <span>{task.title}</span>
             </span>
           }

@@ -11,7 +11,7 @@ import { useTaskMutations } from '@/hooks/useTaskMutations';
 import { useProject } from '@/contexts/ProjectContext';
 import { cn } from '@/lib/utils';
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
-import { statusLabels } from '@/utils/statusLabels';
+import { statusColorVars, statusLabels } from '@/utils/statusLabels';
 
 /**
  * The status glyph, and the control for changing it.
@@ -39,14 +39,6 @@ const FILL: Record<TaskStatus, number> = {
   cancelled: 0,
 };
 
-const TONE: Record<TaskStatus, string> = {
-  todo: 'text-muted-foreground',
-  inprogress: 'text-warning',
-  inreview: 'text-success',
-  done: 'text-info',
-  cancelled: 'text-muted-foreground',
-};
-
 // Circumference of the inner circle the wedge is drawn with. Its stroke is thick enough to reach
 // the centre, so cutting the dash to a fraction of this leaves a pie wedge.
 const INNER_C = 2 * Math.PI * 3;
@@ -68,7 +60,10 @@ export function StatusGlyph({
       height={size}
       viewBox="0 0 16 16"
       aria-hidden="true"
-      className={cn('shrink-0', TONE[status], className)}
+      // Inline rather than a Tailwind class so the colour comes from the same map the
+      // section and column headings read, and cannot drift from them.
+      style={{ color: `hsl(var(${statusColorVars[status]}))` }}
+      className={cn('shrink-0', className)}
     >
       {status === 'done' ? (
         <>
@@ -188,7 +183,7 @@ export function TaskStatusControl({
       >
         <Command loop>
           <div className="flex items-center gap-2 border-b px-3 py-2">
-            <StatusGlyph status={task.status} size={14} />
+            <StatusGlyph status={task.status} />
             <Command.Input
               placeholder="Change status…"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"

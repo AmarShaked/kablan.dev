@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/shadcn-io/kanban';
 import { TaskCard } from './TaskCard';
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
-import { statusBoardColors, statusLabels } from '@/utils/statusLabels';
+import { statusColorVars, statusLabels } from '@/utils/statusLabels';
 
 export type KanbanColumns = Record<TaskStatus, TaskWithAttemptStatus[]>;
 
@@ -37,7 +37,7 @@ function TaskKanbanBoard({
           <KanbanBoard key={status} id={statusKey}>
             <KanbanHeader
               name={statusLabels[statusKey]}
-              color={statusBoardColors[statusKey]}
+              color={statusColorVars[statusKey]}
               onAddTask={onCreateTask}
             />
             <KanbanCards>
