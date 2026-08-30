@@ -3,6 +3,7 @@ import { KanbanCard } from '@/components/ui/shadcn-io/kanban';
 import { Link } from 'lucide-react';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
+import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import { TaskActivityBadge } from '@/components/tasks/TaskActivityBadge';
 import { Button } from '@/components/ui/button';
 import { useNavigateWithSearch } from '@/hooks';
@@ -88,7 +89,13 @@ export function TaskCard({
     >
       <div className="flex flex-col gap-2">
         <TaskCardHeader
-          title={task.title}
+          title={
+            <span className="inline-flex items-start gap-1.5">
+              {/* -my-1 keeps the button's padding from adding a row of height to the card. */}
+              <TaskStatusControl task={task} className="-my-1 -ml-1" size={14} />
+              <span>{task.title}</span>
+            </span>
+          }
           right={
             <>
               <TaskActivityBadge task={task} />

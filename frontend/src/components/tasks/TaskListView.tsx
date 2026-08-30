@@ -1,6 +1,7 @@
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { statusBoardColors, statusLabels } from '@/utils/statusLabels';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
+import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import {
   TaskActivityBadge,
   taskAccentClass,
@@ -21,8 +22,9 @@ type Props = {
  * once, which is hard when five columns each scroll separately. Same information and the same
  * per-task actions — only the layout differs.
  *
- * Drag-to-reorder is deliberately not offered here: rows carry no drop targets, so status is
- * changed from the actions menu instead of by dragging.
+ * Drag-to-reorder is deliberately not offered here: rows carry no drop targets. Status is
+ * changed from the glyph on the left of each row, which is the same control the board card and
+ * the task sidebar use.
  */
 export function TaskListView({
   columns,
@@ -78,6 +80,8 @@ export function TaskListView({
                       task
                     )} ${selectedTaskId === task.id ? 'bg-accent' : ''}`}
                   >
+                    <TaskStatusControl task={task} className="-ml-1" />
+
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{task.title}</p>
                       {task.description && (

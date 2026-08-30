@@ -1,5 +1,6 @@
-import { Check, CircleDashed, Loader2, SquareTerminal, X } from 'lucide-react';
+import { Loader2, SquareTerminal } from 'lucide-react';
 
+import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { statusLabels } from '@/utils/statusLabels';
 
@@ -7,28 +8,11 @@ import { statusLabels } from '@/utils/statusLabels';
  * The task list shown beside an open task.
  *
  * Opening a task used to replace the board, so you lost sight of everything else. This keeps the
- * full list next to the conversation: a state glyph, the title, what the task is doing now, and
- * the status — enough to switch between tasks without going back.
+ * full list next to the conversation: the status glyph, the title, and what the task is doing
+ * now — enough to switch between tasks, and to move one along, without going back.
  */
 
-function StateGlyph({
-  task,
-}: {
-  task: TaskWithAttemptStatus;
-}) {
-  const cls = 'h-3.5 w-3.5 shrink-0';
-  if (task.has_in_progress_attempt)
-    return <Loader2 className={`${cls} animate-spin text-info`} aria-label="Attempt running" />;
-  if (task.last_attempt_failed)
-    return <X className={`${cls} text-destructive`} aria-label="Last attempt failed" />;
-  if (task.status === 'done')
-    return <Check className={`${cls} text-success`} aria-label="Done" />;
-  if (task.status === 'cancelled')
-    return <X className={`${cls} text-muted-foreground`} aria-label="Cancelled" />;
-  return <CircleDashed className={`${cls} text-muted-foreground`} aria-label={statusLabels[task.status]} />;
-}
-
-/** What the task is doing right now, in preference to a status word that repeats the glyph. */
+/** What the task is doing right now, in preference to a status word the glyph already carries. */
 function activityLine(task: TaskWithAttemptStatus): string {
   if (task.has_in_progress_attempt) return 'Agent is working…';
   if (task.last_attempt_failed) return 'Last attempt failed';
@@ -62,23 +46,38 @@ export function TaskSidebarList({
           <p className="px-3 py-4 text-xs text-muted-foreground">No tasks.</p>
         ) : (
           tasks.map((task) => (
-            <button
+            // A div rather than a button, so the status control can be a button inside it —
+            // nesting one button in another is invalid and browsers drop the inner one.
+            <div
               key={task.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(task)}
-              className={`flex w-full items-start gap-2 border-b border-border px-3 py-2.5 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(task);
+                }
+              }}
+              className={`flex w-full cursor-pointer items-start gap-1.5 border-b border-border py-2.5 pl-2 pr-3 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                 selectedTaskId === task.id ? 'bg-accent' : ''
               }`}
             >
-              <span className="mt-0.5">
-                <StateGlyph task={task} />
-              </span>
+              <TaskStatusControl task={task} className="mt-px" />
+
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{task.title}</span>
                 <span className="mt-0.5 flex items-center gap-1.5">
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                     {activityLine(task)}
                   </span>
+                  {/* The agent's own state, which the status glyph does not cover. */}
+                  {task.has_in_progress_attempt && (
+                    <Loader2
+                      className="h-3 w-3 shrink-0 animate-spin text-info"
+                      aria-label="Attempt running"
+                    />
+                  )}
                   {task.has_running_dev_server && (
                     <SquareTerminal
                       className="h-3 w-3 shrink-0 text-success"
@@ -87,7 +86,7 @@ export function TaskSidebarList({
                   )}
                 </span>
               </span>
-            </button>
+            </div>
           ))
         )}
       </div>
