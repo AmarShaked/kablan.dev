@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kablan",
+  "version": "0.1.8",
+  "identifier": "dev.kablan.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm run frontend:dev",
+    "beforeBuildCommand": "cd frontend && pnpm build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/AmarShaked/kablan.dev/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU3OTkyOEE0MEZERjJGRkQKUldUOUw5OFBwQ2laNS8wa1N1Z09WV0Y2eTd6NXlRRktDNFVSemhaRjJvQjNmZFdFOTNPb05VK0YK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "category": "DeveloperTool",
+    "shortDescription": "Run coding agents against your repos, from a board.",
+    "longDescription": "Kablan runs Claude Code, Codex, Gemini CLI and other coding agents against your repositories from a board. Each task gets its own git worktree and branch, so several agents work at once without colliding.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}

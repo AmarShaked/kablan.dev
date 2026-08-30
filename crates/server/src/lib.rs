@@ -2,6 +2,7 @@ pub mod error;
 pub mod mcp;
 pub mod middleware;
 pub mod routes;
+pub mod run;
 
 // #[cfg(feature = "cloud")]
 // type DeploymentImpl = vibe_kanban_cloud::deployment::CloudDeployment;
