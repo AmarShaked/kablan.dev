@@ -40,6 +40,8 @@ import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { paths } from '@/lib/paths';
 import { agentLabel } from '@/utils/agentLabels';
+import { statusLabels } from '@/utils/statusLabels';
+import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 
@@ -211,6 +213,22 @@ export function AttemptDetailsPanel({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-border bg-background p-2">
+      <SectionLabel>Task</SectionLabel>
+      {/* The glyph is the control, exactly as in the board, the list and the sidebar. */}
+      <div className="flex items-center gap-2 px-1 py-1 text-sm">
+        <TaskStatusControl task={task} />
+        <span className="min-w-0 flex-1 truncate">
+          {statusLabels[task.status]}
+        </span>
+      </div>
+      <Row
+        icon={ArrowUpRight}
+        onClick={handleCreateSubtask}
+        disabled={!projectId || !attempt.branch}
+      >
+        Create subtask
+      </Row>
+
       <SectionLabel>Attempt</SectionLabel>
       {ordered.length > 1 ? (
         <DropdownMenu>
@@ -428,14 +446,6 @@ export function AttemptDetailsPanel({
         />
       </div>
 
-      <SectionLabel>Task</SectionLabel>
-      <Row
-        icon={ArrowUpRight}
-        onClick={handleCreateSubtask}
-        disabled={!projectId || !attempt.branch}
-      >
-        Create subtask
-      </Row>
     </div>
   );
 }
