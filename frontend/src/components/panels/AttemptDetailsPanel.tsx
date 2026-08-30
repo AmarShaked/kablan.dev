@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowUpRight,
   Bot,
   Check,
+  GitBranchPlus,
   Copy,
   ExternalLink,
   FileDiff,
@@ -103,29 +103,34 @@ function Row({
   );
 }
 
-/** Copies text and briefly confirms, so a click on a path has visible feedback. */
-function CopyRow({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
+/**
+ * One action in the row above the panel. Icon-only, because these are the three things done
+ * often enough to be recognised by shape, and a full row each pushed the properties down the
+ * panel.
+ */
+function IconAction({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  title,
+}: {
+  icon: typeof GitBranch;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
     <button
       type="button"
-      title={value}
+      onClick={onClick}
+      disabled={disabled}
       aria-label={label}
-      onClick={() => {
-        navigator.clipboard.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-accent"
+      title={title ?? label}
+      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
-      {copied ? (
-        <Check className="h-3.5 w-3.5 shrink-0 text-success" />
-      ) : (
-        <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      )}
-      <span className="font-ibm-plex-mono min-w-0 flex-1 truncate text-xs text-muted-foreground">
-        {value}
-      </span>
+      <Icon className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -167,6 +172,7 @@ export function AttemptDetailsPanel({
   } = useDevServer(attempt.id);
 
   const [showLogs, setShowLogs] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
 
   const primaryDevServer = runningDevServers[0];
   const logStream = useLogStream(primaryDevServer?.id ?? '');
@@ -213,6 +219,34 @@ export function AttemptDetailsPanel({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-border bg-background p-2">
+      <div className="flex items-center justify-end gap-0.5 border-b border-border px-1 pb-1.5">
+        <IconAction
+          icon={ExternalLink}
+          label="Open in IDE"
+          onClick={() => openInEditor()}
+        />
+        {attempt.container_ref && (
+          <IconAction
+            icon={copiedPath ? Check : Copy}
+            label="Copy worktree path"
+            // The path is long and was truncated even on its own row, so it lives in the
+            // tooltip where it can be read in full.
+            title={`Copy worktree path\n${attempt.container_ref}`}
+            onClick={() => {
+              navigator.clipboard.writeText(attempt.container_ref!);
+              setCopiedPath(true);
+              setTimeout(() => setCopiedPath(false), 1500);
+            }}
+          />
+        )}
+        <IconAction
+          icon={GitBranchPlus}
+          label="Create subtask"
+          onClick={handleCreateSubtask}
+          disabled={!projectId || !attempt.branch}
+        />
+      </div>
+
       <SectionLabel>Task</SectionLabel>
       {/* The glyph is the control, exactly as in the board, the list and the sidebar. */}
       <div className="flex items-center gap-2 px-1 py-1 text-sm">
@@ -221,13 +255,6 @@ export function AttemptDetailsPanel({
           {statusLabels[task.status]}
         </span>
       </div>
-      <Row
-        icon={ArrowUpRight}
-        onClick={handleCreateSubtask}
-        disabled={!projectId || !attempt.branch}
-      >
-        Create subtask
-      </Row>
 
       <SectionLabel>Attempt</SectionLabel>
       {ordered.length > 1 ? (
@@ -321,12 +348,6 @@ export function AttemptDetailsPanel({
           <span className="text-muted-foreground">{targetBranch}</span>
         </Row>
       )}
-      {attempt.container_ref && (
-        <CopyRow value={attempt.container_ref} label="Copy worktree path" />
-      )}
-      <Row icon={ExternalLink} onClick={() => openInEditor()} title="Open in IDE">
-        Open in IDE
-      </Row>
 
       <SectionLabel>Dev server</SectionLabel>
       {hasRunningDevServer ? (
