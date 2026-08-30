@@ -132,5 +132,11 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['wa-sqlite'],
   },
-  build: { sourcemap: true },
+  build: {
+    // Off by default. The map is ~17MB against a ~5MB bundle: it went into every installer, and
+    // building it blew Node's default 2GB heap on CI. Nothing consumes it — this fork ships no
+    // crash reporting unless KABLAN_SENTRY_DSN is set. Set VITE_SOURCEMAP=true to get it back
+    // when actually debugging a production bundle.
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
+  },
 });

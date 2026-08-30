@@ -37,6 +37,9 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       # Build against the committed .sqlx cache instead of a live database.
       SQLX_OFFLINE: "true"
+      # Headroom for the frontend build. It fits inside Node's default 2GB now that the
+      # sourcemap is off, but only just, and a runner OOM reads as an unexplained SIGABRT.
+      NODE_OPTIONS: "--max-old-space-size=6144"
 
     steps:
       - uses: actions/checkout@v4
