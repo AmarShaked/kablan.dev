@@ -3,7 +3,7 @@
   "version": "0.1.8",
   "private": true,
   "bin": {
-    "vibe-kanban": "npx-cli/bin/cli.js"
+    "kablan": "npx-cli/bin/cli.js"
   },
   "files": [
     "npx-cli/bin/cli.js",
