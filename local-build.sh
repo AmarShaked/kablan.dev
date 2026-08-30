@@ -60,28 +60,28 @@ cargo build --release --bin mcp_task_server --manifest-path Cargo.toml
 echo "📦 Creating distribution package..."
 
 # Copy the main binary
-cp ${CARGO_TARGET_DIR}/release/server vibe-kanban
-zip -q vibe-kanban.zip vibe-kanban
-rm -f vibe-kanban 
-mv vibe-kanban.zip npx-cli/dist/$PLATFORM/vibe-kanban.zip
+cp ${CARGO_TARGET_DIR}/release/server kablan
+zip -q kablan.zip kablan
+rm -f kablan 
+mv kablan.zip npx-cli/dist/$PLATFORM/kablan.zip
 
 # Copy the MCP binary
-cp ${CARGO_TARGET_DIR}/release/mcp_task_server vibe-kanban-mcp
-zip -q vibe-kanban-mcp.zip vibe-kanban-mcp
-rm -f vibe-kanban-mcp
-mv vibe-kanban-mcp.zip npx-cli/dist/$PLATFORM/vibe-kanban-mcp.zip
+cp ${CARGO_TARGET_DIR}/release/mcp_task_server kablan-mcp
+zip -q kablan-mcp.zip kablan-mcp
+rm -f kablan-mcp
+mv kablan-mcp.zip npx-cli/dist/$PLATFORM/kablan-mcp.zip
 
 # Copy the Review CLI binary
-cp ${CARGO_TARGET_DIR}/release/review vibe-kanban-review
-zip -q vibe-kanban-review.zip vibe-kanban-review
-rm -f vibe-kanban-review
-mv vibe-kanban-review.zip npx-cli/dist/$PLATFORM/vibe-kanban-review.zip
+cp ${CARGO_TARGET_DIR}/release/review kablan-review
+zip -q kablan-review.zip kablan-review
+rm -f kablan-review
+mv kablan-review.zip npx-cli/dist/$PLATFORM/kablan-review.zip
 
 echo "✅ Build complete!"
 echo "📁 Files created:"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban.zip"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban-mcp.zip"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban-review.zip"
+echo "   - npx-cli/dist/$PLATFORM/kablan.zip"
+echo "   - npx-cli/dist/$PLATFORM/kablan-mcp.zip"
+echo "   - npx-cli/dist/$PLATFORM/kablan-review.zip"
 echo ""
 echo "🚀 To test locally, run:"
 echo "   cd npx-cli && node bin/cli.js"

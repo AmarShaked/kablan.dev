@@ -1,19 +1,19 @@
 {
-  "name": "vibe-kanban",
+  "name": "kablan",
   "private": false,
   "version": "0.1.8",
   "main": "index.js",
   "bin": {
-    "vibe-kanban": "bin/cli.js"
+    "kablan": "bin/cli.js"
   },
   "keywords": [],
-  "author": "bloop",
+  "author": "Shaked Amar",
   "repository": {
     "type": "git",
-    "url": "https://github.com/BloopAI/vibe-kanban"
+    "url": "https://github.com/shakedamar/kablan"
   },
   "license": "",
-  "description": "NPX wrapper around vibe-kanban and vibe-kanban-mcp",
+  "description": "NPX wrapper around the Kablan server and its MCP task server",
   "dependencies": {
     "adm-zip": "^0.5.16"
   },
