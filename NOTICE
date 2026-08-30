@@ -1,4 +1,4 @@
-Kablan Board
+Kablan
 Copyright 2026 Shaked Amar
 
 This product is a derivative work of Vibe Kanban
@@ -8,9 +8,29 @@ licensed under the Apache License, Version 2.0.
 Forked at upstream tag v0.1.8-20260210143125.
 
 Modifications made in this fork (Apache-2.0 section 4b):
-  - Rebranded to Kablan (name, colors, product identity).
-  - Added a branch list view.
-  - Added automatic fetching for configured projects.
-  - Packaged and shipped as a Tauri desktop application.
+  - Rebranded to Kablan: name, product identity, npm package and binaries,
+    MCP server identity, on-disk directories, and the identity used to author
+    commits made on the user's behalf.
+  - Removed analytics and crash reporting. posthog-js and @sentry/react are
+    aliased to no-op modules at build time; the Rust Sentry integration sends
+    nothing unless KABLAN_SENTRY_DSN is set.
+  - Removed calls to upstream's infrastructure: the Discord online-count poll,
+    the GitHub star count, the hosted feature tour, and the browser companion
+    installer.
+  - Removed upstream's promotional text from the generated pull request
+    description prompt.
+  - Removed the in-app browser preview; a running dev server is reported and
+    opened in a real browser instead.
+  - Removed the beta "workspaces" UI (the /workspaces and /projects routes and
+    the code only they reached).
+  - Added a list view for tasks, alongside the board.
+  - Redesigned the projects page as a list with per-project icons, task counts,
+    and inline expansion.
+  - Redesigned the task view into three columns: the task list, the agent
+    conversation, and a details column for the attempt.
+  - Added dev server controls and environment-file editing, with a prompt to
+    replace a dev server already held by another task.
+  - Added running and dev-server indicators to the task list and board.
+  - Added a dark theme and a theme switcher.
 
 The Apache License 2.0 text is in LICENSE and applies to this work.

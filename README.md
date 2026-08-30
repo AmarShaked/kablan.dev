@@ -1,147 +1,108 @@
-<p align="center">
-  <a href="https://vibekanban.com">
-    <picture>
-      <source srcset="frontend/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="frontend/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
-      <img src="frontend/public/vibe-kanban-logo.svg" alt="Vibe Kanban Logo">
-    </picture>
-  </a>
-</p>
+# Kablan
 
-<p align="center">Get 10X more out of Claude Code, Gemini CLI, Codex, Amp and other coding agents...</p>
-<p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/BloopAI/vibe-kanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/BloopAI/vibe-kanban/.github%2Fworkflows%2Fpublish.yml" /></a>
-  <a href="https://deepwiki.com/BloopAI/vibe-kanban"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-</p>
+Run coding agents — Claude Code, Codex, Gemini CLI, Amp and others — against your repositories
+from a board, and watch them work.
 
-<h1 align="center">
-  <a href="https://jobs.polymer.co/vibe-kanban?source=github"><strong>We're hiring!</strong></a>
-</h1>
+Each task gets its own git worktree and its own branch, so several agents can run at once without
+standing on each other. You follow the conversation, review the diff, start the project's dev
+server, and merge or open a PR when it looks right.
 
-![](frontend/public/vibe-kanban-screenshot-overview.png)
+Kablan is a fork of [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) by Bloop AI, Apache-2.0.
+See [NOTICE](NOTICE) for what this fork changes.
 
-## Overview
-
-AI coding agents are increasingly writing the world's code and human engineers now spend the majority of their time planning, reviewing, and orchestrating tasks. Vibe Kanban streamlines this process, enabling you to:
-
-- Easily switch between different coding agents
-- Orchestrate the execution of multiple coding agents in parallel or in sequence
-- Quickly review work and start dev servers
-- Track the status of tasks that your coding agents are working on
-- Centralise configuration of coding agent MCP configs
-- Open projects remotely via SSH when running Vibe Kanban on a remote server
-
-You can watch a video overview [here](https://youtu.be/TFT3KnZOOAk).
-
-## Installation
-
-Make sure you have authenticated with your favourite coding agent. A full list of supported coding agents can be found in the [docs](https://vibekanban.com/docs). Then in your terminal run:
+## Install
 
 ```bash
-npx vibe-kanban
+npx kablan
 ```
 
-## Documentation
+Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
+not hold your model credentials.
 
-Please head to the [website](https://vibekanban.com/docs) for the latest documentation and user guides.
+## The task view
 
-## Support
+Opening a task gives you three columns:
 
-We use [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) for feature requests. Please open a discussion to create a feature request. For bugs please open an issue on this repo.
+- **left** — every task in the project, with what each one is doing right now
+- **centre** — the agent's conversation, and the box you reply in
+- **right** — the attempt: which attempt of how many, its branch and base, the worktree path,
+  Open in IDE, the dev server, the diff totals, and the git actions
 
-## Contributing
-
-We would prefer that ideas and changes are first raised with the core team via [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) or [Discord](https://discord.gg/AC4nwVtJM3), where we can discuss implementation details and alignment with the existing roadmap. Please do not open PRs without first discussing your proposal with the team.
+Each of those lives in exactly one place. Diffs take over the right column when you ask for them.
 
 ## Development
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (latest stable)
-- [Node.js](https://nodejs.org/) (>=18)
-- [pnpm](https://pnpm.io/) (>=8)
+- [Rust](https://rustup.rs/) (the toolchain in `rust-toolchain.toml`)
+- [Node.js](https://nodejs.org/) >= 18
+- [pnpm](https://pnpm.io/) >= 8
 
-Additional development tools:
 ```bash
 cargo install cargo-watch
-cargo install sqlx-cli
-```
-
-Install dependencies:
-```bash
+cargo install sqlx-cli --version ^0.8   # 0.9 needs a newer rustc than this repo pins
 pnpm i
 ```
 
-### Running the dev server
+### Running it
 
 ```bash
 pnpm run dev
 ```
 
-This will start the backend. A blank DB will be copied from the `dev_assets_seed` folder.
+Frontend on **5310**, backend on **5311**. A blank database is copied from `dev_assets_seed` on
+first run.
 
-### Building the frontend
-
-To build just the frontend:
-
-```bash
-cd frontend
-pnpm build
-```
-
-### Build from source (macOS)
-
-1. Run `./local-build.sh`
-2. Test with `cd npx-cli && node bin/cli.js`
-
-
-### Environment Variables
-
-The following environment variables can be configured at build time or runtime:
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `POSTHOG_API_KEY` | Build-time | Empty | PostHog analytics API key (disables analytics if empty) |
-| `POSTHOG_API_ENDPOINT` | Build-time | Empty | PostHog analytics endpoint (disables analytics if empty) |
-| `PORT` | Runtime | Auto-assign | **Production**: Server port. **Dev**: Frontend port (backend uses PORT+1) |
-| `BACKEND_PORT` | Runtime | `0` (auto-assign) | Backend server port (dev mode only, overrides PORT+1) |
-| `FRONTEND_PORT` | Runtime | `3000` | Frontend dev server port (dev mode only, overrides PORT) |
-| `HOST` | Runtime | `127.0.0.1` | Backend server host |
-| `MCP_HOST` | Runtime | Value of `HOST` | MCP server connection host (use `127.0.0.1` when `HOST=0.0.0.0` on Windows) |
-| `MCP_PORT` | Runtime | Value of `BACKEND_PORT` | MCP server connection port |
-| `DISABLE_WORKTREE_CLEANUP` | Runtime | Not set | Disable all git worktree cleanup including orphan and expired workspace cleanup (for debugging) |
-| `VK_ALLOWED_ORIGINS` | Runtime | Not set | Comma-separated list of origins that are allowed to make backend API requests (e.g., `https://my-vibekanban-frontend.com`) |
-
-**Build-time variables** must be set when running `pnpm run build`. **Runtime variables** are read when the application starts.
-
-#### Self-Hosting with a Reverse Proxy or Custom Domain
-
-When running Vibe Kanban behind a reverse proxy (e.g., nginx, Caddy, Traefik) or on a custom domain, you must set the `VK_ALLOWED_ORIGINS` environment variable. Without this, the browser's Origin header won't match the backend's expected host, and API requests will be rejected with a 403 Forbidden error.
-
-Set it to the full origin URL(s) where your frontend is accessible:
+To run the two halves separately — useful when you want the backend to survive a frontend restart:
 
 ```bash
-# Single origin
-VK_ALLOWED_ORIGINS=https://vk.example.com
-
-# Multiple origins (comma-separated)
-VK_ALLOWED_ORIGINS=https://vk.example.com,https://vk-staging.example.com
+BACKEND_PORT=5311 pnpm run frontend:dev
 ```
 
-### Remote Deployment
+### Database
 
-When running Vibe Kanban on a remote server (e.g., via systemctl, Docker, or cloud hosting), you can configure your editor to open projects via SSH:
+Queries are checked at compile time against the `.sqlx` cache. After changing any SQL:
 
-1. **Access via tunnel**: Use Cloudflare Tunnel, ngrok, or similar to expose the web UI
-2. **Configure remote SSH** in Settings → Editor Integration:
-   - Set **Remote SSH Host** to your server hostname or IP
-   - Set **Remote SSH User** to your SSH username (optional)
-3. **Prerequisites**:
-   - SSH access from your local machine to the remote server
-   - SSH keys configured (passwordless authentication)
-   - VSCode Remote-SSH extension
+```bash
+pnpm run prepare-db
+```
 
-When configured, the "Open in VSCode" buttons will generate URLs like `vscode://vscode-remote/ssh-remote+user@host/path` that open your local editor and connect to the remote server.
+### Building
 
-See the [documentation](https://vibekanban.com/docs/configuration-customisation/global-settings#remote-ssh-configuration) for detailed setup instructions.
+```bash
+cd frontend && pnpm build     # frontend only
+./local-build.sh              # binaries + npx package (macOS)
+cd npx-cli && node bin/cli.js # try the packaged build
+```
+
+## Environment variables
+
+| Variable | When | Default | What it does |
+|---|---|---|---|
+| `PORT` | runtime | auto | Production: server port. Dev: frontend port, backend takes `PORT+1` |
+| `FRONTEND_PORT` | runtime | `5310` | Frontend dev server port |
+| `BACKEND_PORT` | runtime | `5311` | Backend port in dev; also what the frontend proxies to |
+| `HOST` | runtime | `127.0.0.1` | Backend host |
+| `MCP_HOST` / `MCP_PORT` | runtime | follows `HOST` / `BACKEND_PORT` | Where the MCP task server connects |
+| `DISABLE_WORKTREE_CLEANUP` | runtime | unset | Leave orphaned and expired worktrees alone, for debugging |
+| `VK_ALLOWED_ORIGINS` | runtime | unset | Comma-separated origins allowed to call the API |
+| `KABLAN_SENTRY_DSN` | runtime | unset | Crash reporting. Nothing is sent unless you set this |
+| `KABLAN_LOCAL` / `KABLAN_DEBUG` | runtime | unset | npx wrapper: use local binaries / verbose output |
+
+Analytics are removed in this fork: `posthog-js` and `@sentry/react` are aliased to no-op modules
+at build time, so nothing is sent from the frontend even if new code imports them.
+
+### Behind a reverse proxy
+
+Set `VK_ALLOWED_ORIGINS` to the origin the browser actually uses, or the backend rejects the
+requests with 403:
+
+```bash
+VK_ALLOWED_ORIGINS=https://kablan.example.com
+```
+
+### Running on a remote server
+
+Configure **Settings → Editor Integration** with your SSH host and user, and "Open in IDE" will
+produce `vscode://vscode-remote/ssh-remote+user@host/path` URLs that open your local editor
+against the remote worktree. You need passwordless SSH and the Remote-SSH extension.
