@@ -19,6 +19,20 @@ npx kablan
 Nothing to install: the wrapper downloads the binary for your platform from this repository's
 latest release, caches it under `~/.kablan/bin`, and runs it. Kablan opens in your browser.
 
+### As a Mac app
+
+```bash
+npx kablan --install
+```
+
+Puts `Kablan.app` in `~/Applications`. Opening it starts Kablan in the background — no terminal
+window — and opens your browser; output goes to `~/Library/Logs/Kablan/kablan.log`.
+
+Because the bundle is assembled on your machine rather than downloaded, macOS does not quarantine
+it, so there is no "unidentified developer" prompt and nothing to notarise.
+
+Update with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.
+
 Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
 not hold your model credentials.
 

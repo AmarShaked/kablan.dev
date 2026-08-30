@@ -5,6 +5,7 @@ const AdmZip = require("adm-zip");
 const path = require("path");
 const fs = require("fs");
 const { ensureBinary, BINARY_TAG, CACHE_DIR, LOCAL_DEV_MODE, LOCAL_DIST_DIR, getLatestVersion } = require("./download");
+const { installMacApp, uninstallMacApp, appDir } = require("./install-app");
 
 const CLI_VERSION = require("../package.json").version;
 
@@ -146,6 +147,26 @@ async function main() {
 
   const args = process.argv.slice(2);
   const isMcpMode = args.includes("--mcp");
+
+  // `--install` puts a double-clickable app in ~/Applications and exits; it never starts a
+  // server itself, so re-running it to update is safe while Kablan is open.
+  if (args.includes("--uninstall")) {
+    const removed = uninstallMacApp();
+    console.log(removed ? `Removed ${removed}` : `Nothing installed at ${appDir()}`);
+    console.log("Cached binaries are still in ~/.kablan/bin; delete that to reclaim the space.");
+    return;
+  }
+
+  if (args.includes("--install")) {
+    await extractAndRun("kablan", (bin) => {
+      const app = installMacApp(bin, CLI_VERSION);
+      console.log(`\nInstalled ${app}`);
+      console.log("Open it from Launchpad or Spotlight — it starts Kablan in the background");
+      console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
+      console.log("\nUpdate with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.");
+    });
+    return;
+  }
 
   // Non-blocking update check. Skipped in MCP mode, where stdout is a protocol stream, and in
   // local dev mode, where the binaries did not come from a release.
