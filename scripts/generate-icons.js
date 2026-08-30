@@ -8,7 +8,7 @@
  * means everywhere in the app — the attempt that is running.
  *
  * Run after changing the mark:
- *   node scripts/generate-icons.js && npx tauri icon assets/icon-source.svg -o src-tauri/icons
+ *   node scripts/generate-icons.js
  */
 
 const fs = require('fs');
@@ -96,8 +96,7 @@ const files = {
       '\n  </g>'
   ),
 
-  // The source every platform icon is generated from. A macOS icon is a rounded tile inset in a
-  // transparent square, and Tauri resizes this as-is rather than adding the shape itself.
+  // The full-size mark, kept as the source anything else is rendered from.
   'assets/icon-source.svg': svg(
     `<rect x="92" y="92" width="840" height="840" rx="188" fill="${INK}"/>\n` +
       `  <g transform="${fit((0.56 * 840) / 1024, 1024)}">\n    ` +

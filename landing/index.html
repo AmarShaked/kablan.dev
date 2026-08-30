@@ -252,7 +252,7 @@
     <nav>
       <a class="hide-sm" href="#how">How it works</a>
       <a class="hide-sm" href="#agents">Agents</a>
-      <a href="#download">Download</a>
+      <a href="#download">Install</a>
       <a href="https://github.com/AmarShaked/kablan.dev">GitHub</a>
     </nav>
   </div>
@@ -270,8 +270,11 @@
     </p>
 
     <div class="actions">
-      <a class="btn" href="#download">Download the app</a>
-      <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Build from source</a>
+      <div class="cmd">
+        <span>npx kablan</span>
+        <button id="copy" type="button">Copy</button>
+      </div>
+      <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Source</a>
     </div>
     <p class="note">
       No account and no telemetry. Kablan drives each agent&rsquo;s own CLI, so it uses the
@@ -398,30 +401,19 @@
 
   <section id="download">
     <p class="eyebrow">Download</p>
-    <h2>Install it, or just run it.</h2>
+    <h2>One command.</h2>
     <p class="lede">
-      The desktop app updates itself when a new version ships. There is no npm package yet —
-      to run it from a terminal today, clone the repository and use
-      <span class="mono">pnpm dev</span>.
+      One command, nothing installed. The wrapper fetches the binary for your platform, caches it
+      under <span class="mono">~/.kablan/bin</span>, and opens Kablan in your browser.
     </p>
 
-    <div class="downloads">
-      <a class="dl" id="dl-mac-arm" href="https://github.com/AmarShaked/kablan.dev/releases">
-        <div class="os">macOS · Apple silicon</div><div class="f">.dmg</div>
-      </a>
-      <a class="dl" id="dl-mac-intel" href="https://github.com/AmarShaked/kablan.dev/releases">
-        <div class="os">macOS · Intel</div><div class="f">.dmg</div>
-      </a>
-      <a class="dl" id="dl-win" href="https://github.com/AmarShaked/kablan.dev/releases">
-        <div class="os">Windows</div><div class="f">.msi installer</div>
-      </a>
-      <a class="dl" id="dl-linux" href="https://github.com/AmarShaked/kablan.dev/releases">
-        <div class="os">Linux</div><div class="f">.AppImage / .deb</div>
-      </a>
+    <div class="cmd" style="margin-top:8px">
+      <span>npx kablan</span>
+      <button id="copy2" type="button">Copy</button>
     </div>
     <p class="note" id="rel-note">
-      Builds are not signed by Apple or Microsoft: on macOS, right-click the app and choose Open
-      the first time; on Windows, choose &ldquo;More info&rdquo; then &ldquo;Run anyway&rdquo;.
+      Needs Node 18 or newer. macOS on Apple silicon and Intel, Linux x64, Windows x64.
+      The binary is cached, so only the first run downloads.
     </p>
   </section>
 
@@ -441,43 +433,20 @@
 </footer>
 
 <script>
-  // Point the download cards at the newest release's actual assets. If the request fails — rate
-  // limited, offline, no release yet — the links already point at the releases page, so nothing
-  // here can leave a dead button behind.
-  (async () => {
-    const REPO = 'AmarShaked/kablan.dev';
-    try {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      if (!res.ok) return;
-      const rel = await res.json();
-      const assets = rel.assets || [];
-      const find = (patterns) => {
-        for (const p of patterns) {
-          const hit = assets.find((a) => p.test(a.name));
-          if (hit) return hit.browser_download_url;
-        }
-        return null;
-      };
-      const map = {
-        'dl-mac-arm': [/aarch64.*\.dmg$/i, /universal.*\.dmg$/i, /\.dmg$/i],
-        'dl-mac-intel': [/x64.*\.dmg$/i, /x86_64.*\.dmg$/i, /universal.*\.dmg$/i],
-        'dl-win': [/\.msi$/i, /setup\.exe$/i, /\.exe$/i],
-        'dl-linux': [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i],
-      };
-      for (const [id, patterns] of Object.entries(map)) {
-        const url = find(patterns);
-        if (url) document.getElementById(id).href = url;
+  for (const id of ['copy', 'copy2']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('click', async (e) => {
+      try {
+        await navigator.clipboard.writeText('npx kablan');
+        e.target.textContent = 'Copied';
+        setTimeout(() => { e.target.textContent = 'Copy'; }, 1600);
+      } catch {
+        e.target.textContent = 'Press \u2318C';
       }
-      if (rel.tag_name) {
-        const note = document.getElementById('rel-note');
-        note.textContent = `Latest release ${rel.tag_name}. ` + note.textContent.trim();
-      }
-    } catch {
-      /* keep the fallback links */
-    }
-  })();
+    });
+  }
+
 </script>
 
 </body>

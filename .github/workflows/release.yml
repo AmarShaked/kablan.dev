@@ -1,0 +1,178 @@
+name: Release
+
+# Builds the CLI binaries, publishes them on a GitHub release, and pushes the npm wrapper that
+# downloads them.
+#
+#   npm version 0.5.0 --workspaces false   # or edit npx-cli/package.json
+#   git tag v0.5.0 && git push origin v0.5.0
+#
+# The tag and the package version must match: the wrapper derives its release tag from its own
+# version, so a mismatch would publish a package that downloads nothing. The verify job below
+# fails the run before anything is published if they disagree.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match npx-cli/package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./npx-cli/package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG does not match npx-cli/package.json version $PKG"
+            exit 1
+          fi
+          echo "version $PKG"
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            dir: macos-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            dir: macos-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            dir: linux-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            dir: windows-x64
+    runs-on: ${{ matrix.platform }}
+
+    env:
+      # The workspace patches a crate from an ssh:// source. Runners have no SSH key, so cargo
+      # cannot fetch it; rewriting to https lets the same lockfile resolve on CI and locally.
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      # Build against the committed .sqlx cache instead of a live database.
+      SQLX_OFFLINE: "true"
+      # The frontend build peaks near Node's default 2GB ceiling, and an OOM here surfaces as a
+      # bare SIGABRT with nothing about memory in it.
+      NODE_OPTIONS: "--max-old-space-size=6144"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Let cargo fetch ssh:// git sources over https
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2025-12-04
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: cli-${{ matrix.dir }}
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The server embeds the built frontend, so this has to happen before cargo runs.
+      - name: Build frontend
+        run: cd frontend && pnpm build
+
+      - name: Build binaries
+        run: cargo build --release --target ${{ matrix.target }} --bin server --bin mcp_task_server
+
+      # Named for the platform because release assets are a flat namespace, and matching what
+      # npx-cli/bin/download.js asks for.
+      - name: Package (unix)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          mkdir -p out
+          cd target/${{ matrix.target }}/release
+          cp server kablan && zip -q "$GITHUB_WORKSPACE/out/kablan-${{ matrix.dir }}.zip" kablan
+          cp mcp_task_server kablan-mcp && zip -q "$GITHUB_WORKSPACE/out/kablan-mcp-${{ matrix.dir }}.zip" kablan-mcp
+
+      - name: Package (windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $rel = "target/${{ matrix.target }}/release"
+          Copy-Item "$rel/server.exe" "$rel/kablan.exe"
+          Copy-Item "$rel/mcp_task_server.exe" "$rel/kablan-mcp.exe"
+          Compress-Archive -Path "$rel/kablan.exe" -DestinationPath "out/kablan-${{ matrix.dir }}.zip" -Force
+          Compress-Archive -Path "$rel/kablan-mcp.exe" -DestinationPath "out/kablan-mcp-${{ matrix.dir }}.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.dir }}
+          path: out/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          merge-multiple: true
+          path: out
+
+      # The wrapper verifies what it downloads against this, so it is written from the same
+      # files that are about to be uploaded rather than from a separate build.
+      - name: Checksums
+        run: cd out && sha256sum *.zip > sha256sums.txt && cat sha256sums.txt
+
+      - id: meta
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --title "Kablan ${GITHUB_REF_NAME}" \
+            --notes "Run it with \`npx kablan@${{ steps.meta.outputs.version }}\`, or \`npx kablan\` for the latest.
+
+          Binaries below are downloaded by the npm wrapper; you do not need them directly."
+
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish wrapper
+        working-directory: npx-cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Runs only after the release exists, because the wrapper resolves its binaries from that
+        # tag the moment someone installs it.
+        run: npm publish --provenance --access public

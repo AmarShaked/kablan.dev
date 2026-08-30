@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"What the Kablan window is allowed to ask the app to do.","local":true,"windows":["main"],"permissions":["core:default","updater:default","process:allow-restart"]}}

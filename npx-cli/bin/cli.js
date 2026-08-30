@@ -4,7 +4,7 @@ const { execSync, spawn } = require("child_process");
 const AdmZip = require("adm-zip");
 const path = require("path");
 const fs = require("fs");
-const { ensureBinary, BINARY_TAG, CACHE_DIR, LOCAL_DEV_MODE, LOCAL_DIST_DIR, R2_BASE_URL, getLatestVersion } = require("./download");
+const { ensureBinary, BINARY_TAG, CACHE_DIR, LOCAL_DEV_MODE, LOCAL_DIST_DIR, getLatestVersion } = require("./download");
 
 const CLI_VERSION = require("../package.json").version;
 
@@ -146,11 +146,10 @@ async function main() {
 
   const args = process.argv.slice(2);
   const isMcpMode = args.includes("--mcp");
-  const isReviewMode = args[0] === "review";
 
-  // Non-blocking update check (skip in MCP mode, local dev mode, and when R2 URL not configured)
-  const hasValidR2Url = !R2_BASE_URL.startsWith("__");
-  if (!isMcpMode && !LOCAL_DEV_MODE && hasValidR2Url) {
+  // Non-blocking update check. Skipped in MCP mode, where stdout is a protocol stream, and in
+  // local dev mode, where the binaries did not come from a release.
+  if (!isMcpMode && !LOCAL_DEV_MODE) {
     getLatestVersion()
       .then((latest) => {
         if (latest && latest !== CLI_VERSION) {
@@ -175,16 +174,6 @@ async function main() {
         proc.kill("SIGINT");
       });
       process.on("SIGTERM", () => proc.kill("SIGTERM"));
-    });
-  } else if (isReviewMode) {
-    await extractAndRun("kablan-review", (bin) => {
-      const reviewArgs = args.slice(1);
-      const proc = spawn(bin, reviewArgs, { stdio: "inherit" });
-      proc.on("exit", (c) => process.exit(c || 0));
-      proc.on("error", (e) => {
-        console.error("Review CLI error:", e.message);
-        process.exit(1);
-      });
     });
   } else {
     const modeLabel = LOCAL_DEV_MODE ? " (local dev)" : "";

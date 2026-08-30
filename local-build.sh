@@ -71,17 +71,10 @@ zip -q kablan-mcp.zip kablan-mcp
 rm -f kablan-mcp
 mv kablan-mcp.zip npx-cli/dist/$PLATFORM/kablan-mcp.zip
 
-# Copy the Review CLI binary
-cp ${CARGO_TARGET_DIR}/release/review kablan-review
-zip -q kablan-review.zip kablan-review
-rm -f kablan-review
-mv kablan-review.zip npx-cli/dist/$PLATFORM/kablan-review.zip
-
 echo "✅ Build complete!"
 echo "📁 Files created:"
 echo "   - npx-cli/dist/$PLATFORM/kablan.zip"
 echo "   - npx-cli/dist/$PLATFORM/kablan-mcp.zip"
-echo "   - npx-cli/dist/$PLATFORM/kablan-review.zip"
 echo ""
 echo "🚀 To test locally, run:"
 echo "   cd npx-cli && node bin/cli.js"
