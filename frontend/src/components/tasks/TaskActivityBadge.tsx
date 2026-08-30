@@ -59,8 +59,3 @@ export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
 }
 
 /** True when the task is worth marking out in a list — used for the row/card edge stripe. */
-export function taskAccentClass(task: TaskWithAttemptStatus): string {
-  if (task.has_in_progress_attempt) return 'border-l-2 border-l-info';
-  if (task.last_attempt_failed) return 'border-l-2 border-l-destructive';
-  return 'border-l-2 border-l-transparent';
-}

@@ -1,8 +1,8 @@
+import { UserSystemContext } from '@/contexts/UserSystemContext';
+import type { UserSystemContextType } from '@/contexts/UserSystemContext';
 import {
-  createContext,
   ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
 } from 'react';
@@ -12,51 +12,12 @@ import {
   type Environment,
   type UserSystemInfo,
   type BaseAgentCapability,
-  type LoginStatus,
 } from 'shared/types';
 import type { ExecutorConfig } from 'shared/types';
 import { configApi } from '../lib/api';
 import { updateLanguageFromConfig } from '../i18n/config';
 
-interface UserSystemState {
-  config: Config | null;
-  environment: Environment | null;
-  profiles: Record<string, ExecutorConfig> | null;
-  capabilities: Record<string, BaseAgentCapability[]> | null;
-  analyticsUserId: string | null;
-  loginStatus: LoginStatus | null;
-}
 
-interface UserSystemContextType {
-  // Full system state
-  system: UserSystemState;
-
-  // Hot path - config helpers (most frequently used)
-  config: Config | null;
-  updateConfig: (updates: Partial<Config>) => void;
-  updateAndSaveConfig: (updates: Partial<Config>) => Promise<boolean>;
-  saveConfig: () => Promise<boolean>;
-
-  // System data access
-  environment: Environment | null;
-  profiles: Record<string, ExecutorConfig> | null;
-  capabilities: Record<string, BaseAgentCapability[]> | null;
-  analyticsUserId: string | null;
-  loginStatus: LoginStatus | null;
-  setEnvironment: (env: Environment | null) => void;
-  setProfiles: (profiles: Record<string, ExecutorConfig> | null) => void;
-  setCapabilities: (caps: Record<string, BaseAgentCapability[]> | null) => void;
-
-  // Reload system data
-  reloadSystem: () => Promise<void>;
-
-  // State
-  loading: boolean;
-}
-
-const UserSystemContext = createContext<UserSystemContextType | undefined>(
-  undefined
-);
 
 interface UserSystemProviderProps {
   children: ReactNode;
@@ -227,12 +188,4 @@ export function UserSystemProvider({ children }: UserSystemProviderProps) {
       {children}
     </UserSystemContext.Provider>
   );
-}
-
-export function useUserSystem() {
-  const context = useContext(UserSystemContext);
-  if (context === undefined) {
-    throw new Error('useUserSystem must be used within a UserSystemProvider');
-  }
-  return context;
 }

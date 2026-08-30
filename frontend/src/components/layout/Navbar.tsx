@@ -36,7 +36,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { OAuthDialog } from '@/components/dialogs/global/OAuthDialog';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { oauthApi } from '@/lib/api';
 
 const INTERNAL_NAV = [

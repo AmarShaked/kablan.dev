@@ -6,7 +6,7 @@ import {
   parseInstance,
 } from '@git-diff-view/react';
 import { SquarePen } from 'lucide-react';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { getHighLightLanguageFromPath } from '@/utils/extToLanguage';
 import { getActualTheme } from '@/utils/theme';
 import '@/styles/diff-style-overrides.css';

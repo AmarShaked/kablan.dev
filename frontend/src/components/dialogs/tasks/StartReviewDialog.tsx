@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AgentSelector } from '@/components/tasks/AgentSelector';
 import { ConfigSelector } from '@/components/tasks/ConfigSelector';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
 import { sessionsApi } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';

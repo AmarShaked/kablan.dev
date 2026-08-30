@@ -15,7 +15,7 @@ import { tasksApi } from '@/lib/api';
 import type { Workspace } from 'shared/types';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { BetaWorkspacesDialog } from '@/components/dialogs/global/BetaWorkspacesDialog';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useWorkspaceCount } from '@/hooks/useWorkspaceCount';
 import { usePostHog } from 'posthog-js/react';
 
@@ -61,6 +61,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { TasksLayout, type LayoutMode } from '@/components/layout/TasksLayout';
 import { AttemptDetailsPanel } from '@/components/panels/AttemptDetailsPanel';
+import { DevServerLogsPanel } from '@/components/panels/DevServerLogsPanel';
 import { DiffsPanel } from '@/components/panels/DiffsPanel';
 import TaskAttemptPanel from '@/components/panels/TaskAttemptPanel';
 import TaskPanel from '@/components/panels/TaskPanel';
@@ -278,25 +279,19 @@ export function ProjectTasks() {
   // how "I closed the column" is spelled, since the absent param now means the default.
   const mode: LayoutMode = !effectiveAttemptId
     ? null
-    : rawMode === 'diffs'
-      ? 'diffs'
+    : rawMode === 'diffs' || rawMode === 'logs'
+      ? rawMode
       : rawMode === 'chat'
         ? null
         : 'details';
 
-  // Legacy URL support for bookmarked links: `view=logs` was renamed to `view=diffs`, and
-  // `view=preview` named a pane this fork folded into the details column.
+  // Legacy URL support for bookmarked links: `view=preview` named a pane this fork folded into
+  // the details column. `view=logs` used to be redirected to the diff, but it now names the dev
+  // server's own pane — which is closer to what anyone following such a link meant anyway.
   useEffect(() => {
-    const view = searchParams.get('view');
-    if (view === 'preview') {
+    if (searchParams.get('view') === 'preview') {
       const params = new URLSearchParams(searchParams);
       params.delete('view');
-      setSearchParams(params, { replace: true });
-      return;
-    }
-    if (view === 'logs') {
-      const params = new URLSearchParams(searchParams);
-      params.set('view', 'diffs');
       setSearchParams(params, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -479,7 +474,7 @@ export function ProjectTasks() {
    */
   const cycleView = useCallback(
     (direction: 'forward' | 'backward' = 'forward') => {
-      const order: LayoutMode[] = ['details', 'diffs', null];
+      const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
       const idx = order.indexOf(mode);
       const next =
         direction === 'forward'
@@ -503,7 +498,7 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = ['details', 'diffs', null];
+        const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
         const idx = order.indexOf(mode);
         const next = order[(idx + 1) % order.length];
 
@@ -529,7 +524,7 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = ['details', 'diffs', null];
+        const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
         const idx = order.indexOf(mode);
         const next = order[(idx - 1 + order.length) % order.length];
 
@@ -897,8 +892,10 @@ export function ProjectTasks() {
             attempt={attempt}
             task={selectedTask}
             onOpenDiffs={() => setMode('diffs')}
+            onOpenLogs={() => setMode('logs')}
           />
         )}
+        {mode === 'logs' && <DevServerLogsPanel attemptId={attempt.id} />}
         {mode === 'diffs' && (
           <DiffsPanelContainer attempt={attempt} />
         )}

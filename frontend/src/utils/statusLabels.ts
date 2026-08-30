@@ -1,5 +1,19 @@
 import { TaskStatus } from 'shared/types';
 
+/**
+ * The order statuses are shown in, and therefore the number each answers to in the picker.
+ *
+ * Here rather than beside the picker because a module that exports a component must export only
+ * components: anything else breaks Fast Refresh for it and for everything that imports it.
+ */
+export const STATUS_ORDER: TaskStatus[] = [
+  'todo',
+  'inprogress',
+  'inreview',
+  'done',
+  'cancelled',
+];
+
 export const statusLabels: Record<TaskStatus, string> = {
   todo: 'To Do',
   inprogress: 'In Progress',

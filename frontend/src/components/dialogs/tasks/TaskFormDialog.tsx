@@ -29,7 +29,7 @@ import type { LocalImageMetadata } from '@/components/ui/wysiwyg/context/task-at
 import BranchSelector from '@/components/tasks/BranchSelector';
 import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
 import { ExecutorProfileSelector } from '@/components/settings';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import {
   useTaskImages,
   useImageUpload,

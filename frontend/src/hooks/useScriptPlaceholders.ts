@@ -1,4 +1,4 @@
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import {
   createScriptPlaceholderStrategy,
   ScriptPlaceholderContext,

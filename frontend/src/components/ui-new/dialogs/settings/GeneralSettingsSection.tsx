@@ -22,7 +22,7 @@ import { getModifierKey } from '@/utils/platform';
 import { getLanguageOptions } from '@/i18n/languages';
 import { toPrettyCase } from '@/utils/string';
 import { useTheme } from '@/components/ThemeProvider';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { TagManager } from '@/components/TagManager';
 import { cn } from '@/lib/utils';
 import { PrimaryButton } from '../../primitives/PrimaryButton';

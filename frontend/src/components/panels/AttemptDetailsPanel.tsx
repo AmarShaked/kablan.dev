@@ -23,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import GitOperations from '@/components/tasks/Toolbar/GitOperations';
-import { DevServerLogsView } from '@/components/tasks/TaskDetails/preview/DevServerLogsView';
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
 import { EditBranchNameDialog } from '@/components/dialogs/tasks/EditBranchNameDialog';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
@@ -112,12 +111,14 @@ interface AttemptDetailsPanelProps {
   attempt: WorkspaceWithSession;
   task: TaskWithAttemptStatus;
   onOpenDiffs: () => void;
+  onOpenLogs: () => void;
 }
 
 export function AttemptDetailsPanel({
   attempt,
   task,
   onOpenDiffs,
+  onOpenLogs,
 }: AttemptDetailsPanelProps) {
   const navigate = useNavigate();
   const { project, projectId } = useProject();
@@ -145,7 +146,6 @@ export function AttemptDetailsPanel({
     devServerProcesses,
   } = useDevServer(attempt.id);
 
-  const [showLogs, setShowLogs] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
 
   const primaryDevServer = runningDevServers[0];
@@ -384,7 +384,7 @@ export function AttemptDetailsPanel({
             variant="outline"
             size="sm"
             className="flex-1"
-            onClick={() => setShowLogs((v) => !v)}
+            onClick={onOpenLogs}
           >
             Dev logs
           </Button>
@@ -400,14 +400,6 @@ export function AttemptDetailsPanel({
             Fix script
           </Button>
         )}
-      </div>
-      <div className="pt-2">
-        <DevServerLogsView
-          devServerProcesses={devServerProcesses}
-          showLogs={showLogs}
-          onToggle={() => setShowLogs((v) => !v)}
-          height="h-48"
-        />
       </div>
 
       <SectionLabel>Changes</SectionLabel>

@@ -8,10 +8,8 @@ import {
   StatusGlyph,
   TaskStatusControl,
 } from '@/components/tasks/TaskStatusControl';
-import {
-  TaskActivityBadge,
-  taskAccentClass,
-} from '@/components/tasks/TaskActivityBadge';
+import { TaskActivityBadge } from '@/components/tasks/TaskActivityBadge';
+import { taskAccentClass } from '@/utils/taskAccent';
 
 const COLLAPSED_KEY = 'kablan.listView.collapsedSections';
 

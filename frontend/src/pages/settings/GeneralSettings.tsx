@@ -34,7 +34,7 @@ import { toPrettyCase } from '@/utils/string';
 import { useEditorAvailability } from '@/hooks/useEditorAvailability';
 import { EditorAvailabilityIndicator } from '@/components/EditorAvailabilityIndicator';
 import { useTheme } from '@/components/ThemeProvider';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { TagManager } from '@/components/TagManager';
 import { FolderPickerDialog } from '@/components/dialogs/shared/FolderPickerDialog';
 

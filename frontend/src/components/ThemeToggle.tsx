@@ -1,7 +1,7 @@
 import { Moon, Sun } from 'lucide-react';
 import { ThemeMode } from 'shared/types';
 import { useTheme } from '@/components/ThemeProvider';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { getActualTheme } from '@/utils/theme';
 
 /**

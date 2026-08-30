@@ -21,7 +21,8 @@ import {
   ReposSettings,
   SettingsLayout,
 } from '@/pages/settings/';
-import { UserSystemProvider, useUserSystem } from '@/components/ConfigProvider';
+import { UserSystemProvider } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SearchProvider } from '@/contexts/SearchContext';
 

@@ -11,7 +11,11 @@ import { useTaskMutations } from '@/hooks/useTaskMutations';
 import { useProject } from '@/contexts/ProjectContext';
 import { cn } from '@/lib/utils';
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
-import { statusColorVars, statusLabels } from '@/utils/statusLabels';
+import {
+  STATUS_ORDER,
+  statusColorVars,
+  statusLabels,
+} from '@/utils/statusLabels';
 
 /**
  * The status glyph, and the control for changing it.
@@ -20,15 +24,6 @@ import { statusColorVars, statusLabels } from '@/utils/statusLabels';
  * as well as colour — it survives greyscale, colour-blindness, and being 14px on a board card.
  * Since the glyph is already what shows the status, it is also what changes it.
  */
-
-/** The order statuses appear in, and therefore the number each one answers to. */
-export const STATUS_ORDER: TaskStatus[] = [
-  'todo',
-  'inprogress',
-  'inreview',
-  'done',
-  'cancelled',
-];
 
 /** How full the ring is drawn for each status. */
 const FILL: Record<TaskStatus, number> = {

@@ -22,6 +22,7 @@ export function IconAction({
   onClick,
   disabled,
   active,
+  indicator,
   className,
 }: {
   icon: LucideIcon;
@@ -30,6 +31,11 @@ export function IconAction({
   disabled?: boolean;
   /** Renders as held down — for a button that toggles something rather than doing it once. */
   active?: boolean;
+  /**
+   * A dot in the corner: 'live' for something happening now, 'idle' for something there to look
+   * at. Omitted when there is nothing to say, so the dot always means something.
+   */
+  indicator?: 'live' | 'idle';
   className?: string;
 }) {
   return (
@@ -42,7 +48,7 @@ export function IconAction({
           aria-label={label}
           aria-pressed={active}
           className={cn(
-            'inline-flex h-7 w-7 items-center justify-center rounded transition-colors',
+            'relative inline-flex h-7 w-7 items-center justify-center rounded transition-colors',
             'hover:bg-accent hover:text-foreground',
             'disabled:pointer-events-none disabled:opacity-40',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
@@ -51,6 +57,15 @@ export function IconAction({
           )}
         >
           <Icon className="h-3.5 w-3.5" />
+          {indicator && (
+            <span
+              aria-hidden
+              className={cn(
+                'absolute right-1 top-1 h-1.5 w-1.5 rounded-full',
+                indicator === 'live' ? 'bg-success' : 'bg-muted-foreground'
+              )}
+            />
+          )}
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="px-2 py-1 text-xs">

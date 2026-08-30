@@ -9,7 +9,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-export type LayoutMode = 'details' | 'diffs' | null;
+export type LayoutMode = 'details' | 'diffs' | 'logs' | null;
 
 interface TasksLayoutProps {
   kanban: ReactNode;
@@ -127,7 +127,13 @@ function RightWorkArea({
               minSize={MIN_PANEL_SIZE}
               className="min-w-0 min-h-0 overflow-hidden"
               role="region"
-              aria-label={mode === 'details' ? 'Task details' : 'Diffs'}
+              aria-label={
+                mode === 'details'
+                  ? 'Task details'
+                  : mode === 'logs'
+                    ? 'Dev server logs'
+                    : 'Diffs'
+              }
             >
               <AuxRouter mode={mode} aux={aux} />
             </Panel>

@@ -11,7 +11,7 @@ import { PROJECT_ISSUES_SHAPE } from 'shared/remote-types';
 import { useScratch } from '@/hooks/useScratch';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useProjects } from '@/hooks/useProjects';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useShape } from '@/lib/electric/hooks';
 import { projectsApi, repoApi } from '@/lib/api';
 

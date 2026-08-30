@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { FileDiff, PanelRight, X } from 'lucide-react';
+import { FileDiff, PanelRight, SquareTerminal, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { IconAction } from '@/components/ui/icon-action';
+import { useDevServer } from '@/hooks/useDevServer';
 import { TooltipProvider } from '../ui/tooltip';
 import type { LayoutMode } from '../layout/TasksLayout';
 import type { TaskWithAttemptStatus } from 'shared/types';
@@ -26,6 +27,8 @@ export const AttemptHeaderActions = ({
 }: AttemptHeaderActionsProps) => {
   const { t } = useTranslation('tasks');
   const posthog = usePostHog();
+  // Only to decide whether the logs button has anything to point at.
+  const { runningDevServers, devServerProcesses } = useDevServer(attempt?.id);
 
   return (
     <>
@@ -44,6 +47,21 @@ export const AttemptHeaderActions = ({
               onClick={() =>
                 onModeChange(mode === 'details' ? null : 'details')
               }
+            />
+            <IconAction
+              icon={SquareTerminal}
+              label="Dev server logs"
+              active={mode === 'logs'}
+              // A dot only when there is something behind the button: green while a server is
+              // up, grey when one has run and its output is still there to read.
+              indicator={
+                runningDevServers.length > 0
+                  ? 'live'
+                  : devServerProcesses.length > 0
+                    ? 'idle'
+                    : undefined
+              }
+              onClick={() => onModeChange(mode === 'logs' ? null : 'logs')}
             />
             <IconAction
               icon={FileDiff}

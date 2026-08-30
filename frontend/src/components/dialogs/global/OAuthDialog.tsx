@@ -14,7 +14,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthMutations } from '@/hooks/auth/useAuthMutations';
 import { useAuthStatus } from '@/hooks/auth/useAuthStatus';
-import { useUserSystem } from '@/components/ConfigProvider';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { organizationKeys } from '@/hooks/organizationKeys';
 import type { ProfileResponse } from 'shared/types';
 import { useTranslation } from 'react-i18next';
