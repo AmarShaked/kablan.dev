@@ -228,6 +228,21 @@
   .dl .os { font-size: 15px; font-weight: 500; margin-bottom: 3px; }
   .dl .f { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted-fg); }
 
+  .ways {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px 32px;
+    margin: 32px 0 8px; align-items: start;
+  }
+  .way h3 { font-size: 15px; font-weight: 500; margin: 0 0 12px; }
+  .way p { font-size: 14px; color: var(--muted-fg); margin: 12px 0 0; }
+  .way .cmd { width: 100%; justify-content: space-between; }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-fg);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 7px; margin-left: 6px; vertical-align: 1px;
+  }
+  @media (max-width: 700px) { .ways { grid-template-columns: 1fr; } }
+
   footer {
     border-top: 1px solid var(--border); padding: 40px 0 64px;
     font-size: 13px; color: var(--muted-fg);
@@ -272,7 +287,7 @@
     <div class="actions">
       <div class="cmd">
         <span>npx kablan</span>
-        <button id="copy" type="button">Copy</button>
+        <button class="copy" data-cmd="npx kablan" type="button">Copy</button>
       </div>
       <a class="btn ghost" href="https://github.com/AmarShaked/kablan.dev">Source</a>
     </div>
@@ -400,27 +415,42 @@
   </section>
 
   <section id="download">
-    <p class="eyebrow">Download</p>
-    <h2>One command.</h2>
+    <p class="eyebrow">Install</p>
+    <h2>Run it, or keep it.</h2>
     <p class="lede">
-      One command, nothing installed. The wrapper fetches the binary for your platform, caches it
-      under <span class="mono">~/.kablan/bin</span>, and opens Kablan in your browser.
+      Both fetch the same binary for your platform and cache it under
+      <span class="mono">~/.kablan/bin</span>, so only the first run downloads.
     </p>
 
-    <div class="cmd" style="margin-top:8px">
-      <span>npx kablan</span>
-      <button id="copy2" type="button">Copy</button>
+    <div class="ways">
+      <div class="way">
+        <h3>Just run it</h3>
+        <div class="cmd">
+          <span>npx kablan</span>
+          <button class="copy" data-cmd="npx kablan" type="button">Copy</button>
+        </div>
+        <p>Nothing installed, nothing left behind. Kablan opens in your browser.</p>
+      </div>
+
+      <div class="way">
+        <h3>Install it as an app <span class="badge">macOS</span></h3>
+        <div class="cmd">
+          <span>npx kablan --install</span>
+          <button class="copy" data-cmd="npx kablan --install" type="button">Copy</button>
+        </div>
+        <p>
+          Puts Kablan in your Applications folder. Opening it starts Kablan in the background —
+          no terminal — and opens your browser. Because the app is assembled on your machine
+          rather than downloaded, macOS raises no unidentified-developer warning and there is
+          nothing to sign.
+        </p>
+      </div>
     </div>
-    <p class="note" id="rel-note">
-      Needs Node 18 or newer. macOS on Apple silicon and Intel, Linux x64, Windows x64.
-      The binary is cached, so only the first run downloads.
-    </p>
 
-    <p class="eyebrow" style="padding-top:28px">Prefer an icon</p>
-    <p class="lede" style="margin-bottom:16px">
-      <span class="mono">npx kablan --install</span> puts Kablan.app in your Applications folder.
-      Opening it starts Kablan in the background and opens your browser. The bundle is built on
-      your machine, so macOS raises no unidentified-developer warning.
+    <p class="note">
+      Needs Node 18 or newer. macOS on Apple silicon and Intel, Linux x64, Windows x64.
+      Update with <span class="mono">npx kablan@latest</span>; remove the app with
+      <span class="mono">npx kablan --uninstall</span>.
     </p>
   </section>
 
@@ -440,12 +470,10 @@
 </footer>
 
 <script>
-  for (const id of ['copy', 'copy2']) {
-    const el = document.getElementById(id);
-    if (!el) continue;
-    el.addEventListener('click', async (e) => {
+  for (const btn of document.querySelectorAll('.copy')) {
+    btn.addEventListener('click', async (e) => {
       try {
-        await navigator.clipboard.writeText('npx kablan');
+        await navigator.clipboard.writeText(e.target.dataset.cmd);
         e.target.textContent = 'Copied';
         setTimeout(() => { e.target.textContent = 'Copy'; }, 1600);
       } catch {
@@ -453,7 +481,6 @@
       }
     });
   }
-
 </script>
 
 </body>
