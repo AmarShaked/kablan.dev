@@ -4356,7 +4356,7 @@ dependencies = [
 
 [[package]]
 name = "kablan-desktop"
-version = "0.1.8"
+version = "0.5.0"
 dependencies = [
  "deployment",
  "serde_json",

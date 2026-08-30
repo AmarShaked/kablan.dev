@@ -1,6 +1,8 @@
 [package]
+# Versioned independently of the workspace: this number is what the updater compares
+# against the copy a person already has installed.
 name = "kablan-desktop"
-version = "0.1.8"
+version = "0.5.0"
 edition = "2024"
 description = "Kablan — run coding agents against your repositories from a board"
 authors = ["Shaked Amar"]
