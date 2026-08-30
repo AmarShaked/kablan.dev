@@ -23,9 +23,14 @@ function isPortAvailable(port) {
 }
 
 /**
+ * The port the dev frontend uses unless something takes it; the backend takes the next one.
+ */
+const DEFAULT_FRONTEND_PORT = 5310;
+
+/**
  * Find a free port starting from a given port
  */
-async function findFreePort(startPort = 3000) {
+async function findFreePort(startPort = DEFAULT_FRONTEND_PORT) {
   let port = startPort;
   while (!(await isPortAvailable(port))) {
     port++;
@@ -125,7 +130,7 @@ async function allocatePorts() {
   }
 
   // Find new free ports
-  const frontendPort = await findFreePort(3000);
+  const frontendPort = await findFreePort(DEFAULT_FRONTEND_PORT);
   const backendPort = await findFreePort(frontendPort + 1);
 
   const ports = {
@@ -239,4 +244,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { getPorts, clearPorts, findFreePort };
+module.exports = { getPorts, clearPorts, findFreePort, DEFAULT_FRONTEND_PORT };
