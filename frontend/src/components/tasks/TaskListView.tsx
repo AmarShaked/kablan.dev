@@ -87,15 +87,17 @@ export function TaskListView({
 
         return (
           <section key={status} className={isCollapsed ? 'mb-3' : 'mb-8'}>
-            {/* Mirrors a row exactly: the same left padding, the same 24px glyph box, and the
+            {/* Mirrors a row: the same horizontal padding, the same 24px glyph box, and the
                 same 2px accent stripe the rows carry — transparent here, but it occupies the
-                width, and without it the heading's glyph sits 2px left of the rows'. */}
+                width, and without it the heading's glyph sits 2px left of the rows'. The
+                vertical padding is even, so the hover highlight reads as a band rather than
+                something resting on the text. */}
             <button
               type="button"
               onClick={() => toggle(status)}
               aria-expanded={!isCollapsed}
               aria-controls={`tasks-${status}`}
-              className="flex w-full items-center gap-3 border-b border-border border-l-2 border-l-transparent pb-2 pl-3 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="flex w-full items-center gap-3 border-b border-border border-l-2 border-l-transparent py-2 pl-3 pr-2 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <span className="-ml-1 inline-flex w-6 shrink-0 justify-center">
                 <StatusGlyph status={status} />
