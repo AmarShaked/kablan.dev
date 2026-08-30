@@ -1,13 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { FileDiff, PanelRight, X } from 'lucide-react';
 import { Button } from '../ui/button';
-import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../ui/tooltip';
+import { IconAction } from '@/components/ui/icon-action';
+import { TooltipProvider } from '../ui/tooltip';
 import type { LayoutMode } from '../layout/TasksLayout';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '../ui/actions-dropdown';
@@ -35,86 +30,48 @@ export const AttemptHeaderActions = ({
   return (
     <>
       {typeof mode !== 'undefined' && onModeChange && (
-        <TooltipProvider>
-          <ToggleGroup
-            type="single"
-            value={mode ?? ''}
-            onValueChange={(v) => {
-              const newMode = (v as LayoutMode) || null;
-
-              // Track view navigation
-              if (newMode === 'diffs') {
-                posthog?.capture('diffs_navigated', {
-                  trigger: 'button',
-                  timestamp: new Date().toISOString(),
-                  source: 'frontend',
-                });
-              } else if (newMode === null) {
-                // Closing the view (clicked active button)
-                posthog?.capture('view_closed', {
-                  trigger: 'button',
-                  from_view: mode ?? 'attempt',
-                  timestamp: new Date().toISOString(),
-                  source: 'frontend',
-                });
-              }
-
-              onModeChange(newMode);
-            }}
-            className="inline-flex gap-4"
+        <TooltipProvider delayDuration={200} skipDelayDuration={400}>
+          <div
+            className="inline-flex items-center gap-0.5"
             aria-label="Layout mode"
           >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem
-                  value="details"
-                  aria-label="Task details"
-                  active={mode === 'details'}
-                >
-                  <PanelRight className="h-4 w-4" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('attemptHeaderActions.details', 'Details')}
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem
-                  value="diffs"
-                  aria-label="Diffs"
-                  active={mode === 'diffs'}
-                >
-                  <FileDiff className="h-4 w-4" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('attemptHeaderActions.diffs')}
-              </TooltipContent>
-            </Tooltip>
-            {/* {attempt?.id && (
-              <>
-                <div className="h-4 w-px bg-border" />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={`/workspaces/${attempt.id}`}
-                      className="inline-flex items-center justify-center text-primary-foreground/70 hover:text-accent-foreground"
-                      aria-label="Try the new UI"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {t('attemptHeaderActions.tryNewUI')}
-                  </TooltipContent>
-                </Tooltip>
-              </>
-            )} */}
-          </ToggleGroup>
+            {/* Clicking the mode already showing closes it, which is what the toggle group this
+                replaced did; the panel is a toggle, not a radio. */}
+            <IconAction
+              icon={PanelRight}
+              label={t('attemptHeaderActions.details', 'Details')}
+              active={mode === 'details'}
+              onClick={() =>
+                onModeChange(mode === 'details' ? null : 'details')
+              }
+            />
+            <IconAction
+              icon={FileDiff}
+              label={t('attemptHeaderActions.diffs')}
+              active={mode === 'diffs'}
+              onClick={() => {
+                const next = mode === 'diffs' ? null : 'diffs';
+                if (next === 'diffs') {
+                  posthog?.capture('diffs_navigated', {
+                    trigger: 'button',
+                    timestamp: new Date().toISOString(),
+                    source: 'frontend',
+                  });
+                } else {
+                  posthog?.capture('view_closed', {
+                    trigger: 'button',
+                    from_view: mode ?? 'attempt',
+                    timestamp: new Date().toISOString(),
+                    source: 'frontend',
+                  });
+                }
+                onModeChange(next);
+              }}
+            />
+          </div>
         </TooltipProvider>
       )}
+
       {typeof mode !== 'undefined' && onModeChange && (
         <div className="h-4 w-px bg-border" />
       )}

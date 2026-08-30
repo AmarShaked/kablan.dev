@@ -27,12 +27,8 @@ import { DevServerLogsView } from '@/components/tasks/TaskDetails/preview/DevSer
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
 import { EditBranchNameDialog } from '@/components/dialogs/tasks/EditBranchNameDialog';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { IconAction } from '@/components/ui/icon-action';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { useProject } from '@/contexts/ProjectContext';
 import { useAttemptExecution, useBranchStatus } from '@/hooks';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
@@ -109,42 +105,6 @@ function Row({
     >
       {content}
     </button>
-  );
-}
-
-/**
- * One action in the row above the panel. Icon-only, because these are the three things done
- * often enough to be recognised by shape, and a full row each pushed the properties down the
- * panel.
- */
-function IconAction({
-  icon: Icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: typeof GitBranch;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          aria-label={label}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <Icon className="h-3.5 w-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="px-2 py-1 text-xs">
-        {label}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
