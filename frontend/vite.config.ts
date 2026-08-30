@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
 import pkg from "./package.json";
+// The version people actually install is the wrapper's, not this workspace package's, which
+// still carries the number inherited from upstream.
+import releasePkg from "../npx-cli/package.json";
 
 function createFilteredLogger() {
   const logger = createLogger();
@@ -79,7 +82,7 @@ export default schemas;
 export default defineConfig({
   customLogger: createFilteredLogger(),
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(releasePkg.version),
   },
   plugins: [
     react({
