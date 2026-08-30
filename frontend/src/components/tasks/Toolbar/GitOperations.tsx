@@ -43,6 +43,37 @@ interface GitOperationsProps {
 
 export type GitOperationsInputs = Omit<GitOperationsProps, 'selectedAttempt'>;
 
+/**
+ * Wraps a git action so its tooltip works even while the button is disabled — a disabled button
+ * receives no pointer events, so the trigger has to be the span around it.
+ */
+function ActionTooltip({
+  reason,
+  children,
+}: {
+  /** Why the action is unavailable, or null when it is available. */
+  reason: string | null;
+  children: React.ReactNode;
+}) {
+  if (!reason) return <>{children}</>;
+  return (
+    // Brings its own provider: this file's other one covers the branch chips only, and a
+    // component that needs a provider should not depend on where it happens to be placed.
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="shrink-0" tabIndex={0}>
+            {children}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs px-2 py-1 text-xs">
+          {reason}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function GitOperations({
   selectedAttempt,
   task,
@@ -260,6 +291,70 @@ function GitOperations({
     });
   };
 
+  /**
+   * Why each action is unavailable, or null when it is available.
+   *
+   * The same string both disables the button and explains it: a control that is greyed out with
+   * no reason given is a question the person has to bring to someone else, and these have six
+   * different causes that are not interchangeable.
+   */
+  const commitsAhead = selectedRepoStatus?.commits_ahead ?? 0;
+  const remoteAhead = selectedRepoStatus?.remote_commits_ahead ?? 0;
+  const recentlyActed = pushSuccess || mergeSuccess;
+
+  const mergeDisabledReason: string | null = mergeInfo.hasMergedPR
+    ? t('git.why.alreadyMerged', 'Already merged')
+    : mergeInfo.hasOpenPR
+      ? t(
+          'git.why.prOpen',
+          'A pull request is open for this branch — merge it there'
+        )
+      : merging
+        ? t('git.why.merging', 'Merging…')
+        : hasConflictsCalculated
+          ? t('git.why.conflicts', 'Resolve the conflicts first')
+          : isAttemptRunning
+            ? t('git.why.running', 'Wait for the agent to finish')
+            : selectedRepoStatus?.is_target_remote
+              ? t(
+                  'git.why.targetRemote',
+                  'The target branch is on a remote — open a pull request instead'
+                )
+              : commitsAhead === 0 && !recentlyActed
+                ? t(
+                    'git.why.nothingToMerge',
+                    'Nothing to merge — this attempt has made no commits'
+                  )
+                : null;
+
+  const prDisabledReason: string | null = mergeInfo.hasMergedPR
+    ? t('git.why.alreadyMerged', 'Already merged')
+    : pushing
+      ? t('git.why.pushing', 'Pushing…')
+      : isAttemptRunning
+        ? t('git.why.running', 'Wait for the agent to finish')
+        : hasConflictsCalculated
+          ? t('git.why.conflicts', 'Resolve the conflicts first')
+          : mergeInfo.hasOpenPR && remoteAhead === 0
+            ? t(
+                'git.why.prUpToDate',
+                'The open pull request already has these commits'
+              )
+            : commitsAhead === 0 && remoteAhead === 0 && !recentlyActed
+              ? t(
+                  'git.why.nothingToPr',
+                  'Nothing to open a pull request about — this attempt has made no commits'
+                )
+              : null;
+
+  const rebaseDisabledReason: string | null = rebasing
+    ? t('git.why.rebasing', 'Rebasing…')
+    : isAttemptRunning
+      ? t('git.why.running', 'Wait for the agent to finish')
+      : hasConflictsCalculated
+        ? t('git.why.conflicts', 'Resolve the conflicts first')
+        : null;
+
   const isVertical = layout === 'vertical';
 
   const containerClasses = isVertical
@@ -472,64 +567,53 @@ function GitOperations({
           </div>
         ) : selectedRepoStatus ? (
           <div className={actionsClasses}>
-            <Button
-              onClick={handleMergeClick}
-              disabled={
-                mergeInfo.hasMergedPR ||
-                mergeInfo.hasOpenPR ||
-                merging ||
-                hasConflictsCalculated ||
-                isAttemptRunning ||
-                selectedRepoStatus?.is_target_remote ||
-                ((selectedRepoStatus?.commits_ahead ?? 0) === 0 &&
-                  !pushSuccess &&
-                  !mergeSuccess)
-              }
-              variant="outline"
-              size="xs"
-              className="border-success text-success hover:bg-success gap-1 shrink-0"
-              aria-label={mergeButtonLabel}
-            >
-              <GitBranchIcon className="h-3.5 w-3.5" />
-              <span className="truncate max-w-[10ch]">{mergeButtonLabel}</span>
-            </Button>
+            <ActionTooltip reason={mergeDisabledReason}>
+              <Button
+                onClick={handleMergeClick}
+                disabled={mergeDisabledReason !== null}
+                variant="outline"
+                size="xs"
+                className="border-success text-success hover:bg-success gap-1 shrink-0"
+                aria-label={mergeButtonLabel}
+              >
+                <GitBranchIcon className="h-3.5 w-3.5" />
+                <span className="truncate max-w-[10ch]">
+                  {mergeButtonLabel}
+                </span>
+              </Button>
+            </ActionTooltip>
 
-            <Button
-              onClick={handlePRButtonClick}
-              disabled={
-                mergeInfo.hasMergedPR ||
-                pushing ||
-                isAttemptRunning ||
-                hasConflictsCalculated ||
-                (mergeInfo.hasOpenPR &&
-                  (selectedRepoStatus?.remote_commits_ahead ?? 0) === 0) ||
-                ((selectedRepoStatus?.commits_ahead ?? 0) === 0 &&
-                  (selectedRepoStatus?.remote_commits_ahead ?? 0) === 0 &&
-                  !pushSuccess &&
-                  !mergeSuccess)
-              }
-              variant="outline"
-              size="xs"
-              className="border-info text-info hover:bg-info gap-1 shrink-0"
-              aria-label={prButtonLabel}
-            >
-              <GitPullRequest className="h-3.5 w-3.5" />
-              <span className="truncate max-w-[10ch]">{prButtonLabel}</span>
-            </Button>
+            <ActionTooltip reason={prDisabledReason}>
+              <Button
+                onClick={handlePRButtonClick}
+                disabled={prDisabledReason !== null}
+                variant="outline"
+                size="xs"
+                className="border-info text-info hover:bg-info gap-1 shrink-0"
+                aria-label={prButtonLabel}
+              >
+                <GitPullRequest className="h-3.5 w-3.5" />
+                <span className="truncate max-w-[10ch]">{prButtonLabel}</span>
+              </Button>
+            </ActionTooltip>
 
-            <Button
-              onClick={handleRebaseDialogOpen}
-              disabled={rebasing || isAttemptRunning || hasConflictsCalculated}
-              variant="outline"
-              size="xs"
-              className="border-warning text-warning hover:bg-warning gap-1 shrink-0"
-              aria-label={rebaseButtonLabel}
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${rebasing ? 'animate-spin' : ''}`}
-              />
-              <span className="truncate max-w-[10ch]">{rebaseButtonLabel}</span>
-            </Button>
+            <ActionTooltip reason={rebaseDisabledReason}>
+              <Button
+                onClick={handleRebaseDialogOpen}
+                disabled={rebaseDisabledReason !== null}
+                variant="outline"
+                size="xs"
+                className="border-warning text-warning hover:bg-warning gap-1 shrink-0"
+                aria-label={rebaseButtonLabel}
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${rebasing ? 'animate-spin' : ''}`}
+                />
+                <span className="truncate max-w-[10ch]">
+                  {rebaseButtonLabel}
+                </span>
+              </Button>
+            </ActionTooltip>
           </div>
         ) : null}
       </div>
