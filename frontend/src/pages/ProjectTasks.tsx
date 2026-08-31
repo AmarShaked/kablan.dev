@@ -62,6 +62,7 @@ import { useHotkeysContext } from 'react-hotkeys-hook';
 import { TasksLayout, type LayoutMode } from '@/components/layout/TasksLayout';
 import { AttemptDetailsPanel } from '@/components/panels/AttemptDetailsPanel';
 import { DevServerLogsPanel } from '@/components/panels/DevServerLogsPanel';
+import { WorkspaceEnvPanel } from '@/components/panels/WorkspaceEnvPanel';
 import { DiffsPanel } from '@/components/panels/DiffsPanel';
 import TaskAttemptPanel from '@/components/panels/TaskAttemptPanel';
 import TaskPanel from '@/components/panels/TaskPanel';
@@ -279,7 +280,7 @@ export function ProjectTasks() {
   // how "I closed the column" is spelled, since the absent param now means the default.
   const mode: LayoutMode = !effectiveAttemptId
     ? null
-    : rawMode === 'diffs' || rawMode === 'logs'
+    : rawMode === 'diffs' || rawMode === 'logs' || rawMode === 'env'
       ? rawMode
       : rawMode === 'chat'
         ? null
@@ -474,7 +475,7 @@ export function ProjectTasks() {
    */
   const cycleView = useCallback(
     (direction: 'forward' | 'backward' = 'forward') => {
-      const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
+      const order: LayoutMode[] = ['details', 'diffs', 'logs', 'env', null];
       const idx = order.indexOf(mode);
       const next =
         direction === 'forward'
@@ -498,7 +499,7 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
+        const order: LayoutMode[] = ['details', 'diffs', 'logs', 'env', null];
         const idx = order.indexOf(mode);
         const next = order[(idx + 1) % order.length];
 
@@ -524,7 +525,7 @@ export function ProjectTasks() {
     () => {
       if (isPanelOpen) {
         // Track keyboard shortcut before cycling view
-        const order: LayoutMode[] = ['details', 'diffs', 'logs', null];
+        const order: LayoutMode[] = ['details', 'diffs', 'logs', 'env', null];
         const idx = order.indexOf(mode);
         const next = order[(idx - 1 + order.length) % order.length];
 
@@ -739,40 +740,40 @@ export function ProjectTasks() {
       onSelect={handleViewTaskDetails}
     />
   ) : tasks.length === 0 ? (
-      <NoTasksEmptyState onCreate={handleCreateNewTask} />
-    ) : !hasVisibleTasks ? (
-      <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
-    ) : (
-      <div className="flex h-full w-full flex-col overflow-hidden">
-        {/* Board vs list. Sits with the content rather than in the page chrome, because the
+    <NoTasksEmptyState onCreate={handleCreateNewTask} />
+  ) : !hasVisibleTasks ? (
+    <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
+  ) : (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      {/* Board vs list. Sits with the content rather than in the page chrome, because the
             chrome is shared with the task-detail view where the choice is meaningless. */}
-        <div className="flex shrink-0 justify-end px-6 pt-3">
-          <div className="flex items-center border border-border p-0.5">
-            <Button
-              variant={taskView === 'board' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => changeTaskView('board')}
-              aria-label="Board view"
-              aria-pressed={taskView === 'board'}
-              title="Board view"
-            >
-              <Columns3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={taskView === 'list' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => changeTaskView('list')}
-              aria-label="List view"
-              aria-pressed={taskView === 'list'}
-              title="List view"
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
+      <div className="flex shrink-0 justify-end px-6 pt-3">
+        <div className="flex items-center border border-border p-0.5">
+          <Button
+            variant={taskView === 'board' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => changeTaskView('board')}
+            aria-label="Board view"
+            aria-pressed={taskView === 'board'}
+            title="Board view"
+          >
+            <Columns3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={taskView === 'list' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => changeTaskView('list')}
+            aria-label="List view"
+            aria-pressed={taskView === 'list'}
+            title="List view"
+          >
+            <List className="h-4 w-4" />
+          </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
+      </div>
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
         {taskView === 'list' ? (
           <TaskListView
             columns={kanbanColumns}
@@ -790,9 +791,9 @@ export function ProjectTasks() {
             projectId={projectId!}
           />
         )}
-        </div>
       </div>
-    );
+    </div>
+  );
 
   const rightHeader = selectedTask ? (
     <NewCardHeader
@@ -893,12 +894,12 @@ export function ProjectTasks() {
             task={selectedTask}
             onOpenDiffs={() => setMode('diffs')}
             onOpenLogs={() => setMode('logs')}
+            onOpenEnv={() => setMode('env')}
           />
         )}
         {mode === 'logs' && <DevServerLogsPanel attemptId={attempt.id} />}
-        {mode === 'diffs' && (
-          <DiffsPanelContainer attempt={attempt} />
-        )}
+        {mode === 'env' && <WorkspaceEnvPanel attempt={attempt} />}
+        {mode === 'diffs' && <DiffsPanelContainer attempt={attempt} />}
       </div>
     ) : (
       <div className="relative h-full w-full" />

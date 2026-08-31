@@ -9,7 +9,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-export type LayoutMode = 'details' | 'diffs' | 'logs' | null;
+export type LayoutMode = 'details' | 'diffs' | 'logs' | 'env' | null;
 
 // The header component draws its own bottom rule, so the wrappers below deliberately have no
 // border of their own — two a pixel apart read as a rendering fault rather than a divider.

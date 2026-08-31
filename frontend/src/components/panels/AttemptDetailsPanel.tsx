@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   FileDiff,
+  FileKey2,
   GitBranch,
   Loader2,
   Pencil,
@@ -112,6 +113,7 @@ interface AttemptDetailsPanelProps {
   task: TaskWithAttemptStatus;
   onOpenDiffs: () => void;
   onOpenLogs: () => void;
+  onOpenEnv: () => void;
 }
 
 export function AttemptDetailsPanel({
@@ -119,6 +121,7 @@ export function AttemptDetailsPanel({
   task,
   onOpenDiffs,
   onOpenLogs,
+  onOpenEnv,
 }: AttemptDetailsPanelProps) {
   const navigate = useNavigate();
   const { project, projectId } = useProject();
@@ -322,6 +325,13 @@ export function AttemptDetailsPanel({
           <span className="text-muted-foreground">{targetBranch}</span>
         </Row>
       )}
+      <Row
+        icon={FileKey2}
+        title="Edit this worktree's .env files"
+        onClick={onOpenEnv}
+      >
+        Environment files
+      </Row>
 
       <SectionLabel>Dev server</SectionLabel>
       {hasRunningDevServer ? (

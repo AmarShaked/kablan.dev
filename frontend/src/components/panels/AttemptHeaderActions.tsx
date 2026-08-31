@@ -1,5 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { FileDiff, PanelRight, SquareTerminal, X } from 'lucide-react';
+import {
+  FileDiff,
+  FileKey2,
+  PanelRight,
+  SquareTerminal,
+  X,
+} from 'lucide-react';
 import { Button } from '../ui/button';
 import { IconAction } from '@/components/ui/icon-action';
 import { useDevServer } from '@/hooks/useDevServer';
@@ -62,6 +68,12 @@ export const AttemptHeaderActions = ({
                     : undefined
               }
               onClick={() => onModeChange(mode === 'logs' ? null : 'logs')}
+            />
+            <IconAction
+              icon={FileKey2}
+              label="Environment files"
+              active={mode === 'env'}
+              onClick={() => onModeChange(mode === 'env' ? null : 'env')}
             />
             <IconAction
               icon={FileDiff}

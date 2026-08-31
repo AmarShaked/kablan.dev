@@ -44,6 +44,20 @@ exists: boolean, content: string, };
 
 export type SaveEnvFile = { name: string, content: string, };
 
+export type WorkspaceEnvFile = { name: string, 
+/**
+ * False when this worktree has no such file yet — the UI still offers it, so one can be
+ * created here.
+ */
+exists: boolean, content: string, 
+/**
+ * The repository checkout's copy of the same file. The client compares against it to mark a
+ * file as overridden, and offers it as the value to reset back to.
+ */
+repo_content: string, };
+
+export type SaveWorkspaceEnvFile = { name: string, content: string, };
+
 export type ProjectRepo = { id: string, project_id: string, repo_id: string, };
 
 export type CreateProjectRepo = { display_name: string, git_repo_path: string, };

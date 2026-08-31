@@ -3,7 +3,6 @@ import { createLogger, defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
-import pkg from "./package.json";
 // The version people actually install is the wrapper's, not this workspace package's, which
 // still carries the number inherited from upstream.
 import releasePkg from "../npx-cli/package.json";

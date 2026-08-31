@@ -20,6 +20,8 @@ import {
   Project,
   Repo,
   RepoWithTargetBranch,
+  WorkspaceEnvFile,
+  SaveWorkspaceEnvFile,
   CreateProject,
   CreateProjectRepo,
   UpdateRepo,
@@ -337,7 +339,9 @@ export const projectsApi = {
 export const tasksApi = {
   /** One-shot fetch of a project's tasks. The board streams over WS; this is for places that
    *  just need a snapshot, like expanding a project row. */
-  listByProject: async (projectId: string): Promise<TaskWithAttemptStatus[]> => {
+  listByProject: async (
+    projectId: string
+  ): Promise<TaskWithAttemptStatus[]> => {
     const response = await makeRequest(
       `/api/tasks?project_id=${encodeURIComponent(projectId)}`
     );
@@ -585,6 +589,29 @@ export const attemptsApi = {
   getRepos: async (attemptId: string): Promise<RepoWithTargetBranch[]> => {
     const response = await makeRequest(`/api/task-attempts/${attemptId}/repos`);
     return handleApiResponse<RepoWithTargetBranch[]>(response);
+  },
+
+  /** The .env files inside this workspace's worktree for one repository. */
+  listEnvFiles: async (
+    attemptId: string,
+    repoId: string
+  ): Promise<WorkspaceEnvFile[]> => {
+    const response = await makeRequest(
+      `/api/task-attempts/${attemptId}/env-files?repo_id=${repoId}`
+    );
+    return handleApiResponse<WorkspaceEnvFile[]>(response);
+  },
+
+  saveEnvFile: async (
+    attemptId: string,
+    repoId: string,
+    data: SaveWorkspaceEnvFile
+  ): Promise<WorkspaceEnvFile> => {
+    const response = await makeRequest(
+      `/api/task-attempts/${attemptId}/env-files?repo_id=${repoId}`,
+      { method: 'PUT', body: JSON.stringify(data) }
+    );
+    return handleApiResponse<WorkspaceEnvFile>(response);
   },
 
   getFirstUserMessage: async (attemptId: string): Promise<string | null> => {

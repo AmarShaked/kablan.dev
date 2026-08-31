@@ -1,5 +1,6 @@
 pub mod codex_setup;
 pub mod cursor_setup;
+pub mod env_files;
 pub mod gh_cli_setup;
 pub mod images;
 pub mod pr;
@@ -1323,13 +1324,17 @@ pub async fn start_dev_server(
     // if you know what that something is.
     if !existing_dev_servers.is_empty() && !query.replace {
         let holder_title = match existing_dev_servers.first() {
-            Some(proc) => async {
-                let session = Session::find_by_id(pool, proc.session_id).await.ok()??;
-                let holder_ws = Workspace::find_by_id(pool, session.workspace_id).await.ok()??;
-                let holder_task = holder_ws.parent_task(pool).await.ok()??;
-                Some(holder_task.title)
+            Some(proc) => {
+                async {
+                    let session = Session::find_by_id(pool, proc.session_id).await.ok()??;
+                    let holder_ws = Workspace::find_by_id(pool, session.workspace_id)
+                        .await
+                        .ok()??;
+                    let holder_task = holder_ws.parent_task(pool).await.ok()??;
+                    Some(holder_task.title)
+                }
+                .await
             }
-            .await,
             None => None,
         };
         return Err(ApiError::Conflict(match holder_title {
@@ -2011,6 +2016,10 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
                 .route("/change-target-branch", post(change_target_branch))
                 .route("/rename-branch", post(rename_branch))
                 .route("/repos", get(get_task_attempt_repos))
+                .route(
+                    "/env-files",
+                    get(env_files::get_workspace_env_files).put(env_files::save_workspace_env_file),
+                )
                 .route("/first-message", get(get_first_user_message))
                 .route("/mark-seen", put(mark_seen))
                 .route("/link", post(link_workspace))

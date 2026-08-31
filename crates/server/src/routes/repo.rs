@@ -293,13 +293,12 @@ pub async fn list_open_prs(
     }
 }
 
-
 /// The env files Kablan will read or write in a repository root.
 ///
 /// A fixed allowlist, deliberately: the filename arrives from the client, and joining an
 /// arbitrary one onto the repo path would let a caller read or overwrite anything on disk
 /// (`../../.ssh/id_rsa`). Matching against this list means a traversal attempt simply isn't found.
-const ENV_FILE_NAMES: [&str; 6] = [
+pub const ENV_FILE_NAMES: [&str; 6] = [
     ".env",
     ".env.local",
     ".env.development",
@@ -341,8 +340,16 @@ pub async fn get_repo_env_files(
             // Unreadable (permissions, or a directory of that name) is reported as absent rather
             // than failing the whole request — one odd file shouldn't hide the others.
             match std::fs::read_to_string(&path) {
-                Ok(content) => EnvFile { name: name.to_string(), exists: true, content },
-                Err(_) => EnvFile { name: name.to_string(), exists: false, content: String::new() },
+                Ok(content) => EnvFile {
+                    name: name.to_string(),
+                    exists: true,
+                    content,
+                },
+                Err(_) => EnvFile {
+                    name: name.to_string(),
+                    exists: false,
+                    content: String::new(),
+                },
             }
         })
         .collect();
