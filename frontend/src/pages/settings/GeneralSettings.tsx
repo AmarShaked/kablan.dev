@@ -20,7 +20,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FolderOpen, Loader2, Volume2 } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  Check,
+  FolderOpen,
+  Loader2,
+  Volume2,
+} from 'lucide-react';
 import {
   DEFAULT_PR_DESCRIPTION_PROMPT,
   EditorType,
@@ -35,6 +41,7 @@ import { useEditorAvailability } from '@/hooks/useEditorAvailability';
 import { EditorAvailabilityIndicator } from '@/components/EditorAvailabilityIndicator';
 import { useTheme } from '@/components/ThemeProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { useLatestRelease } from '@/hooks/useLatestRelease';
 import { TagManager } from '@/components/TagManager';
 import { FolderPickerDialog } from '@/components/dialogs/shared/FolderPickerDialog';
 
@@ -53,6 +60,7 @@ export function GeneralSettings() {
     loading,
     updateAndSaveConfig, // Use this on Save
   } = useUserSystem();
+  const { latest, current, updateAvailable } = useLatestRelease();
 
   // Draft state management
   const [draft, setDraft] = useState(() => (config ? cloneDeep(config) : null));
@@ -780,6 +788,43 @@ export function GeneralSettings() {
                 {t('settings.general.beta.workspaces.helper')}
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* No save button: this reports, it does not configure. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>About</CardTitle>
+          <CardDescription>
+            Which Kablan this is, and whether a newer one exists.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-sm text-muted-foreground">Version</span>
+            <span className="font-ibm-plex-mono text-sm">{current}</span>
+
+            {updateAvailable ? (
+              <span className="inline-flex items-center gap-2 text-sm">
+                <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 text-info" />
+                <span>
+                  {latest} is available — quit and run{' '}
+                  <span className="font-ibm-plex-mono">npx kablan@latest</span>
+                </span>
+              </span>
+            ) : latest ? (
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Check className="h-3.5 w-3.5 shrink-0 text-success" />
+                Up to date
+              </span>
+            ) : (
+              // The check is best-effort; saying nothing beats claiming to be current when we
+              // could not reach the registry to find out.
+              <span className="text-sm text-muted-foreground">
+                Could not check for updates
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
