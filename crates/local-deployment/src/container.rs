@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use chrono::Utc;
 use command_group::AsyncGroupChild;
 use db::{
     DBService,
@@ -39,9 +40,7 @@ use executors::{
 };
 use futures::{FutureExt, TryStreamExt, stream::select};
 use git::GitService;
-use serde_json::json;
 use services::services::{
-    analytics::AnalyticsContext,
     approvals::{Approvals, executor_approvals::ExecutorApprovalBridge},
     config::{Config, DEFAULT_COMMIT_REMINDER_PROMPT},
     container::{ContainerError, ContainerRef, ContainerService},
@@ -77,7 +76,6 @@ pub struct LocalContainerService {
     config: Arc<RwLock<Config>>,
     git: GitService,
     image_service: ImageService,
-    analytics: Option<AnalyticsContext>,
     approvals: Approvals,
     queued_message_service: QueuedMessageService,
     notification_service: NotificationService,
@@ -92,7 +90,6 @@ impl LocalContainerService {
         config: Arc<RwLock<Config>>,
         git: GitService,
         image_service: ImageService,
-        analytics: Option<AnalyticsContext>,
         approvals: Approvals,
         queued_message_service: QueuedMessageService,
         remote_client: Option<RemoteClient>,
@@ -113,7 +110,6 @@ impl LocalContainerService {
             config,
             git,
             image_service,
-            analytics,
             approvals,
             queued_message_service,
             notification_service,
@@ -231,6 +227,7 @@ impl LocalContainerService {
 
     pub fn spawn_workspace_cleanup(&self) {
         let db = self.db.clone();
+        let config = self.config.clone();
         let cleanup_expired = Self::cleanup_expired_workspaces;
         tokio::spawn(async move {
             WorkspaceManager::cleanup_orphan_workspaces(&db.pool).await;
@@ -243,8 +240,32 @@ impl LocalContainerService {
                 cleanup_expired(&db).await.unwrap_or_else(|e| {
                     tracing::error!("Failed to clean up expired workspaces: {}", e)
                 });
+                Self::archive_finished_tasks(&db, &config).await;
             }
         });
+    }
+
+    /// Archive tasks that have been finished longer than the configured number of days.
+    ///
+    /// Rides the cleanup loop rather than running a timer of its own: this is housekeeping on the
+    /// same half-hour rhythm, and a task appearing in the archive a few minutes late is not
+    /// something anyone waits on. The setting is read each pass, so changing it takes effect
+    /// without a restart, and None means the person has turned this off.
+    async fn archive_finished_tasks(db: &DBService, config: &Arc<RwLock<Config>>) {
+        let Some(days) = config.read().await.archive_tasks_after_days else {
+            return;
+        };
+        let Some(cutoff) = Utc::now().checked_sub_signed(chrono::Duration::days(days.into()))
+        else {
+            tracing::warn!("archive_tasks_after_days={days} does not fit a date; skipping");
+            return;
+        };
+
+        match Task::archive_finished_before(&db.pool, cutoff).await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!("Archived {n} task(s) finished before {cutoff}"),
+            Err(e) => tracing::error!("Failed to archive finished tasks: {e}"),
+        }
     }
 
     /// Record the current HEAD commit for each repository as the "after" state.
@@ -414,9 +435,8 @@ impl LocalContainerService {
         let child_store = self.child_store.clone();
         let msg_stores = self.msg_stores.clone();
         let db = self.db.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
         let container = self.clone();
-        let analytics = self.analytics.clone();
 
         let mut process_exit_rx = self.spawn_os_exit_watcher(exec_id);
 
@@ -586,24 +606,6 @@ impl LocalContainerService {
                     } else {
                         container.finalize_task(&ctx).await;
                     }
-                }
-
-                // Fire analytics event when CodingAgent execution has finished
-                if config.read().await.analytics_enabled
-                    && matches!(
-                        &ctx.execution_process.run_reason,
-                        ExecutionProcessRunReason::CodingAgent
-                    )
-                    && let Some(analytics) = &analytics
-                {
-                    analytics.analytics_service.track_event(&analytics.user_id, "task_attempt_finished", Some(json!({
-                        "task_id": ctx.task.id.to_string(),
-                        "project_id": ctx.task.project_id.to_string(),
-                        "workspace_id": ctx.workspace.id.to_string(),
-                        "session_id": ctx.session.id.to_string(),
-                        "execution_success": matches!(ctx.execution_process.status, ExecutionProcessStatus::Completed),
-                        "exit_code": ctx.execution_process.exit_code,
-                    })));
                 }
 
                 // Sync workspace to remote after CodingAgent execution

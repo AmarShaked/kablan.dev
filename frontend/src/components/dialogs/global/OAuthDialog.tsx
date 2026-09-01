@@ -163,7 +163,7 @@ const OAuthDialogImpl = NiceModal.create<NoProps>(() => {
           <>
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <LogIn className="h-6 w-6 text-primary-foreground" />
+                <LogIn className="h-6 w-6 text-foreground" />
                 <DialogTitle>{t('oauth.title')}</DialogTitle>
               </div>
               <DialogDescription className="text-left pt-2">
@@ -204,7 +204,7 @@ const OAuthDialogImpl = NiceModal.create<NoProps>(() => {
           <>
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <LogIn className="h-6 w-6 text-primary-foreground" />
+                <LogIn className="h-6 w-6 text-foreground" />
                 <DialogTitle>{t('oauth.waitingTitle')}</DialogTitle>
               </div>
               <DialogDescription className="text-left pt-2">

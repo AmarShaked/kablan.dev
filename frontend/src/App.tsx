@@ -7,7 +7,6 @@ import { ProjectTasks } from '@/pages/ProjectTasks';
 import { FullAttemptLogsPage } from '@/pages/FullAttemptLogs';
 import { Migration } from '@/pages/Migration';
 import { NormalLayout } from '@/components/layout/NormalLayout';
-import { usePostHog } from 'posthog-js/react';
 import { useAuth } from '@/hooks';
 import { usePreviousPath } from '@/hooks/usePreviousPath';
 import { useUiPreferencesScratch } from '@/hooks/useUiPreferencesScratch';
@@ -16,7 +15,6 @@ import {
   AgentSettings,
   GeneralSettings,
   McpSettings,
-  OrganizationSettings,
   ProjectSettings,
   ReposSettings,
   SettingsLayout,
@@ -30,7 +28,6 @@ import { HotkeysProvider } from 'react-hotkeys-hook';
 
 import { ProjectProvider } from '@/contexts/ProjectContext';
 import { ThemeMode } from 'shared/types';
-import * as Sentry from '@sentry/react';
 
 import { DisclaimerDialog } from '@/components/dialogs/global/DisclaimerDialog';
 import { OnboardingDialog } from '@/components/dialogs/global/OnboardingDialog';
@@ -38,13 +35,11 @@ import { ReleaseNotesDialog } from '@/components/dialogs/global/ReleaseNotesDial
 import { ClickedElementsProvider } from './contexts/ClickedElementsProvider';
 
 // Design scope components
+import { AllTasks } from '@/pages/AllTasks';
 import { LegacyDesignScope } from '@/components/legacy-design/LegacyDesignScope';
 
-const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
-
 function AppContent() {
-  const { config, analyticsUserId, updateAndSaveConfig } = useUserSystem();
-  const posthog = usePostHog();
+  const { config, updateAndSaveConfig } = useUserSystem();
   const { isSignedIn } = useAuth();
 
   // Track previous path for back navigation
@@ -52,20 +47,6 @@ function AppContent() {
 
   // Sync UI preferences with server scratch storage
   useUiPreferencesScratch();
-
-  // Handle opt-in/opt-out and user identification when config loads
-  useEffect(() => {
-    if (!posthog || !analyticsUserId) return;
-
-    if (config?.analytics_enabled) {
-      posthog.opt_in_capturing();
-      posthog.identify(analyticsUserId);
-      console.log('[Analytics] Analytics enabled and user identified');
-    } else {
-      posthog.opt_out_capturing();
-      console.log('[Analytics] Analytics disabled by user preference');
-    }
-  }, [config?.analytics_enabled, analyticsUserId, posthog]);
 
   useEffect(() => {
     if (!config) return;
@@ -127,7 +108,7 @@ function AppContent() {
     <I18nextProvider i18n={i18n}>
       <ThemeProvider initialTheme={config?.theme || ThemeMode.SYSTEM}>
         <SearchProvider>
-          <SentryRoutes>
+          <Routes>
             {/* ========== LEGACY DESIGN ROUTES ========== */}
             {/* VS Code full-page logs route (outside NormalLayout for minimal UI) */}
             <Route
@@ -147,6 +128,7 @@ function AppContent() {
               }
             >
               <Route path="/" element={<Projects />} />
+              <Route path="/tasks" element={<AllTasks />} />
               <Route path="/local-projects" element={<Projects />} />
               <Route path="/local-projects/:projectId" element={<Projects />} />
               <Route path="/migration" element={<Migration />} />
@@ -159,10 +141,6 @@ function AppContent() {
                 <Route path="general" element={<GeneralSettings />} />
                 <Route path="projects" element={<ProjectSettings />} />
                 <Route path="repos" element={<ReposSettings />} />
-                <Route
-                  path="organizations"
-                  element={<OrganizationSettings />}
-                />
                 <Route path="agents" element={<AgentSettings />} />
                 <Route path="mcp" element={<McpSettings />} />
               </Route>
@@ -179,8 +157,7 @@ function AppContent() {
                 element={<ProjectTasks />}
               />
             </Route>
-
-          </SentryRoutes>
+          </Routes>
         </SearchProvider>
       </ThemeProvider>
     </I18nextProvider>

@@ -22,8 +22,10 @@ export async function searchTagsAndFiles(
 ): Promise<SearchResultItem[]> {
   const results: SearchResultItem[] = [];
 
-  // Fetch all tags and filter client-side
-  const tags = await tagsApi.list();
+  // Scoped the same way the composer's Tags menu is, so typing @ and opening the menu offer the
+  // same set: this project's tags plus the global ones. Without the scope, a tag belonging to
+  // another project would be suggested here and then insert text from somewhere else entirely.
+  const tags = await tagsApi.list({ project_id: options?.projectId ?? null });
   const filteredTags = tags.filter((tag) =>
     tag.tag_name.toLowerCase().includes(query.toLowerCase())
   );

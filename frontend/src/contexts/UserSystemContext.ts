@@ -13,7 +13,6 @@ interface UserSystemState {
   environment: Environment | null;
   profiles: Record<string, ExecutorConfig> | null;
   capabilities: Record<string, BaseAgentCapability[]> | null;
-  analyticsUserId: string | null;
   loginStatus: LoginStatus | null;
 }
 
@@ -31,7 +30,6 @@ export interface UserSystemContextType {
   environment: Environment | null;
   profiles: Record<string, ExecutorConfig> | null;
   capabilities: Record<string, BaseAgentCapability[]> | null;
-  analyticsUserId: string | null;
   loginStatus: LoginStatus | null;
   setEnvironment: (env: Environment | null) => void;
   setProfiles: (profiles: Record<string, ExecutorConfig> | null) => void;
@@ -54,9 +52,9 @@ export interface UserSystemContextType {
  * a tree that plainly had the provider in it. Keeping the context in a module of its own gives it
  * a stable identity across those updates.
  */
-export const UserSystemContext = createContext<UserSystemContextType | undefined>(
-  undefined
-);
+export const UserSystemContext = createContext<
+  UserSystemContextType | undefined
+>(undefined);
 
 export function useUserSystem() {
   const context = useContext(UserSystemContext);

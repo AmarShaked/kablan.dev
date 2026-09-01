@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { isEqual } from 'lodash';
+import { ConfirmDialog } from '@/components/dialogs';
+import { TagManager } from '@/components/TagManager';
 import {
   Card,
   CardContent,
@@ -80,16 +82,19 @@ export function ProjectSettings() {
 
   // Handle project selection from dropdown
   const handleProjectSelect = useCallback(
-    (id: string) => {
+    async (id: string) => {
       // No-op if same project
       if (id === selectedProjectId) return;
 
       // Confirm if there are unsaved changes
       if (hasUnsavedChanges) {
-        const confirmed = window.confirm(
-          t('settings.projects.save.confirmSwitch')
-        );
-        if (!confirmed) return;
+        const result = await ConfirmDialog.show({
+          title: t('settings.projects.save.unsavedChanges'),
+          message: t('settings.projects.save.confirmSwitch'),
+          confirmText: t('settings.projects.save.discard'),
+          variant: 'destructive',
+        }).catch(() => 'canceled');
+        if (result !== 'confirmed') return;
 
         // Clear local state before switching
         setDraft(null);
@@ -115,24 +120,34 @@ export function ProjectSettings() {
 
     // Confirm if there are unsaved changes
     if (hasUnsavedChanges) {
-      const confirmed = window.confirm(
-        t('settings.projects.save.confirmSwitch')
-      );
-      if (!confirmed) {
-        // Revert URL to previous value
-        if (selectedProjectId) {
-          setSearchParams({ projectId: selectedProjectId });
-        } else {
-          setSearchParams({});
+      // The effect cannot wait on an answer, so the URL has already changed: ask, and put it
+      // back if the answer is no. The native confirm blocked the thread to avoid this; a dialog
+      // that matches the rest of the app is worth the moment of drift.
+      void (async () => {
+        const result = await ConfirmDialog.show({
+          title: t('settings.projects.save.unsavedChanges'),
+          message: t('settings.projects.save.confirmSwitch'),
+          confirmText: t('settings.projects.save.discard'),
+          variant: 'destructive',
+        }).catch(() => 'canceled');
+        if (result !== 'confirmed') {
+          // Revert URL to previous value
+          if (selectedProjectId) {
+            setSearchParams({ projectId: selectedProjectId });
+          } else {
+            setSearchParams({});
+          }
+          return;
         }
-        return;
-      }
 
-      // Clear local state before switching
-      setDraft(null);
-      setSelectedProject(null);
-      setSuccess(false);
-      setError(null);
+        // Clear local state before switching
+        setDraft(null);
+        setSelectedProject(null);
+        setSuccess(false);
+        setError(null);
+        setSelectedProjectId(projectIdParam);
+      })();
+      return;
     }
 
     setSelectedProjectId(projectIdParam);
@@ -463,6 +478,21 @@ export function ProjectSettings() {
           </Card>
 
           {/* Repositories Section */}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tags</CardTitle>
+              <CardDescription>
+                Reusable snippets for this project. Insert one by typing
+                @its_name, or from the chat menu. Tags with no project are
+                listed here too and are available everywhere.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TagManager projectId={selectedProject.id} />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Repositories</CardTitle>

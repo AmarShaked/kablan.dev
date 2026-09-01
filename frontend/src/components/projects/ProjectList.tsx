@@ -8,7 +8,7 @@ import { Project } from 'shared/types';
 import { ProjectFormDialog } from '@/components/dialogs/projects/ProjectFormDialog';
 import { AlertCircle, Loader2, Plus } from 'lucide-react';
 import { ProjectsEmptyState } from '@/components/projects/ProjectsEmptyState';
-import { ProjectListRow } from '@/components/projects/ProjectListRow';
+import { ProjectCard } from '@/components/projects/ProjectCard';
 import { useKeyCreate, Scope } from '@/keyboard';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectStatsApi, projectsApi } from '@/lib/api';
@@ -60,7 +60,6 @@ export function ProjectList() {
     navigate(`/settings/projects?projectId=${project.id}`);
   };
 
-
   return (
     <div className="space-y-6 p-8 pb-16 md:pb-8 h-full overflow-auto">
       <div className="flex justify-between items-center">
@@ -93,9 +92,9 @@ export function ProjectList() {
       ) : projects.length === 0 ? (
         <ProjectsEmptyState onCreate={handleCreateProject} />
       ) : (
-        <div className="border-t border-border">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
-            <ProjectListRow
+            <ProjectCard
               key={project.id}
               project={project}
               onEdit={handleEditProject}

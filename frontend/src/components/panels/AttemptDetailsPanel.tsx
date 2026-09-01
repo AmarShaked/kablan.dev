@@ -3,29 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bot,
   Check,
+  ChevronDown,
+  CircleDot,
   GitBranchPlus,
   Copy,
   ExternalLink,
   FileDiff,
   FileKey2,
   GitBranch,
+  Plus,
   Loader2,
-  Pencil,
   Play,
   Square,
   SquareTerminal,
+  Wrench,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { BranchStatusChips } from '@/components/tasks/Toolbar/BranchStatus';
+import {
+  BaseBranchField,
+  BranchNameField,
+} from '@/components/panels/BranchFields';
 import GitOperations from '@/components/tasks/Toolbar/GitOperations';
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
-import { EditBranchNameDialog } from '@/components/dialogs/tasks/EditBranchNameDialog';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
 import { IconAction } from '@/components/ui/icon-action';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -41,6 +48,7 @@ import { useDiffSummary } from '@/hooks/useDiffSummary';
 import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { paths } from '@/lib/paths';
+import { cn } from '@/lib/utils';
 import { agentLabel } from '@/utils/agentLabels';
 import { statusLabels } from '@/utils/statusLabels';
 import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
@@ -56,55 +64,65 @@ import type { WorkspaceWithSession } from '@/types/attempt';
  * duplicated, so each of these lives in exactly one place now.
  */
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-ibm-plex-mono px-2 pb-1 pt-4 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-      {children}
-    </p>
-  );
-}
+/**
+ * One property: its name on the left, its value on the right.
+ *
+ * The pane used to be section headings over full-width rows, which meant the name of a thing and
+ * the thing itself were on different lines and nothing lined up down the column. A fixed label
+ * column reads the way a properties list should — you scan the left edge for the field you want,
+ * and every value starts on the same axis.
+ *
+ * Where a property can be changed, the value is the control and the name is not: a row-wide
+ * button puts the hit area over the label too, so pointing at the word "Branch" offers to rename
+ * it. Every value is set the same way — same size, same colour, same box — so the column reads as
+ * one list of values rather than a set of differently-treated fields.
+ */
 
-function Row({
+/** The one value style. Shared so a new property cannot arrive with a slightly different one. */
+const VALUE =
+  'flex min-h-6 min-w-0 flex-1 items-center rounded px-1.5 text-[11px]';
+
+function Property({
   icon: Icon,
+  label,
   children,
   onClick,
   title,
   disabled,
 }: {
   icon: typeof GitBranch;
+  label: string;
   children: React.ReactNode;
   onClick?: () => void;
   title?: string;
   disabled?: boolean;
 }) {
-  const content = (
-    <>
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </>
-  );
-
-  if (!onClick) {
-    return (
-      <div
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
-        title={title}
-      >
-        {content}
-      </div>
-    );
-  }
-
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-    >
-      {content}
-    </button>
+    <div className="flex w-full items-start gap-2 px-2 py-1">
+      <span className="flex w-[6.5rem] shrink-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          title={title}
+          className={cn(
+            VALUE,
+            '-mr-1.5 text-left transition-colors hover:bg-accent',
+            'disabled:pointer-events-none disabled:opacity-50'
+          )}
+        >
+          {children}
+        </button>
+      ) : (
+        <span className={cn(VALUE, '-mr-1.5')} title={title}>
+          {children}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -112,7 +130,6 @@ interface AttemptDetailsPanelProps {
   attempt: WorkspaceWithSession;
   task: TaskWithAttemptStatus;
   onOpenDiffs: () => void;
-  onOpenLogs: () => void;
   onOpenEnv: () => void;
 }
 
@@ -120,7 +137,6 @@ export function AttemptDetailsPanel({
   attempt,
   task,
   onOpenDiffs,
-  onOpenLogs,
   onOpenEnv,
 }: AttemptDetailsPanelProps) {
   const navigate = useNavigate();
@@ -167,9 +183,10 @@ export function AttemptDetailsPanel({
   );
   const attemptNumber = ordered.findIndex((a) => a.id === attempt.id) + 1;
 
-  const targetBranch = branchStatus?.find(
+  const selectedRepoStatus = branchStatus?.find(
     (r) => r.repo_id === (selectedRepoId ?? repos[0]?.id)
-  )?.target_branch_name;
+  );
+  const targetBranch = selectedRepoStatus?.target_branch_name;
 
   const handleNewAttempt = () => CreateAttemptDialog.show({ taskId: task.id });
 
@@ -197,7 +214,7 @@ export function AttemptDetailsPanel({
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-border bg-background p-2">
       <TooltipProvider delayDuration={200} skipDelayDuration={400}>
-        <div className="flex items-center justify-end gap-0.5 border-b border-border px-1 pb-1.5">
+        <div className="mb-1.5 flex items-center justify-end gap-0.5 border-b border-border px-1 pb-1.5">
           <IconAction
             icon={ExternalLink}
             label="Open in IDE"
@@ -220,223 +237,225 @@ export function AttemptDetailsPanel({
             onClick={handleCreateSubtask}
             disabled={!projectId || !attempt.branch}
           />
+
+          {/* Attempts live up here with the other things you do to the attempt, rather than as
+              a property: which attempt you are on is a choice, and starting another or stopping
+              this one are the two acts that go with it. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Attempts"
+                title={`Attempt ${Math.max(attemptNumber, 1)} of ${Math.max(ordered.length, 1)}`}
+                className="inline-flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Play className="h-3.5 w-3.5" />
+                <span className="tabular-nums">
+                  {Math.max(attemptNumber, 1)}/{Math.max(ordered.length, 1)}
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[260px]">
+              {isAttemptRunning ? (
+                <DropdownMenuItem
+                  onClick={() => stopExecution()}
+                  disabled={isStopping}
+                >
+                  <Square className="mr-2 h-3.5 w-3.5" />
+                  {isStopping ? 'Stopping…' : 'Stop attempt'}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={handleNewAttempt}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  New attempt
+                </DropdownMenuItem>
+              )}
+              {ordered.length > 1 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {ordered.map((a, i) => (
+                    <DropdownMenuItem
+                      key={a.id}
+                      onClick={() =>
+                        projectId &&
+                        navigate(paths.attempt(projectId, task.id, a.id))
+                      }
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        Attempt {i + 1} · {a.branch}
+                      </span>
+                      {a.id === attempt.id && (
+                        <Check className="ml-2 h-3.5 w-3.5 shrink-0" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </TooltipProvider>
 
-      <SectionLabel>Task</SectionLabel>
-      {/* The glyph is the control, exactly as in the board, the list and the sidebar. */}
-      <div className="flex items-center gap-2 px-1 py-1 text-sm">
-        <TaskStatusControl task={task} />
-        <span className="min-w-0 flex-1 truncate">
-          {statusLabels[task.status]}
+      {/* A badge rather than a line of text: status is the one property whose value is a state
+          rather than a name, and the colour it already has everywhere else in the app carries
+          that at a glance. The glyph stays inside it — the ring is what says how far along the
+          task is, and the pill only supplies the surface. */}
+      <div className="flex w-full items-start gap-2 px-2 py-1">
+        <span className="flex w-[6.5rem] shrink-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+          <CircleDot className="h-3.5 w-3.5 shrink-0" />
+          Status
+        </span>
+        <span className="-mr-1.5 flex min-h-6 min-w-0 flex-1 items-center">
+          <TaskStatusControl
+            task={task}
+            size={12}
+            className="!inline-flex !min-w-0 !gap-1.5 !rounded-full border border-border !bg-background !py-0.5 !pl-1.5 !pr-2 text-[11px] font-medium transition-colors hover:!bg-accent"
+          >
+            <span className="min-w-0 truncate">
+              {statusLabels[task.status]}
+            </span>
+          </TaskStatusControl>
         </span>
       </div>
-
-      <SectionLabel>Attempt</SectionLabel>
-      {ordered.length > 1 ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-            >
-              <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">
-                Attempt {attemptNumber} of {ordered.length}
-              </span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[260px]">
-            {ordered.map((a, i) => (
-              <DropdownMenuItem
-                key={a.id}
-                onClick={() =>
-                  projectId && navigate(paths.attempt(projectId, task.id, a.id))
-                }
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  Attempt {i + 1} · {a.branch}
-                </span>
-                {a.id === attempt.id && (
-                  <Check className="ml-2 h-3.5 w-3.5 shrink-0" />
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <Row icon={Play}>
-          Attempt {Math.max(attemptNumber, 1)} of {Math.max(ordered.length, 1)}
-        </Row>
-      )}
 
       {attempt.session?.executor && (
-        <Row icon={Bot} title="The agent running this attempt">
+        <Property
+          icon={Bot}
+          label="Agent"
+          title="The agent running this attempt"
+        >
           {agentLabel(attempt.session.executor)}
-        </Row>
+        </Property>
       )}
 
-      <div className="flex gap-1 px-2 pt-1">
-        {isAttemptRunning ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => stopExecution()}
-            disabled={isStopping}
-          >
-            {isStopping ? (
-              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-            ) : (
-              <Square className="mr-1.5 h-3 w-3" />
-            )}
-            {isStopping ? 'Stopping…' : 'Stop attempt'}
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={handleNewAttempt}
-          >
-            New attempt
-          </Button>
-        )}
-      </div>
+      {/* Both branch fields are edited where they are shown, so the value is the control and
+          there is no pencil or gear standing in for it. */}
+      <Property icon={GitBranch} label="Branch">
+        <BranchNameField
+          attemptId={attempt.id}
+          branch={attempt.branch}
+          disabled={isAttemptRunning}
+        />
+      </Property>
 
-      <SectionLabel>Workspace</SectionLabel>
-      <Row
-        icon={GitBranch}
-        title="Task branch — click to rename"
-        onClick={() =>
-          EditBranchNameDialog.show({
-            attemptId: attempt.id,
-            currentBranchName: attempt.branch,
-          })
-        }
-      >
-        <span className="inline-flex w-full items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate">{attempt.branch}</span>
-          <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-        </span>
-      </Row>
       {targetBranch && (
-        <Row icon={GitBranch} title="Base branch">
-          <span className="text-muted-foreground">{targetBranch}</span>
-        </Row>
+        <Property icon={GitBranch} label="Base">
+          <span className="flex w-full min-w-0 items-center gap-1.5">
+            <BaseBranchField
+              attemptId={attempt.id}
+              repoId={selectedRepoId ?? repos[0]?.id}
+              targetBranch={targetBranch}
+              disabled={isAttemptRunning}
+            />
+            {/* How far this branch has drifted from its base belongs beside the base itself,
+                not in a separate status strip further down the pane. */}
+            <BranchStatusChips
+              status={selectedRepoStatus}
+              compact
+              className="shrink-0"
+            />
+          </span>
+        </Property>
       )}
-      <Row
+
+      <Property
         icon={FileKey2}
+        label="Environment"
         title="Edit this worktree's .env files"
         onClick={onOpenEnv}
       >
-        Environment files
-      </Row>
+        Edit .env files
+      </Property>
 
-      <SectionLabel>Dev server</SectionLabel>
-      {hasRunningDevServer ? (
-        <>
-          {devServerUrl ? (
-            <button
-              type="button"
-              onClick={() =>
-                window.open(devServerUrl, '_blank', 'noopener,noreferrer')
-              }
-              title={devServerUrl}
-              className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-accent"
-            >
-              <SquareTerminal className="h-3.5 w-3.5 shrink-0 text-success" />
-              <span className="font-ibm-plex-mono min-w-0 flex-1 truncate text-xs">
-                {devServerUrl}
-              </span>
-              <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-            </button>
-          ) : (
-            <Row icon={SquareTerminal}>
-              <span className="text-muted-foreground">
-                Running — waiting for a URL…
-              </span>
-            </Row>
-          )}
-        </>
-      ) : (
-        <Row icon={SquareTerminal}>
-          <span className="text-muted-foreground">
-            {projectHasDevScript ? 'Not running' : 'No dev script configured'}
+      {/* The controls sit on the row they act on: the pane is a properties list, and a
+          full-width button bar under one property reads as if it belonged to all of them. */}
+      <Property icon={SquareTerminal} label="Dev server">
+        <span className="flex w-full items-center gap-1.5">
+          <span className="min-w-0 flex-1 truncate">
+            {hasRunningDevServer ? (
+              devServerUrl ? (
+                <a
+                  href={devServerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={devServerUrl}
+                  className="hover:underline"
+                >
+                  {devServerUrl}
+                </a>
+              ) : (
+                <span>Waiting for a URL…</span>
+              )
+            ) : (
+              <span>{projectHasDevScript ? 'Stopped' : 'No dev script'}</span>
+            )}
           </span>
-        </Row>
-      )}
-      <div className="flex gap-1 px-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1"
-          disabled={
-            isStartingDevServer ||
-            isStoppingDevServer ||
-            (!hasRunningDevServer && !projectHasDevScript)
-          }
-          onClick={() =>
-            hasRunningDevServer ? stopDevServer() : startDevServer()
-          }
-        >
-          {isStartingDevServer || isStoppingDevServer ? (
-            <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-          ) : hasRunningDevServer ? (
-            <Square className="mr-1.5 h-3 w-3" />
-          ) : (
-            <Play className="mr-1.5 h-3 w-3" />
-          )}
-          {hasRunningDevServer ? 'Stop dev' : 'Start dev'}
-        </Button>
-        {devServerProcesses.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={onOpenLogs}
-          >
-            Dev logs
-          </Button>
-        )}
-        {devServerProcesses.length === 0 && !projectHasDevScript && project && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={handleFixDevScript}
-            disabled={repos.length === 0}
-          >
-            Fix script
-          </Button>
-        )}
-      </div>
 
-      <SectionLabel>Changes</SectionLabel>
-      <button
-        type="button"
-        onClick={onOpenDiffs}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-      >
-        <FileDiff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate">
-          {fileCount === 0
-            ? 'No changes yet'
-            : `Diffs · ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
+          {/* Icons, not labelled buttons: the row is ~140px wide once the label column is
+              taken out, and two words of button leave the status itself nothing to sit in. */}
+          <TooltipProvider delayDuration={200} skipDelayDuration={400}>
+            <span className="flex shrink-0 items-center gap-0.5">
+              {devServerProcesses.length === 0 &&
+                !projectHasDevScript &&
+                project && (
+                  <IconAction
+                    icon={Wrench}
+                    label="Fix dev script"
+                    onClick={handleFixDevScript}
+                    disabled={repos.length === 0}
+                    className="!h-5 !w-5"
+                  />
+                )}
+              <IconAction
+                icon={
+                  isStartingDevServer || isStoppingDevServer
+                    ? Loader2
+                    : hasRunningDevServer
+                      ? Square
+                      : Play
+                }
+                label={
+                  hasRunningDevServer ? 'Stop dev server' : 'Start dev server'
+                }
+                className={cn(
+                  '!h-5 !w-5',
+                  (isStartingDevServer || isStoppingDevServer) &&
+                    '[&_svg]:animate-spin'
+                )}
+                disabled={
+                  isStartingDevServer ||
+                  isStoppingDevServer ||
+                  (!hasRunningDevServer && !projectHasDevScript)
+                }
+                onClick={() =>
+                  hasRunningDevServer ? stopDevServer() : startDevServer()
+                }
+              />
+            </span>
+          </TooltipProvider>
         </span>
-        {fileCount > 0 && (
-          <span className="font-ibm-plex-mono shrink-0 text-xs tabular-nums">
-            <span className="text-success">+{added}</span>{' '}
-            <span className="text-destructive">−{deleted}</span>
-          </span>
-        )}
-      </button>
+      </Property>
 
-      <SectionLabel>Git</SectionLabel>
-      <div className="px-2">
+      <Property icon={FileDiff} label="Changes" onClick={onOpenDiffs}>
+        <span className="inline-flex w-full items-center gap-1.5">
+          <span className="min-w-0 flex-1 truncate">
+            {fileCount === 0
+              ? 'No changes yet'
+              : `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
+          </span>
+          {fileCount > 0 && (
+            <span className="font-ibm-plex-mono shrink-0 text-xs tabular-nums">
+              <span className="text-success">+{added}</span>{' '}
+              <span className="text-destructive">−{deleted}</span>
+            </span>
+          )}
+        </span>
+      </Property>
+
+      <div className="mt-2 border-t border-border px-2 pt-2">
         <GitOperations
           selectedAttempt={attempt}
-          task={task}
           branchStatus={branchStatus ?? null}
           branchStatusError={branchStatusError}
           isAttemptRunning={isAttemptRunning}

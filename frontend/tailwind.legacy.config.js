@@ -42,13 +42,6 @@ module.exports = {
       ringColor: {
         DEFAULT: 'hsl(var(--primary))', // e.g. Tailwind's blue-500
       },
-      fontSize: { // These are downshifted by 1
-        xs: ['0.625rem', { lineHeight: '0.875rem' }], // 10px / 14px
-        sm: ['0.75rem', { lineHeight: '1rem' }],     // 12px / 16px
-        base: ['0.875rem', { lineHeight: '1.25rem' }],  // 14px / 20px
-        lg: ['1rem', { lineHeight: '1.5rem' }],   // 16px / 24px
-        xl: ['1.125rem', { lineHeight: '1.75rem' }],  // 18px / 28px
-      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -99,6 +92,19 @@ module.exports = {
           DEFAULT: "hsl(var(--neutral))",
           foreground: "hsl(var(--neutral-foreground))",
         },
+        // The shadcn sidebar styles itself through these; they are aliased to this app's own
+        // tokens in the theme CSS, so the sidebar follows the Kablan palette rather than
+        // shipping shadcn's greys alongside it.
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar-background))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
+        },
         status: {
           init: "hsl(var(--status-init))",
           "init-foreground": "hsl(var(--status-init-foreground))",
@@ -124,8 +130,16 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        'chivo-mono': ['Geist', 'Chivo Mono', 'Noto Emoji', 'monospace'],
-        geist: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // The UI's one typeface. `sans` is overridden rather than added beside it so anything
+        // that never asked for a family — most of the app — gets Montserrat too.
+        sans: ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Kept as aliases so the classes already scattered through the app resolve to the new
+        // face instead of silently falling back to the system sans.
+        geist: ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        'ibm-plex-mono': ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        'chivo-mono': ['Montserrat', 'Noto Emoji', 'ui-sans-serif', 'sans-serif'],
+        // Code, diffs and logs stay monospace: Montserrat has no mono cut, and a diff whose
+        // columns do not line up is a broken diff.
         'geist-mono': ['"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       keyframes: {

@@ -56,7 +56,11 @@ export function NoTasksEmptyState({ onCreate }: { onCreate: () => void }) {
 }
 
 /** Shown when a search or filter hides every task — a different situation to having none. */
-export function NoSearchResultsEmptyState({ onClear }: { onClear?: () => void }) {
+export function NoSearchResultsEmptyState({
+  onClear,
+}: {
+  onClear?: () => void;
+}) {
   const { t } = useTranslation('tasks');
 
   return (

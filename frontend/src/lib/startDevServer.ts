@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '@/components/dialogs';
 import { attemptsApi } from '@/lib/api';
 
 /**
@@ -20,10 +21,12 @@ export async function startDevServerWithReplacePrompt(
     // Anything other than the port conflict is a real failure and belongs to the caller.
     if (!/already running/i.test(message)) throw err;
 
-    const confirmed = window.confirm(
-      `${message}\n\nStop it and start the dev server for this task instead?`
-    );
-    if (!confirmed) return false;
+    const result = await ConfirmDialog.show({
+      title: 'A dev server is already running',
+      message: `${message}\n\nStop it and start the dev server for this task instead?`,
+      confirmText: 'Stop and start here',
+    }).catch(() => 'canceled');
+    if (result !== 'confirmed') return false;
 
     await attemptsApi.startDevServer(attemptId, true);
     return true;

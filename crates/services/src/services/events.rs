@@ -3,8 +3,12 @@ use std::{str::FromStr, sync::Arc};
 use db::{
     DBService,
     models::{
-        execution_process::ExecutionProcess, project::Project, scratch::Scratch, session::Session,
-        task::Task, workspace::Workspace,
+        execution_process::ExecutionProcess,
+        project::Project,
+        scratch::Scratch,
+        session::Session,
+        task::{ArchiveFilter, Task},
+        workspace::Workspace,
     },
 };
 use serde_json::json;
@@ -49,7 +53,12 @@ impl EventService {
         task_id: Uuid,
     ) -> Result<(), SqlxError> {
         if let Some(task) = Task::find_by_id(pool, task_id).await? {
-            let tasks = Task::find_by_project_id_with_attempt_status(pool, task.project_id).await?;
+            let tasks = Task::find_by_project_id_with_attempt_status(
+                pool,
+                task.project_id,
+                ArchiveFilter::Active,
+            )
+            .await?;
 
             if let Some(task_with_status) = tasks
                 .into_iter()
@@ -276,6 +285,7 @@ impl EventService {
                                         Task::find_by_project_id_with_attempt_status(
                                             &db.pool,
                                             task.project_id,
+                                            ArchiveFilter::Active,
                                         )
                                         .await
                                         && let Some(task_with_status) =
@@ -351,6 +361,7 @@ impl EventService {
                                             Task::find_by_project_id_with_attempt_status(
                                                 &db.pool,
                                                 task.project_id,
+                                                ArchiveFilter::Active,
                                             )
                                             .await
                                         && let Some(task_with_status) =
@@ -372,6 +383,7 @@ impl EventService {
                                             Task::find_by_project_id_with_attempt_status(
                                                 &db.pool,
                                                 task.project_id,
+                                                ArchiveFilter::Active,
                                             )
                                             .await
                                         && let Some(task_with_status) =

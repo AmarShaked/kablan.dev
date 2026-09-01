@@ -15,7 +15,7 @@ use axum::{
 use db::models::{
     image::TaskImage,
     repo::{Repo, RepoError},
-    task::{CreateTask, Task, TaskWithAttemptStatus, UpdateTask},
+    task::{ArchiveFilter, CreateTask, Task, TaskWithAttemptStatus, UpdateTask},
     workspace::{CreateWorkspace, Workspace},
     workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
 };
@@ -37,17 +37,43 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskQuery {
     pub project_id: Uuid,
+    /// Omitted means active tasks only, which is what every view wants by default.
+    #[serde(default)]
+    pub archived: ArchiveFilter,
 }
 
 pub async fn get_tasks(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<TaskQuery>,
 ) -> Result<ResponseJson<ApiResponse<Vec<TaskWithAttemptStatus>>>, ApiError> {
-    let tasks =
-        Task::find_by_project_id_with_attempt_status(&deployment.db().pool, query.project_id)
-            .await?;
+    let tasks = Task::find_by_project_id_with_attempt_status(
+        &deployment.db().pool,
+        query.project_id,
+        query.archived,
+    )
+    .await?;
 
     Ok(ResponseJson(ApiResponse::success(tasks)))
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct SetArchivedRequest {
+    pub task_ids: Vec<Uuid>,
+    pub archived: bool,
+}
+
+/// Archive or restore a set of tasks.
+///
+/// One endpoint for both directions and for any number of tasks: the list acts on a selection,
+/// and a single task is a selection of one.
+pub async fn set_tasks_archived(
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<SetArchivedRequest>,
+) -> Result<ResponseJson<ApiResponse<u64>>, ApiError> {
+    let updated =
+        Task::set_archived(&deployment.db().pool, &payload.task_ids, payload.archived).await?;
+
+    Ok(ResponseJson(ApiResponse::success(updated)))
 }
 
 pub async fn stream_tasks_ws(
@@ -122,18 +148,6 @@ pub async fn create_task(
         TaskImage::associate_many_dedup(&deployment.db().pool, task.id, image_ids).await?;
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "task_created",
-            serde_json::json!({
-            "task_id": task.id.to_string(),
-            "project_id": payload.project_id,
-            "has_description": task.description.is_some(),
-            "has_images": payload.image_ids.is_some(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(task)))
 }
 
@@ -162,18 +176,6 @@ pub async fn create_task_and_start(
     if let Some(image_ids) = &payload.task.image_ids {
         TaskImage::associate_many_dedup(pool, task.id, image_ids).await?;
     }
-
-    deployment
-        .track_if_analytics_allowed(
-            "task_created",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": task.project_id,
-                "has_description": task.description.is_some(),
-                "has_images": payload.task.image_ids.is_some(),
-            }),
-        )
-        .await;
 
     let attempt_id = Uuid::new_v4();
     let git_branch_name = deployment
@@ -226,17 +228,6 @@ pub async fn create_task_and_start(
         .await
         .inspect_err(|err| tracing::error!("Failed to start task attempt: {}", err))
         .is_ok();
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_started",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "executor": &payload.executor_profile_id.executor,
-                "variant": &payload.executor_profile_id.variant,
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
 
     let task = Task::find_by_id(pool, task.id)
         .await?
@@ -348,17 +339,6 @@ pub async fn delete_task(
         );
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "task_deleted",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": task.project_id.to_string(),
-                "attempt_count": attempts.len(),
-            }),
-        )
-        .await;
-
     let task_id = task.id;
     let pool = pool.clone();
     tokio::spawn(async move {
@@ -412,6 +392,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/", get(get_tasks).post(create_task))
         .route("/stream/ws", get(stream_tasks_ws))
         .route("/create-and-start", post(create_task_and_start))
+        .route("/archive", post(set_tasks_archived))
         .nest("/{task_id}", task_id_router);
 
     // mount under /projects/:project_id/tasks

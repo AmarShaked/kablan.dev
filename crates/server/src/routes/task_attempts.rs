@@ -26,7 +26,7 @@ use axum::{
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus},
-    merge::{Merge, MergeStatus, PrMerge, PullRequestInfo},
+    merge::{Merge, MergeStatus},
     repo::{Repo, RepoError},
     session::{CreateSession, Session},
     task::{Task, TaskRelationships, TaskStatus},
@@ -290,19 +290,6 @@ pub async fn create_task_attempt(
         tracing::error!("Failed to start task attempt: {}", err);
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_started",
-            serde_json::json!({
-                "task_id": workspace.task_id.to_string(),
-                "variant": &executor_profile_id.variant,
-                "executor": &executor_profile_id.executor,
-                "workspace_id": workspace.id.to_string(),
-                "repository_count": payload.repos.len(),
-            }),
-        )
-        .await;
-
     tracing::info!("Created attempt for task {}", task.id);
 
     Ok(ResponseJson(ApiResponse::success(workspace)))
@@ -326,16 +313,6 @@ pub async fn run_agent_setup(
         }
         _ => return Err(ApiError::Executor(ExecutorError::SetupHelperNotSupported)),
     }
-
-    deployment
-        .track_if_analytics_allowed(
-            "agent_setup_script_executed",
-            serde_json::json!({
-                "executor_profile_id": executor_profile_id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
 
     Ok(ResponseJson(ApiResponse::success(RunAgentSetupResponse {})))
 }
@@ -555,16 +532,6 @@ pub async fn merge_task_attempt(
         tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_merged",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(())))
 }
 
@@ -632,11 +599,62 @@ pub async fn force_push_task_attempt_branch(
     Ok(ResponseJson(ApiResponse::success(())))
 }
 
+/// Bring the attempt's branch up to date with its remote.
+///
+/// Fast-forward only, and the git service says so when the branches have diverged — the reply
+/// carries how many commits arrived so the client can tell "already up to date" from real work.
+pub async fn pull_task_attempt_branch(
+    Extension(workspace): Extension<Workspace>,
+    State(deployment): State<DeploymentImpl>,
+    Json(request): Json<PushTaskAttemptRequest>,
+) -> Result<ResponseJson<ApiResponse<usize, PullError>>, ApiError> {
+    let pool = &deployment.db().pool;
+
+    let workspace_repo =
+        WorkspaceRepo::find_by_workspace_and_repo_id(pool, workspace.id, request.repo_id)
+            .await?
+            .ok_or(RepoError::NotFound)?;
+
+    let repo = Repo::find_by_id(pool, workspace_repo.repo_id)
+        .await?
+        .ok_or(RepoError::NotFound)?;
+
+    let container_ref = deployment
+        .container()
+        .ensure_container_exists(&workspace)
+        .await?;
+    let worktree_path = Path::new(&container_ref).join(&repo.name);
+
+    match deployment
+        .git()
+        .pull_from_remote(&worktree_path, &workspace.branch)
+    {
+        Ok(pulled) => Ok(ResponseJson(ApiResponse::success(pulled))),
+        Err(GitServiceError::BranchesDiverged(message)) => Ok(ResponseJson(
+            ApiResponse::error_with_data(PullError::Diverged { message }),
+        )),
+        Err(GitServiceError::WorktreeDirty(_, message)) => Ok(ResponseJson(
+            ApiResponse::error_with_data(PullError::WorktreeDirty { message }),
+        )),
+        Err(e) => Err(ApiError::GitService(e)),
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(tag = "type", rename_all = "snake_case")]
 pub enum PushError {
     ForcePushRequired,
+}
+
+/// Why a pull could not happen. Both cases are things the person has to decide about, not
+/// failures to report and forget: one needs a rebase, the other needs the worktree tidied.
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(tag = "type", rename_all = "snake_case")]
+pub enum PullError {
+    Diverged { message: String },
+    WorktreeDirty { message: String },
 }
 
 #[derive(serde::Deserialize, TS)]
@@ -694,17 +712,6 @@ pub async fn open_task_attempt_in_editor(
                 path.display(),
                 if url.is_some() { " (remote mode)" } else { "" }
             );
-
-            deployment
-                .track_if_analytics_allowed(
-                    "task_attempt_editor_opened",
-                    serde_json::json!({
-                        "workspace_id": workspace.id.to_string(),
-                        "editor_type": payload.editor_type.as_ref(),
-                        "remote_mode": url.is_some(),
-                    }),
-                )
-                .await;
 
             Ok(ResponseJson(ApiResponse::success(OpenEditorResponse {
                 url,
@@ -852,24 +859,17 @@ pub async fn get_task_attempt_branch_status(
             }
         };
 
-        let (remote_ahead, remote_behind) = if let Some(Merge::Pr(PrMerge {
-            pr_info:
-                PullRequestInfo {
-                    status: MergeStatus::Open,
-                    ..
-                },
-            ..
-        })) = repo_merges.first()
+        // Against the upstream, from refs already on disk. This used to run only when a pull
+        // request was open, and fetched from the remote to answer — on a five-second poll, for
+        // every attempt. Reading the remote-tracking ref costs nothing, works the same on a host
+        // whose requests this app cannot create, and is what tells the pull button to appear.
+        let (remote_ahead, remote_behind) = match deployment
+            .git()
+            .get_upstream_divergence(&repo.path, &workspace.branch)
         {
-            match deployment
-                .git()
-                .get_remote_branch_status(&repo.path, &workspace.branch, None)
-            {
-                Ok((ahead, behind)) => (Some(ahead), Some(behind)),
-                Err(_) => (None, None),
-            }
-        } else {
-            (None, None)
+            Ok((ahead, behind)) => (Some(ahead), Some(behind)),
+            // No upstream yet: the branch has never been pushed.
+            Err(_) => (None, None),
         };
 
         results.push(RepoBranchStatus {
@@ -965,16 +965,6 @@ pub async fn change_target_branch(
         deployment
             .git()
             .get_branch_status(&repo.path, &workspace.branch, &new_target_branch)?;
-
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_target_branch_changed",
-            serde_json::json!({
-                "repo_id": repo_id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
 
     Ok(ResponseJson(ApiResponse::success(
         ChangeTargetBranchResponse {
@@ -1111,15 +1101,6 @@ pub async fn rename_branch(
         );
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_branch_renamed",
-            serde_json::json!({
-                "updated_children": updated_children_count,
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(RenameBranchResponse {
         branch: new_branch_name.to_string(),
     })))
@@ -1211,16 +1192,6 @@ pub async fn rebase_task_attempt(
             other => Err(ApiError::GitService(other)),
         };
     }
-
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_rebased",
-            serde_json::json!({
-                "workspace_id": workspace.id.to_string(),
-                "repo_id": payload.repo_id.to_string(),
-            }),
-        )
-        .await;
 
     Ok(ResponseJson(ApiResponse::success(())))
 }
@@ -1410,17 +1381,6 @@ pub async fn start_dev_server(
         execution_processes.push(execution_process);
     }
 
-    deployment
-        .track_if_analytics_allowed(
-            "dev_server_started",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": project.id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(execution_processes)))
 }
 
@@ -1429,20 +1389,7 @@ pub async fn get_task_attempt_children(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<TaskRelationships>>, StatusCode> {
     match Task::find_relationships_for_workspace(&deployment.db().pool, &workspace).await {
-        Ok(relationships) => {
-            deployment
-                .track_if_analytics_allowed(
-                    "task_attempt_children_viewed",
-                    serde_json::json!({
-                        "workspace_id": workspace.id.to_string(),
-                        "children_count": relationships.children.len(),
-                        "parent_count": if relationships.parent_task.is_some() { 1 } else { 0 },
-                    }),
-                )
-                .await;
-
-            Ok(ResponseJson(ApiResponse::success(relationships)))
-        }
+        Ok(relationships) => Ok(ResponseJson(ApiResponse::success(relationships))),
         Err(e) => {
             tracing::error!(
                 "Failed to fetch relationships for task attempt {}: {}",
@@ -1459,15 +1406,6 @@ pub async fn stop_task_attempt_execution(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
     deployment.container().try_stop(&workspace, false).await;
-
-    deployment
-        .track_if_analytics_allowed(
-            "task_attempt_stopped",
-            serde_json::json!({
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
 
     Ok(ResponseJson(ApiResponse::success(())))
 }
@@ -1506,7 +1444,7 @@ pub async fn run_setup_script(
         .await?
         .ok_or(SqlxError::RowNotFound)?;
 
-    let project = task
+    let _project = task
         .parent_project(pool)
         .await?
         .ok_or(SqlxError::RowNotFound)?;
@@ -1545,17 +1483,6 @@ pub async fn run_setup_script(
         )
         .await?;
 
-    deployment
-        .track_if_analytics_allowed(
-            "setup_script_executed",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": project.id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(execution_process)))
 }
 
@@ -1585,7 +1512,7 @@ pub async fn run_cleanup_script(
         .await?
         .ok_or(SqlxError::RowNotFound)?;
 
-    let project = task
+    let _project = task
         .parent_project(pool)
         .await?
         .ok_or(SqlxError::RowNotFound)?;
@@ -1624,17 +1551,6 @@ pub async fn run_cleanup_script(
         )
         .await?;
 
-    deployment
-        .track_if_analytics_allowed(
-            "cleanup_script_executed",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": project.id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(execution_process)))
 }
 
@@ -1661,7 +1577,7 @@ pub async fn run_archive_script(
         .await?
         .ok_or(SqlxError::RowNotFound)?;
 
-    let project = task
+    let _project = task
         .parent_project(pool)
         .await?
         .ok_or(SqlxError::RowNotFound)?;
@@ -1698,17 +1614,6 @@ pub async fn run_archive_script(
         )
         .await?;
 
-    deployment
-        .track_if_analytics_allowed(
-            "archive_script_executed",
-            serde_json::json!({
-                "task_id": task.id.to_string(),
-                "project_id": project.id.to_string(),
-                "workspace_id": workspace.id.to_string(),
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(execution_process)))
 }
 
@@ -1718,18 +1623,7 @@ pub async fn gh_cli_setup_handler(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<ExecutionProcess, GhCliSetupError>>, ApiError> {
     match gh_cli_setup::run_gh_cli_setup(&deployment, &workspace).await {
-        Ok(execution_process) => {
-            deployment
-                .track_if_analytics_allowed(
-                    "gh_cli_setup_executed",
-                    serde_json::json!({
-                        "workspace_id": workspace.id.to_string(),
-                    }),
-                )
-                .await;
-
-            Ok(ResponseJson(ApiResponse::success(execution_process)))
-        }
+        Ok(execution_process) => Ok(ResponseJson(ApiResponse::success(execution_process))),
         Err(ApiError::Executor(ExecutorError::ExecutableNotFound { program }))
             if program == "brew" =>
         {
@@ -1834,16 +1728,6 @@ pub async fn delete_workspace(
     if rows_affected == 0 {
         return Err(ApiError::Database(SqlxError::RowNotFound));
     }
-
-    deployment
-        .track_if_analytics_allowed(
-            "workspace_deleted",
-            serde_json::json!({
-                "workspace_id": workspace.id.to_string(),
-                "task_id": workspace.task_id.to_string(),
-            }),
-        )
-        .await;
 
     // Attempt remote workspace deletion if requested
     if query.delete_remote {
@@ -2004,6 +1888,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
                 .route("/merge", post(merge_task_attempt))
                 .route("/push", post(push_task_attempt_branch))
                 .route("/push/force", post(force_push_task_attempt_branch))
+                .route("/pull", post(pull_task_attempt_branch))
                 .route("/rebase", post(rebase_task_attempt))
                 .route("/rebase/continue", post(continue_rebase_task_attempt))
                 .route("/conflicts/abort", post(abort_conflicts_task_attempt))

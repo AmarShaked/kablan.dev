@@ -101,7 +101,14 @@ function toRepoItem(repo: Repo): RepoItem {
   };
 }
 
-export function FileTagTypeaheadPlugin({ repoIds }: { repoIds?: string[] }) {
+export function FileTagTypeaheadPlugin({
+  repoIds,
+  projectId,
+}: {
+  repoIds?: string[];
+  /** Scopes the tag suggestions: this project's tags plus the global ones. */
+  projectId?: string;
+}) {
   const [editor] = useLexicalComposerContext();
   const [options, setOptions] = useState<FileTagOption[]>([]);
   const [recentRepoCatalog, setRecentRepoCatalog] = useState<Repo[] | null>(
@@ -170,6 +177,7 @@ export function FileTagTypeaheadPlugin({ repoIds }: { repoIds?: string[] }) {
         // Here query is a string, including possible empty string ''
         const serverResults = await searchTagsAndFiles(query, {
           repoIds: scopedRepoIds,
+          projectId,
         });
 
         if (requestId !== searchRequestRef.current) {
@@ -209,7 +217,7 @@ export function FileTagTypeaheadPlugin({ repoIds }: { repoIds?: string[] }) {
         });
       }
     },
-    [diffPaths, effectiveRepoIds]
+    [diffPaths, effectiveRepoIds, projectId]
   );
 
   useEffect(() => {

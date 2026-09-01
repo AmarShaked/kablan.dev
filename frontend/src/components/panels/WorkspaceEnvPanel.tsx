@@ -167,9 +167,11 @@ export function WorkspaceEnvPanel({
             className="font-ibm-plex-mono min-w-0 flex-1 truncate text-xs text-muted-foreground"
             title={worktreePath}
             // The tail of the path is the part that identifies it, so truncate from the front.
+            // The bdi isolates the path so its own left-to-right order holds — without it the
+            // bidi algorithm treats the leading "/" as neutral and moves it to the end.
             dir="rtl"
           >
-            {worktreePath}
+            <bdi>{worktreePath}</bdi>
           </span>
         )}
         <button

@@ -68,15 +68,23 @@ export type CreateWorkspaceRepo = { repo_id: string, target_branch: string, };
 
 export type RepoWithTargetBranch = { target_branch: string, id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, created_at: Date, updated_at: Date, };
 
-export type Tag = { id: string, tag_name: string, content: string, created_at: string, updated_at: string, };
+export type Tag = { id: string, 
+/**
+ * The project this tag belongs to. None means it is available in every project.
+ */
+project_id: string | null, tag_name: string, content: string, created_at: string, updated_at: string, };
 
-export type CreateTag = { tag_name: string, content: string, };
+export type CreateTag = { project_id: string | null, tag_name: string, content: string, };
 
 export type UpdateTag = { tag_name: string | null, content: string | null, };
 
 export type TaskStatus = "todo" | "inprogress" | "inreview" | "done" | "cancelled";
 
-export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, created_at: string, updated_at: string, };
+export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, 
+/**
+ * When this task was archived, or None while it is still in the views.
+ */
+archived_at: string | null, created_at: string, updated_at: string, };
 
 export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, 
 /**
@@ -84,13 +92,21 @@ export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_att
  * answers "which task is using it" — the reason it's worth surfacing per task rather than
  * only inside the preview panel.
  */
-has_running_dev_server: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, created_at: string, updated_at: string, };
+has_running_dev_server: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, 
+/**
+ * When this task was archived, or None while it is still in the views.
+ */
+archived_at: string | null, created_at: string, updated_at: string, };
 
 export type TaskRelationships = { parent_task: Task | null, current_workspace: Workspace, children: Array<Task>, };
 
 export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
 
 export type UpdateTask = { title: string | null, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
+
+export type ArchiveFilter = "active" | "archived" | "all";
+
+export type SetArchivedRequest = { task_ids: Array<string>, archived: boolean, };
 
 export type DraftFollowUpData = { message: string, executor_profile_id: ExecutorProfileId, };
 
@@ -294,11 +310,16 @@ export type RegisterRepoRequest = { path: string, display_name: string | null, }
 
 export type InitRepoRequest = { parent_path: string, folder_name: string, };
 
-export type TagSearchParams = { search: string | null, };
+export type TagSearchParams = { search: string | null, 
+/**
+ * Scope the list to one project: its own tags plus the global ones. Omitted returns every
+ * tag, which is what the settings screen that manages them wants.
+ */
+project_id: string | null, };
 
 export type TokenResponse = { access_token: string, expires_at: string | null, };
 
-export type UserSystemInfo = { config: Config, analytics_user_id: string, login_status: LoginStatus, environment: Environment, 
+export type UserSystemInfo = { config: Config, login_status: LoginStatus, environment: Environment, 
 /**
  * Capabilities supported per executor (e.g., { "CLAUDE_CODE": ["SESSION_FORK"] })
  */
@@ -371,6 +392,8 @@ export type AbortConflictsRequest = { repo_id: string, };
 export type GitOperationError = { "type": "merge_conflicts", message: string, op: ConflictOp, conflicted_files: Array<string>, target_branch: string, } | { "type": "rebase_in_progress" };
 
 export type PushError = { "type": "force_push_required" };
+
+export type PullError = { "type": "diverged", message: string, } | { "type": "worktree_dirty", message: string, };
 
 export type PrError = { "type": "cli_not_installed", provider: ProviderKind, } | { "type": "cli_not_logged_in", provider: ProviderKind, } | { "type": "git_cli_not_logged_in" } | { "type": "git_cli_not_installed" } | { "type": "target_branch_not_found", branch: string, } | { "type": "unsupported_provider" };
 
@@ -476,7 +499,15 @@ export type DirectoryListResponse = { entries: Array<DirectoryEntry>, current_pa
 
 export type SearchMode = "taskform" | "settings";
 
-export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, analytics_enabled: boolean, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, };
+export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
+/**
+ * Days a task stays in the views after it is done or cancelled, before it is archived out of
+ * them. None turns automatic archiving off; archiving by hand still works.
+ *
+ * Defaulted rather than versioned: a config written before this existed reads as the same
+ * seven days a new one gets, so nothing has to migrate.
+ */
+archive_tasks_after_days: number | null, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 

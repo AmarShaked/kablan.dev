@@ -1,22 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
-import {
-  AlertTriangle,
-  Cloud,
-  Columns3,
-  ExternalLink,
-  List,
-  Sparkles,
-} from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { Loader } from '@/components/ui/loader';
 import { tasksApi } from '@/lib/api';
 import type { Workspace } from 'shared/types';
 import { openTaskForm } from '@/lib/openTaskForm';
-import { BetaWorkspacesDialog } from '@/components/dialogs/global/BetaWorkspacesDialog';
-import { useUserSystem } from '@/contexts/UserSystemContext';
-import { useWorkspaceCount } from '@/hooks/useWorkspaceCount';
 import { usePostHog } from 'posthog-js/react';
 
 import { useSearch } from '@/contexts/SearchContext';
@@ -46,15 +35,14 @@ import {
   useKeyCycleViewBackward,
 } from '@/keyboard';
 
-import TaskKanbanBoard, {
-  type KanbanColumns,
-} from '@/components/tasks/TaskKanbanBoard';
+// The board is not reachable for now, but its column shape is still what this page builds.
+import { type KanbanColumns } from '@/components/tasks/TaskKanbanBoard';
 import {
   NoTasksEmptyState,
   NoSearchResultsEmptyState,
 } from '@/components/tasks/TasksEmptyState';
-import { TaskListView } from '@/components/tasks/TaskListView';
-import { TaskSidebarList } from '@/components/tasks/TaskSidebarList';
+import { TaskGroupSidebar } from '@/components/tasks/TaskGroupSidebar';
+import { TaskGroupSidebarSkeleton } from '@/components/tasks/TaskGroupSidebarSkeleton';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -74,17 +62,13 @@ import {
   BreadcrumbList,
   BreadcrumbLink,
   BreadcrumbPage,
-  BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { AttemptHeaderActions } from '@/components/panels/AttemptHeaderActions';
 import { TaskPanelHeaderActions } from '@/components/panels/TaskPanelHeaderActions';
-import { useSelectedOrgId } from '@/stores/useOrganizationStore';
 
 import type { TaskWithAttemptStatus, TaskStatus } from 'shared/types';
 
 type Task = TaskWithAttemptStatus;
-
-const TASK_VIEW_KEY = 'kablan.tasks.view';
 
 const TASK_STATUSES = [
   'todo',
@@ -131,11 +115,9 @@ export function ProjectTasks() {
 
   const {
     projectId,
-    project,
     isLoading: projectLoading,
     error: projectError,
   } = useProject();
-  const selectedOrgId = useSelectedOrgId();
 
   useEffect(() => {
     enableScope(Scope.KANBAN);
@@ -164,55 +146,16 @@ export function ProjectTasks() {
     [taskId, tasksById]
   );
 
+  // Lifts the composer only once the transcript has actually scrolled under it.
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [isTranscriptScrolled, setIsTranscriptScrolled] = useState(false);
+
   const isPanelOpen = Boolean(taskId && selectedTask);
-
-  const { config, updateAndSaveConfig, loading } = useUserSystem();
-
-  const isLoaded = !loading;
 
   // Kablan fork: upstream opened a five-slide feature tour here the first time the task panel was
   // used. Its slides were vibe-kanban screenshots and it streamed videos from the original
   // author's personal CDN (vkcdn.britannio.dev), so every user of this fork would have pulled
   // promotional media from them. Removed rather than rebranded.
-
-  // Beta workspaces invitation - only fetch count if invitation not yet sent
-  const shouldCheckBetaInvitation =
-    isLoaded && !config?.beta_workspaces_invitation_sent;
-  const { data: workspaceCount } = useWorkspaceCount({
-    enabled: shouldCheckBetaInvitation,
-  });
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (config?.beta_workspaces_invitation_sent) return;
-    if (workspaceCount === undefined || workspaceCount <= 5) return;
-
-    BetaWorkspacesDialog.show().then((joinBeta) => {
-      BetaWorkspacesDialog.hide();
-      void updateAndSaveConfig({
-        beta_workspaces_invitation_sent: true,
-        beta_workspaces: joinBeta === true,
-      });
-      if (joinBeta === true) {
-        navigate('/workspaces');
-      }
-    });
-  }, [
-    isLoaded,
-    config?.beta_workspaces_invitation_sent,
-    workspaceCount,
-    updateAndSaveConfig,
-    navigate,
-  ]);
-
-  // Redirect beta users from old attempt URLs to the new workspaces UI
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!config?.beta_workspaces) return;
-    if (!attemptId || attemptId === 'latest') return;
-
-    navigate(`/workspaces/${attemptId}`, { replace: true });
-  }, [isLoaded, config?.beta_workspaces, attemptId, navigate]);
 
   const isLatest = attemptId === 'latest';
   const { data: attempts = [], isLoading: isAttemptsLoading } = useTaskAttempts(
@@ -341,23 +284,6 @@ export function ProjectTasks() {
     },
     { scope: Scope.KANBAN }
   );
-
-  // Board vs list, remembered across visits.
-  const [taskView, setTaskView] = useState<'board' | 'list'>(() => {
-    try {
-      return localStorage.getItem(TASK_VIEW_KEY) === 'list' ? 'list' : 'board';
-    } catch {
-      return 'board';
-    }
-  });
-  const changeTaskView = (next: 'board' | 'list') => {
-    setTaskView(next);
-    try {
-      localStorage.setItem(TASK_VIEW_KEY, next);
-    } catch {
-      // Blocked storage: the choice just won't persist.
-    }
-  };
 
   const hasSearch = Boolean(searchQuery.trim());
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -565,19 +491,13 @@ export function ProjectTasks() {
     (task: Task, attemptIdToShow?: string) => {
       if (!projectId) return;
 
-      // If beta_workspaces is enabled, always navigate to task view (not attempt)
-      if (config?.beta_workspaces) {
-        navigateWithSearch(paths.task(projectId, task.id));
-        return;
-      }
-
       if (attemptIdToShow) {
         navigateWithSearch(paths.attempt(projectId, task.id, attemptIdToShow));
       } else {
         navigateWithSearch(`${paths.task(projectId, task.id)}/attempts/latest`);
       }
     },
-    [projectId, navigateWithSearch, config?.beta_workspaces]
+    [projectId, navigateWithSearch]
   );
 
   const selectNextTask = useCallback(() => {
@@ -732,67 +652,27 @@ export function ProjectTasks() {
   // With a task open the left pane becomes the task list: the board's columns are unreadable at
   // sidebar width, and losing sight of the other tasks was the point of the redesign. The centre
   // (the agent conversation) is untouched.
-  const kanbanContent = isPanelOpen ? (
-    <TaskSidebarList
-      tasksByStatus={visibleTasksByStatus}
-      order={TASK_STATUSES}
-      selectedTaskId={selectedTask?.id}
-      onSelect={handleViewTaskDetails}
-    />
+  // One view now: the grouped task list is always the left column, whether or not a task is
+  // open. The board and the full-width list each answered "show me everything" by taking the
+  // window, so opening a task meant losing the list and going back meant leaving the
+  // conversation. Both still exist (TaskKanbanBoard, TaskListView) and neither is reachable.
+  const kanbanContent = isInitialTasksLoad ? (
+    // Switching projects goes through here: the query key changes, tasks empties, and without
+    // this the column would flash the "no tasks" state before the new ones arrive.
+    <TaskGroupSidebarSkeleton />
   ) : tasks.length === 0 ? (
     <NoTasksEmptyState onCreate={handleCreateNewTask} />
   ) : !hasVisibleTasks ? (
     <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
   ) : (
-    <div className="flex h-full w-full flex-col overflow-hidden">
-      {/* Board vs list. Sits with the content rather than in the page chrome, because the
-            chrome is shared with the task-detail view where the choice is meaningless. */}
-      <div className="flex shrink-0 justify-end px-6 pt-3">
-        <div className="flex items-center border border-border p-0.5">
-          <Button
-            variant={taskView === 'board' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 w-7 p-0"
-            onClick={() => changeTaskView('board')}
-            aria-label="Board view"
-            aria-pressed={taskView === 'board'}
-            title="Board view"
-          >
-            <Columns3 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={taskView === 'list' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 w-7 p-0"
-            onClick={() => changeTaskView('list')}
-            aria-label="List view"
-            aria-pressed={taskView === 'list'}
-            title="List view"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
-        {taskView === 'list' ? (
-          <TaskListView
-            columns={kanbanColumns}
-            order={TASK_STATUSES}
-            selectedTaskId={selectedTask?.id}
-            onViewTaskDetails={handleViewTaskDetails}
-          />
-        ) : (
-          <TaskKanbanBoard
-            columns={kanbanColumns}
-            onDragEnd={handleDragEnd}
-            onViewTaskDetails={handleViewTaskDetails}
-            selectedTaskId={selectedTask?.id}
-            onCreateTask={handleCreateNewTask}
-            projectId={projectId!}
-          />
-        )}
-      </div>
-    </div>
+    <TaskGroupSidebar
+      columns={visibleTasksByStatus}
+      order={TASK_STATUSES}
+      selectedTaskId={selectedTask?.id}
+      onSelect={handleViewTaskDetails}
+      onCreateTask={handleCreateNewTask}
+      onDragEnd={handleDragEnd}
+    />
   );
 
   const rightHeader = selectedTask ? (
@@ -838,16 +718,6 @@ export function ProjectTasks() {
                 </BreadcrumbLink>
               )}
             </BreadcrumbItem>
-            {!isTaskView && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>
-                    {attempt?.branch || 'Task Attempt'}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
           </BreadcrumbList>
         </Breadcrumb>
       </div>
@@ -855,7 +725,7 @@ export function ProjectTasks() {
   ) : null;
 
   const attemptContent = selectedTask ? (
-    <NewCard className="h-full min-h-0 flex flex-col bg-muted border-0">
+    <NewCard className="h-full min-h-0 flex flex-col bg-muted/25 border-0">
       {isTaskView ? (
         <TaskPanel task={selectedTask} />
       ) : (
@@ -863,16 +733,39 @@ export function ProjectTasks() {
           {({ logs, followUp }) => (
             <>
               <GitErrorBanner />
-              <div className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-1 min-h-0 flex flex-col">{logs}</div>
+              {/* Scroll events do not bubble, but they do capture — so the column can watch the
+                  transcript scroll without the virtualised list having to expose anything.
+                  Scrolls originating inside the composer itself are ignored. */}
+              <div
+                className="flex-1 min-h-0 flex flex-col"
+                onScrollCapture={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (composerRef.current?.contains(target)) return;
+                  const scrolled = target.scrollTop > 1;
+                  setIsTranscriptScrolled((prev) =>
+                    prev === scrolled ? prev : scrolled
+                  );
+                }}
+              >
+                <div className="relative flex-1 min-h-0 flex flex-col">
+                  {logs}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-8 backdrop-blur-[3px] [mask-image:linear-gradient(to_top,black_20%,transparent)]"
+                  />
+                </div>
 
-                <div className="shrink-0 border-t">
+                <div className="shrink-0">
                   <div className="mx-auto w-full max-w-[50rem]">
                     <TodoPanel />
                   </div>
                 </div>
 
-                <div className="min-h-0 max-h-[50%] border-t overflow-hidden bg-background">
+                <div
+                  ref={composerRef}
+                  data-scrolled={isTranscriptScrolled}
+                  className="group/composer min-h-0 max-h-[50%] overflow-hidden"
+                >
                   <div className="mx-auto w-full max-w-[50rem] h-full min-h-0">
                     {followUp}
                   </div>
@@ -883,7 +776,14 @@ export function ProjectTasks() {
         </TaskAttemptPanel>
       )}
     </NewCard>
-  ) : null;
+  ) : (
+    // The right side is always there now, so it has to say something when nothing is chosen.
+    <div className="flex h-full items-center justify-center px-6 text-center">
+      <p className="max-w-xs text-sm text-muted-foreground">
+        Pick a task on the left to see its conversation and details.
+      </p>
+    </div>
+  );
 
   const auxContent =
     selectedTask && attempt ? (
@@ -893,7 +793,6 @@ export function ProjectTasks() {
             attempt={attempt}
             task={selectedTask}
             onOpenDiffs={() => setMode('diffs')}
-            onOpenLogs={() => setMode('logs')}
             onOpenEnv={() => setMode('env')}
           />
         )}
@@ -938,64 +837,6 @@ export function ProjectTasks() {
           </AlertTitle>
           <AlertDescription>{streamError}</AlertDescription>
         </Alert>
-      )}
-
-      {config?.beta_workspaces && (
-        <div className="mx-4 my-4 flex justify-center">
-          <div className="max-w-2xl w-full p-3 border border-orange-500/30 bg-orange-500/5 rounded flex items-center gap-4">
-            <div className="flex items-center gap-3 flex-1">
-              {project?.remote_project_id ? (
-                <Cloud className="h-5 w-5 text-orange-500" />
-              ) : (
-                <Sparkles className="h-5 w-5 text-orange-500" />
-              )}
-              <div>
-                {project?.remote_project_id ? (
-                  <>
-                    <p className="text-sm font-medium">
-                      Project migrated to Cloud
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Access collaboration, tags, priorities, and more
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium">
-                      Migrate this project to the cloud
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Get collaboration, tags, priorities, sub-issues and more
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-            {project?.remote_project_id ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  navigate(
-                    `/projects/${project.remote_project_id}${selectedOrgId ? `?orgId=${selectedOrgId}` : ''}`
-                  )
-                }
-                className="flex items-center gap-1.5"
-              >
-                View project
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/migrate')}
-              >
-                Learn more
-              </Button>
-            )}
-          </div>
-        </div>
       )}
 
       <div className="flex-1 min-h-0">{attemptArea}</div>

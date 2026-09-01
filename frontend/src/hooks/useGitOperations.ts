@@ -1,5 +1,6 @@
 import { useRebase } from './useRebase';
 import { useMerge } from './useMerge';
+import { usePull } from './usePull';
 import { usePush } from './usePush';
 import { useForcePush } from './useForcePush';
 import { useChangeTargetBranch } from './useChangeTargetBranch';
@@ -76,6 +77,22 @@ export function useGitOperations(
     }
   );
 
+  const pull = usePull(
+    attemptId,
+    () => setError(null),
+    (err: unknown, errorData) => {
+      // Both refusals are specific and actionable, so they are surfaced as themselves rather
+      // than as "failed to pull".
+      const message =
+        errorData?.type === 'diverged' || errorData?.type === 'worktree_dirty'
+          ? errorData.message
+          : err && typeof err === 'object' && 'message' in err
+            ? String(err.message)
+            : 'Failed to pull';
+      setError(message);
+    }
+  );
+
   const changeTargetBranch = useChangeTargetBranch(
     attemptId,
     repoId,
@@ -93,6 +110,7 @@ export function useGitOperations(
     rebase.isPending ||
     merge.isPending ||
     push.isPending ||
+    pull.isPending ||
     forcePush.isPending ||
     changeTargetBranch.isPending;
 
@@ -101,6 +119,7 @@ export function useGitOperations(
       rebase: rebase.mutateAsync,
       merge: merge.mutateAsync,
       push: push.mutateAsync,
+      pull: pull.mutateAsync,
       forcePush: forcePush.mutateAsync,
       changeTargetBranch: changeTargetBranch.mutateAsync,
     },
@@ -109,6 +128,7 @@ export function useGitOperations(
       rebasePending: rebase.isPending,
       mergePending: merge.isPending,
       pushPending: push.isPending,
+      pullPending: pull.isPending,
       forcePushPending: forcePush.isPending,
       changeTargetBranchPending: changeTargetBranch.isPending,
     },

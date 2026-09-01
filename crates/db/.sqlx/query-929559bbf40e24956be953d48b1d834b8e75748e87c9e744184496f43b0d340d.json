@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tasks\n                  SET status = $2,\n                      archived_at = CASE WHEN $3 THEN NULL ELSE archived_at END,\n                      updated_at = CURRENT_TIMESTAMP\n                WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "929559bbf40e24956be953d48b1d834b8e75748e87c9e744184496f43b0d340d"
+}

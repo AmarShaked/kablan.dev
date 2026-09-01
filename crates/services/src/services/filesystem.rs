@@ -236,9 +236,7 @@ impl FilesystemService {
 
                     // Skip the app temp directory and all subdirectories
                     // Normalize to handle macOS /private/var vs /var aliasing
-                    if utils::path::normalize_macos_private_alias(path)
-                        .starts_with(&app_temp_dir)
-                    {
+                    if utils::path::normalize_macos_private_alias(path).starts_with(&app_temp_dir) {
                         return false;
                     }
 

@@ -3,7 +3,6 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useTaskAttemptsWithSessions } from '@/hooks/useTaskAttempts';
 import { useTaskAttemptWithSession } from '@/hooks/useTaskAttempt';
 import { useNavigateWithSearch } from '@/hooks';
-import { useUserSystem } from '@/contexts/UserSystemContext';
 import { paths } from '@/lib/paths';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
@@ -13,6 +12,7 @@ import { PlusIcon } from 'lucide-react';
 import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
 import WYSIWYGEditor from '@/components/ui/wysiwyg';
 import { DataTable, type ColumnDef } from '@/components/ui/table';
+import { AttemptsEmptyState } from '@/components/tasks/AttemptsEmptyState';
 
 interface TaskPanelProps {
   task: TaskWithAttemptStatus | null;
@@ -22,7 +22,6 @@ const TaskPanel = ({ task }: TaskPanelProps) => {
   const { t } = useTranslation('tasks');
   const navigate = useNavigateWithSearch();
   const { projectId } = useProject();
-  const { config } = useUserSystem();
 
   const {
     data: attempts = [],
@@ -117,9 +116,7 @@ const TaskPanel = ({ task }: TaskPanelProps) => {
                 columns={attemptColumns}
                 keyExtractor={(attempt) => attempt.id}
                 onRowClick={(attempt) => {
-                  if (config?.beta_workspaces) {
-                    navigate(`/workspaces/${attempt.id}`);
-                  } else if (projectId) {
+                  if (projectId) {
                     navigate(
                       paths.attempt(projectId, attempt.task_id, attempt.id)
                     );
@@ -138,15 +135,19 @@ const TaskPanel = ({ task }: TaskPanelProps) => {
               <div className="text-destructive">
                 {t('taskPanel.errorLoadingAttempts')}
               </div>
+            ) : displayedAttempts.length === 0 ? (
+              // A task with nothing run against it is the start of the flow, not a table with
+              // no rows in it — so it gets the same welcome the projects and tasks pages give.
+              <AttemptsEmptyState
+                onStart={() => CreateAttemptDialog.show({ taskId: task.id })}
+              />
             ) : (
               <DataTable
                 data={displayedAttempts}
                 columns={attemptColumns}
                 keyExtractor={(attempt) => attempt.id}
                 onRowClick={(attempt) => {
-                  if (config?.beta_workspaces) {
-                    navigate(`/workspaces/${attempt.id}`);
-                  } else if (projectId && task.id) {
+                  if (projectId && task.id) {
                     navigate(paths.attempt(projectId, task.id, attempt.id));
                   }
                 }}

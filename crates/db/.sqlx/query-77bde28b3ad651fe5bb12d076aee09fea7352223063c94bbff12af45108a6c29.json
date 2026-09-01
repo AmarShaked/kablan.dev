@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n  t.id                            AS \"id!: Uuid\",\n  t.project_id                    AS \"project_id!: Uuid\",\n  t.title,\n  t.description,\n  t.status                        AS \"status!: TaskStatus\",\n  t.parent_workspace_id           AS \"parent_workspace_id: Uuid\",\n  t.archived_at                   AS \"archived_at: DateTime<Utc>\",\n  t.created_at                    AS \"created_at!: DateTime<Utc>\",\n  t.updated_at                    AS \"updated_at!: DateTime<Utc>\",\n\n  CASE WHEN EXISTS (\n    SELECT 1\n      FROM workspaces w\n      JOIN sessions s ON s.workspace_id = w.id\n      JOIN execution_processes ep ON ep.session_id = s.id\n     WHERE w.task_id       = t.id\n       AND ep.status        = 'running'\n       AND ep.run_reason IN ('setupscript','cleanupscript','codingagent')\n     LIMIT 1\n  ) THEN 1 ELSE 0 END            AS \"has_in_progress_attempt!: i64\",\n\n  CASE WHEN EXISTS (\n    SELECT 1\n      FROM workspaces w\n      JOIN sessions s ON s.workspace_id = w.id\n      JOIN execution_processes ep ON ep.session_id = s.id\n     WHERE w.task_id       = t.id\n       AND ep.status        = 'running'\n       AND ep.run_reason    = 'devserver'\n     LIMIT 1\n  ) THEN 1 ELSE 0 END            AS \"has_running_dev_server!: i64\",\n\n  CASE WHEN (\n    SELECT ep.status\n      FROM workspaces w\n      JOIN sessions s ON s.workspace_id = w.id\n      JOIN execution_processes ep ON ep.session_id = s.id\n     WHERE w.task_id       = t.id\n     AND ep.run_reason IN ('setupscript','cleanupscript','codingagent')\n     ORDER BY ep.created_at DESC\n     LIMIT 1\n  ) IN ('failed','killed') THEN 1 ELSE 0 END\n                                 AS \"last_attempt_failed!: i64\",\n\n  ( SELECT s.executor\n      FROM workspaces w\n      JOIN sessions s ON s.workspace_id = w.id\n      WHERE w.task_id = t.id\n     ORDER BY s.created_at DESC\n      LIMIT 1\n    )                               AS \"executor!: String\"\n\nFROM tasks t\nWHERE t.project_id = $1\n  -- One query for the three cases: $2 is null to see everything, otherwise it asks for rows\n  -- whose archived state matches. Written this way so the filter cannot be forgotten at a call\n  -- site — it is an argument, not something the caller appends.\n  AND ( $2 IS NULL\n        OR ($2 = 0 AND t.archived_at IS NULL)\n        OR ($2 = 1 AND t.archived_at IS NOT NULL) )\nORDER BY t.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: TaskStatus",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_workspace_id: Uuid",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "archived_at: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "has_in_progress_attempt!: i64",
+        "ordinal": 9,
+        "type_info": "Null"
+      },
+      {
+        "name": "has_running_dev_server!: i64",
+        "ordinal": 10,
+        "type_info": "Null"
+      },
+      {
+        "name": "last_attempt_failed!: i64",
+        "ordinal": 11,
+        "type_info": "Null"
+      },
+      {
+        "name": "executor!: String",
+        "ordinal": 12,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "77bde28b3ad651fe5bb12d076aee09fea7352223063c94bbff12af45108a6c29"
+}

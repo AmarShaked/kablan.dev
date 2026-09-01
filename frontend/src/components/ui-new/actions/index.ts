@@ -73,7 +73,6 @@ import { DeleteWorkspaceDialog } from '@/components/ui-new/dialogs/DeleteWorkspa
 import { RebaseDialog } from '@/components/ui-new/dialogs/RebaseDialog';
 import { ResolveConflictsDialog } from '@/components/ui-new/dialogs/ResolveConflictsDialog';
 import { RenameWorkspaceDialog } from '@/components/ui-new/dialogs/RenameWorkspaceDialog';
-import { CreatePRDialog } from '@/components/dialogs/tasks/CreatePRDialog';
 import { getIdeName } from '@/components/ide/IdeIcon';
 import { EditorSelectionDialog } from '@/components/dialogs/tasks/EditorSelectionDialog';
 import { StartReviewDialog } from '@/components/dialogs/tasks/StartReviewDialog';
@@ -942,38 +941,6 @@ export const Actions = {
   },
 
   // === Git Actions ===
-  GitCreatePR: {
-    id: 'git-create-pr',
-    label: 'Create Pull Request',
-    icon: GitPullRequestIcon,
-    shortcut: 'X P',
-    requiresTarget: ActionTargetType.GIT,
-    isVisible: (ctx) => ctx.hasWorkspace && ctx.hasGitRepos,
-    execute: async (ctx, workspaceId, repoId) => {
-      const workspace = await getWorkspace(ctx.queryClient, workspaceId);
-      const task = await tasksApi.getById(workspace.task_id);
-
-      const repos = await attemptsApi.getRepos(workspaceId);
-      const repo = repos.find((r) => r.id === repoId);
-
-      const result = await CreatePRDialog.show({
-        attempt: workspace,
-        task: {
-          ...task,
-          has_in_progress_attempt: false,
-          last_attempt_failed: false,
-          has_running_dev_server: false,
-          executor: '',
-        },
-        repoId,
-        targetBranch: repo?.target_branch,
-      });
-
-      if (!result.success && result.error) {
-        throw new Error(result.error);
-      }
-    },
-  },
 
   GitMerge: {
     id: 'git-merge',

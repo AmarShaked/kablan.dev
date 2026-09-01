@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/dialogs';
 import { EnvFilesSection } from '@/components/settings/EnvFilesSection';
 import { Button } from '@/components/ui/button';
 import {
@@ -87,14 +88,17 @@ export function ReposSettings() {
 
   // Handle repo selection from dropdown
   const handleRepoSelect = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (id === selectedRepoId) return;
 
       if (hasUnsavedChanges) {
-        const confirmed = window.confirm(
-          t('settings.repos.save.confirmSwitch')
-        );
-        if (!confirmed) return;
+        const result = await ConfirmDialog.show({
+          title: t('settings.repos.save.unsavedChanges'),
+          message: t('settings.repos.save.confirmSwitch'),
+          confirmText: t('settings.repos.save.discard'),
+          variant: 'destructive',
+        }).catch(() => 'canceled');
+        if (result !== 'confirmed') return;
         setDraft(null);
         setSelectedRepo(null);
         setSuccess(false);
@@ -116,19 +120,31 @@ export function ReposSettings() {
     if (repoIdParam === selectedRepoId) return;
 
     if (hasUnsavedChanges) {
-      const confirmed = window.confirm(t('settings.repos.save.confirmSwitch'));
-      if (!confirmed) {
-        if (selectedRepoId) {
-          setSearchParams({ repoId: selectedRepoId });
-        } else {
-          setSearchParams({});
+      // The effect cannot wait on an answer, so the URL has already changed: ask, and put it
+      // back if the answer is no. The native confirm blocked the thread to avoid this; a dialog
+      // that matches the rest of the app is worth the moment of drift.
+      void (async () => {
+        const result = await ConfirmDialog.show({
+          title: t('settings.repos.save.unsavedChanges'),
+          message: t('settings.repos.save.confirmSwitch'),
+          confirmText: t('settings.repos.save.discard'),
+          variant: 'destructive',
+        }).catch(() => 'canceled');
+        if (result !== 'confirmed') {
+          if (selectedRepoId) {
+            setSearchParams({ repoId: selectedRepoId });
+          } else {
+            setSearchParams({});
+          }
+          return;
         }
-        return;
-      }
-      setDraft(null);
-      setSelectedRepo(null);
-      setSuccess(false);
-      setError(null);
+        setDraft(null);
+        setSelectedRepo(null);
+        setSuccess(false);
+        setError(null);
+        setSelectedRepoId(repoIdParam);
+      })();
+      return;
     }
 
     setSelectedRepoId(repoIdParam);

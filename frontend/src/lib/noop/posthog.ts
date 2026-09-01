@@ -21,6 +21,7 @@ export const posthog = {
 export const usePostHog = () => posthog;
 
 /** Mirrors the provider so any remaining JSX usage still renders its children. */
-export const PostHogProvider = ({ children }: { children?: unknown }) => children as never;
+export const PostHogProvider = ({ children }: { children?: unknown }) =>
+  children as never;
 
 export default posthog;

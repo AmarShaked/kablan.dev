@@ -2,7 +2,7 @@ use db::models::{
     execution_process::ExecutionProcess,
     project::Project,
     scratch::Scratch,
-    task::{Task, TaskWithAttemptStatus},
+    task::{ArchiveFilter, Task, TaskWithAttemptStatus},
     workspace::Workspace,
 };
 use futures::StreamExt;
@@ -25,7 +25,12 @@ impl EventService {
     ) -> Result<futures::stream::BoxStream<'static, Result<LogMsg, std::io::Error>>, EventError>
     {
         // Get initial snapshot of tasks
-        let tasks = Task::find_by_project_id_with_attempt_status(&self.db.pool, project_id).await?;
+        let tasks = Task::find_by_project_id_with_attempt_status(
+            &self.db.pool,
+            project_id,
+            ArchiveFilter::Active,
+        )
+        .await?;
 
         // Convert task array to object keyed by task ID
         let tasks_map: serde_json::Map<String, serde_json::Value> = tasks

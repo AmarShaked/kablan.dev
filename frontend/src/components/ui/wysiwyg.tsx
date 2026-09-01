@@ -87,6 +87,15 @@ type WysiwygProps = {
   taskId?: string;
   /** Repo ID for slash commands when no workspace yet */
   repoId?: string;
+  /**
+   * Where the read-only hover actions sit.
+   *
+   * 'below' (the default) puts them under the content, right-aligned, where they cannot cover
+   * it. 'overlay' floats them over the top-right — only safe when the content is guaranteed to
+   * have empty margin there. 'none' suppresses them, for a caller that renders its own outside
+   * the content, as the user bubble does.
+   */
+  actionsPlacement?: 'overlay' | 'below' | 'none';
   /** Local images for immediate rendering (before saved to server) */
   localImages?: LocalImageMetadata[];
   /** Optional edit callback - shows edit button in read-only mode when provided */
@@ -134,7 +143,9 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
       disabled = false,
       onPasteFiles,
       className,
+      actionsPlacement = 'below',
       repoIds,
+      projectId,
       executor = null,
       onCmdEnter,
       onShiftCmdEnter,
@@ -274,7 +285,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
       () => (
         <div
           className={cn(
-            'absolute top-0 left-0 text-base text-secondary-foreground text-low pointer-events-none truncate',
+            'absolute top-0 left-0 right-0 text-sm text-muted-foreground pointer-events-none truncate',
             className
           )}
         >
@@ -285,7 +296,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
     );
 
     const editorContent = (
-      <div className="wysiwyg text-base">
+      <div className="wysiwyg text-sm">
         <TaskAttemptContext.Provider value={taskAttemptId}>
           <TaskContext.Provider value={taskId}>
             <LocalImagesContext.Provider value={localImages ?? []}>
@@ -332,7 +343,10 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
                     />
                     <PasteMarkdownPlugin transformers={extendedTransformers} />
                     <TypeaheadOpenProvider>
-                      <FileTagTypeaheadPlugin repoIds={repoIds} />
+                      <FileTagTypeaheadPlugin
+                        repoIds={repoIds}
+                        projectId={projectId}
+                      />
                       {executor && (
                         <SlashCommandTypeaheadPlugin
                           agent={executor}
@@ -369,54 +383,74 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
 
     // Wrap with action buttons in read-only mode
     if (disabled) {
+      const actions = (
+        <>
+          <Button
+            type="button"
+            aria-label={copied ? 'Copied!' : 'Copy as Markdown'}
+            title={copied ? 'Copied!' : 'Copy as Markdown'}
+            variant="icon"
+            size="icon"
+            onClick={handleCopy}
+            className="pointer-events-auto !h-7 !w-7 bg-muted !p-1.5 [&_svg]:!size-3.5"
+          >
+            {copied ? (
+              <Check className="h-4 w-4 text-success" />
+            ) : (
+              <Clipboard className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+          {onEdit && (
+            <Button
+              type="button"
+              aria-label="Edit"
+              title="Edit"
+              variant="icon"
+              size="icon"
+              onClick={onEdit}
+              className="pointer-events-auto !h-7 !w-7 bg-muted !p-1.5 [&_svg]:!size-3.5"
+            >
+              <Pencil className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              type="button"
+              aria-label="Delete"
+              title="Delete"
+              variant="icon"
+              size="icon"
+              onClick={onDelete}
+              className="pointer-events-auto !h-7 !w-7 bg-muted !p-1.5 [&_svg]:!size-3.5"
+            >
+              <Trash2 className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          )}
+        </>
+      );
+
+      if (actionsPlacement === 'none') {
+        return editorContent;
+      }
+
+      if (actionsPlacement === 'below') {
+        return (
+          <div className="group">
+            {editorContent}
+            {/* Below the content, so nothing is ever covered. Reserved height rather than a
+                conditional row, or the message would jump on hover. */}
+            <div className="mt-2.5 flex h-7 items-center justify-end gap-1 pr-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              {actions}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="relative group">
           <div className="sticky top-0 right-2 z-10 pointer-events-none h-0">
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              {/* Copy button */}
-              <Button
-                type="button"
-                aria-label={copied ? 'Copied!' : 'Copy as Markdown'}
-                title={copied ? 'Copied!' : 'Copy as Markdown'}
-                variant="icon"
-                size="icon"
-                onClick={handleCopy}
-                className="pointer-events-auto p-2 bg-muted h-8 w-8"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-success" />
-                ) : (
-                  <Clipboard className="w-4 h-4 text-muted-foreground" />
-                )}
-              </Button>
-              {/* Edit button - only if onEdit provided */}
-              {onEdit && (
-                <Button
-                  type="button"
-                  aria-label="Edit"
-                  title="Edit"
-                  variant="icon"
-                  size="icon"
-                  onClick={onEdit}
-                  className="pointer-events-auto p-2 bg-muted h-8 w-8"
-                >
-                  <Pencil className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              )}
-              {/* Delete button - only if onDelete provided */}
-              {onDelete && (
-                <Button
-                  type="button"
-                  aria-label="Delete"
-                  title="Delete"
-                  variant="icon"
-                  size="icon"
-                  onClick={onDelete}
-                  className="pointer-events-auto p-2 bg-muted h-8 w-8"
-                >
-                  <Trash2 className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              )}
+              {actions}
             </div>
           </div>
           {editorContent}

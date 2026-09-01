@@ -57,7 +57,6 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
     }
   };
 
-
   const handleViewProcesses = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!attempt?.id) return;
@@ -78,10 +77,6 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
       },
     });
   };
-
-
-
-
 
   return (
     <>

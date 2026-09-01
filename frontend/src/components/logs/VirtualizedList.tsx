@@ -12,9 +12,13 @@ import DisplayConversationEntry from '../NormalizedConversation/DisplayConversat
 import { useEntries } from '@/contexts/EntriesContext';
 import {
   AddEntryType,
+  DisplayEntry,
   PatchTypeWithKey,
+  isAggregatedGroup,
   useConversationHistory,
 } from '@/hooks/useConversationHistory';
+import { CommandGroup } from './CommandGroup';
+import { groupConsecutiveCommands } from './groupCommands';
 import { Loader2 } from 'lucide-react';
 import { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
@@ -44,11 +48,15 @@ const AutoScrollToBottom: ScrollModifier = {
 };
 
 const ItemContent: VirtuosoMessageListProps<
-  PatchTypeWithKey,
+  DisplayEntry,
   MessageListContext
 >['ItemContent'] = ({ data, context }) => {
   const attempt = context?.attempt;
   const task = context?.task;
+
+  if (isAggregatedGroup(data) && attempt) {
+    return <CommandGroup group={data} attempt={attempt} task={task} />;
+  }
 
   if (data.type === 'STDOUT') {
     return <p>{data.content}</p>;
@@ -72,13 +80,13 @@ const ItemContent: VirtuosoMessageListProps<
 };
 
 const computeItemKey: VirtuosoMessageListProps<
-  PatchTypeWithKey,
+  DisplayEntry,
   MessageListContext
 >['computeItemKey'] = ({ data }) => `l-${data.patchKey}`;
 
 const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
   const [channelData, setChannelData] =
-    useState<DataWithScrollModifier<PatchTypeWithKey> | null>(null);
+    useState<DataWithScrollModifier<DisplayEntry> | null>(null);
   const [loading, setLoading] = useState(true);
   const { setEntries, reset } = useEntries();
 
@@ -99,7 +107,12 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
       scrollModifier = AutoScrollToBottom;
     }
 
-    setChannelData({ data: newEntries, scrollModifier });
+    // Grouped for display; the context keeps the flat list, since everything else counting or
+    // scanning entries expects one item per entry.
+    setChannelData({
+      data: groupConsecutiveCommands(newEntries),
+      scrollModifier,
+    });
     setEntries(newEntries);
 
     if (loading) {
@@ -120,7 +133,7 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
       <VirtuosoMessageListLicense
         licenseKey={import.meta.env.VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY}
       >
-        <VirtuosoMessageList<PatchTypeWithKey, MessageListContext>
+        <VirtuosoMessageList<DisplayEntry, MessageListContext>
           ref={messageListRef}
           className="flex-1"
           data={channelData}
@@ -133,7 +146,7 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
         />
       </VirtuosoMessageListLicense>
       {loading && (
-        <div className="float-left top-0 left-0 w-full h-full bg-primary flex flex-col gap-2 justify-center items-center">
+        <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center gap-2 bg-background">
           <Loader2 className="h-8 w-8 animate-spin" />
           <p>Loading History</p>
         </div>

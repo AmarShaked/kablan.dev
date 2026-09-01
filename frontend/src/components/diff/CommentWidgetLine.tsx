@@ -75,7 +75,7 @@ export function CommentWidgetLine({
   });
 
   return (
-    <div className="p-4 border-y bg-primary">
+    <div className="p-4 border-y bg-background">
       <WYSIWYGEditor
         value={value}
         onChange={setValue}

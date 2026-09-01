@@ -10,6 +10,7 @@ use deployment::Deployment;
 use serde::Deserialize;
 use ts_rs::TS;
 use utils::response::ApiResponse;
+use uuid::Uuid;
 
 use crate::{DeploymentImpl, error::ApiError, middleware::load_tag_middleware};
 
@@ -17,13 +18,20 @@ use crate::{DeploymentImpl, error::ApiError, middleware::load_tag_middleware};
 pub struct TagSearchParams {
     #[serde(default)]
     pub search: Option<String>,
+    /// Scope the list to one project: its own tags plus the global ones. Omitted returns every
+    /// tag, which is what the settings screen that manages them wants.
+    #[serde(default)]
+    pub project_id: Option<Uuid>,
 }
 
 pub async fn get_tags(
     State(deployment): State<DeploymentImpl>,
     Query(params): Query<TagSearchParams>,
 ) -> Result<ResponseJson<ApiResponse<Vec<Tag>>>, ApiError> {
-    let mut tags = Tag::find_all(&deployment.db().pool).await?;
+    let mut tags = match params.project_id {
+        Some(project_id) => Tag::find_for_project(&deployment.db().pool, project_id).await?,
+        None => Tag::find_all(&deployment.db().pool).await?,
+    };
 
     // Filter by search query if provided
     if let Some(search_query) = params.search {
@@ -40,16 +48,6 @@ pub async fn create_tag(
 ) -> Result<ResponseJson<ApiResponse<Tag>>, ApiError> {
     let tag = Tag::create(&deployment.db().pool, &payload).await?;
 
-    deployment
-        .track_if_analytics_allowed(
-            "tag_created",
-            serde_json::json!({
-                "tag_id": tag.id.to_string(),
-                "tag_name": tag.tag_name,
-            }),
-        )
-        .await;
-
     Ok(ResponseJson(ApiResponse::success(tag)))
 }
 
@@ -59,16 +57,6 @@ pub async fn update_tag(
     Json(payload): Json<UpdateTag>,
 ) -> Result<ResponseJson<ApiResponse<Tag>>, ApiError> {
     let updated_tag = Tag::update(&deployment.db().pool, tag.id, &payload).await?;
-
-    deployment
-        .track_if_analytics_allowed(
-            "tag_updated",
-            serde_json::json!({
-                "tag_id": tag.id.to_string(),
-                "tag_name": updated_tag.tag_name,
-            }),
-        )
-        .await;
 
     Ok(ResponseJson(ApiResponse::success(updated_tag)))
 }

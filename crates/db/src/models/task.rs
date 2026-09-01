@@ -30,8 +30,37 @@ pub struct Task {
     pub description: Option<String>,
     pub status: TaskStatus,
     pub parent_workspace_id: Option<Uuid>, // Foreign key to parent Workspace
+    /// When this task was archived, or None while it is still in the views.
+    pub archived_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Which side of the archive a listing wants.
+///
+/// Three states rather than a bool, because "show me the archive" is a real request and not the
+/// same as "show me everything".
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveFilter {
+    /// Archived tasks are left out. What every view wants unless it says otherwise.
+    #[default]
+    Active,
+    /// Only archived tasks.
+    Archived,
+    /// Both.
+    All,
+}
+
+impl ArchiveFilter {
+    /// 0 = unarchived only, 1 = archived only, NULL = no filter. Matches the SQL above.
+    fn as_flag(self) -> Option<i64> {
+        match self {
+            Self::Active => Some(0),
+            Self::Archived => Some(1),
+            Self::All => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -120,7 +149,9 @@ impl Task {
     pub async fn find_by_project_id_with_attempt_status(
         pool: &SqlitePool,
         project_id: Uuid,
+        archived: ArchiveFilter,
     ) -> Result<Vec<TaskWithAttemptStatus>, sqlx::Error> {
+        let archived_flag = archived.as_flag();
         let records = sqlx::query!(
             r#"SELECT
   t.id                            AS "id!: Uuid",
@@ -129,6 +160,7 @@ impl Task {
   t.description,
   t.status                        AS "status!: TaskStatus",
   t.parent_workspace_id           AS "parent_workspace_id: Uuid",
+  t.archived_at                   AS "archived_at: DateTime<Utc>",
   t.created_at                    AS "created_at!: DateTime<Utc>",
   t.updated_at                    AS "updated_at!: DateTime<Utc>",
 
@@ -176,8 +208,15 @@ impl Task {
 
 FROM tasks t
 WHERE t.project_id = $1
+  -- One query for the three cases: $2 is null to see everything, otherwise it asks for rows
+  -- whose archived state matches. Written this way so the filter cannot be forgotten at a call
+  -- site — it is an argument, not something the caller appends.
+  AND ( $2 IS NULL
+        OR ($2 = 0 AND t.archived_at IS NULL)
+        OR ($2 = 1 AND t.archived_at IS NOT NULL) )
 ORDER BY t.created_at DESC"#,
-            project_id
+            project_id,
+            archived_flag
         )
         .fetch_all(pool)
         .await?;
@@ -192,6 +231,7 @@ ORDER BY t.created_at DESC"#,
                     description: rec.description,
                     status: rec.status,
                     parent_workspace_id: rec.parent_workspace_id,
+                    archived_at: rec.archived_at,
                     created_at: rec.created_at,
                     updated_at: rec.updated_at,
                 },
@@ -208,7 +248,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                ORDER BY created_at ASC"#
         )
@@ -219,7 +259,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE id = $1"#,
             id
@@ -231,7 +271,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE rowid = $1"#,
             rowid
@@ -250,7 +290,7 @@ ORDER BY t.created_at DESC"#,
             Task,
             r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id)
                VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             task_id,
             data.project_id,
             data.title,
@@ -274,9 +314,11 @@ ORDER BY t.created_at DESC"#,
         sqlx::query_as!(
             Task,
             r#"UPDATE tasks
-               SET title = $3, description = $4, status = $5, parent_workspace_id = $6
+               SET title = $3, description = $4, status = $5, parent_workspace_id = $6,
+                   -- Same rule as update_status: a task moved off done or cancelled comes back.
+                   archived_at = CASE WHEN $5 IN ('done', 'cancelled') THEN archived_at ELSE NULL END
                WHERE id = $1 AND project_id = $2
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             project_id,
             title,
@@ -288,15 +330,64 @@ ORDER BY t.created_at DESC"#,
         .await
     }
 
+    /// Archive or restore, by id.
+    ///
+    /// Takes the whole set at once because both callers act on a set: the periodic job sweeps
+    /// everything that has aged out, and the list acts on a selection.
+    pub async fn set_archived(
+        pool: &SqlitePool,
+        ids: &[Uuid],
+        archived: bool,
+    ) -> Result<u64, sqlx::Error> {
+        let mut affected = 0;
+        for id in ids {
+            let at = archived.then(Utc::now);
+            affected += sqlx::query!(r#"UPDATE tasks SET archived_at = $2 WHERE id = $1"#, id, at)
+                .execute(pool)
+                .await?
+                .rows_affected();
+        }
+        Ok(affected)
+    }
+
+    /// Archive everything finished longer ago than `before`, and say how many that was.
+    pub async fn archive_finished_before(
+        pool: &SqlitePool,
+        before: DateTime<Utc>,
+    ) -> Result<u64, sqlx::Error> {
+        let now = Utc::now();
+        Ok(sqlx::query!(
+            r#"UPDATE tasks
+                  SET archived_at = $1
+                WHERE archived_at IS NULL
+                  AND status IN ('done', 'cancelled')
+                  AND updated_at < $2"#,
+            now,
+            before
+        )
+        .execute(pool)
+        .await?
+        .rows_affected())
+    }
+
     pub async fn update_status(
         pool: &SqlitePool,
         id: Uuid,
         status: TaskStatus,
     ) -> Result<(), sqlx::Error> {
+        // Moving a task off done or cancelled un-archives it: picking work back up is the same
+        // gesture as wanting to see it again, and having to also un-archive it by hand would be
+        // a second step for something already said.
+        let unarchive = !matches!(status, TaskStatus::Done | TaskStatus::Cancelled);
         sqlx::query!(
-            "UPDATE tasks SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            r#"UPDATE tasks
+                  SET status = $2,
+                      archived_at = CASE WHEN $3 THEN NULL ELSE archived_at END,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1"#,
             id,
-            status
+            status,
+            unarchive
         )
         .execute(pool)
         .await?;
@@ -354,7 +445,7 @@ ORDER BY t.created_at DESC"#,
         // Find only child tasks that have this workspace as their parent
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", archived_at as "archived_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE parent_workspace_id = $1
                ORDER BY created_at DESC"#,

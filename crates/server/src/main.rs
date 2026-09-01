@@ -1,11 +1,11 @@
 use server::run::{
     self, KablanError, init_process, perform_cleanup_actions, port_from_env, shutdown_signal,
 };
-use utils::{browser::open_browser, port_file::write_port_file, sentry::SentrySource};
+use utils::{browser::open_browser, port_file::write_port_file};
 
 #[tokio::main]
 async fn main() -> Result<(), KablanError> {
-    init_process(SentrySource::Backend);
+    init_process();
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let bound = run::bind(&host, port_from_env()).await?;

@@ -180,7 +180,18 @@
     "loadingAttempts": "Loading attempts...",
     "errorLoadingAttempts": "Failed to load attempts",
     "attemptsCount": "Attempts ({{count}})",
-    "noAttempts": "No attempts yet"
+    "noAttempts": "No attempts yet",
+    "empty": {
+      "eyebrow": "NO ATTEMPTS YET",
+      "headline": "Nothing has run for this task.",
+      "body": "An attempt gives this task its own branch and worktree, then hands it to a coding agent. Your working copy is untouched until you review what comes back.",
+      "start": "Start an attempt",
+      "steps": {
+        "worktree": "A worktree is created from the base branch.",
+        "agent": "The agent works in it, on its own branch.",
+        "review": "Review the diff, then merge it or throw it away."
+      }
+    }
   },
   "processes": {
     "noLogsAvailable": "No logs available",
@@ -233,7 +244,14 @@
     "noSetupScript": "No setup script configured for this project",
     "noCleanupScript": "No cleanup script configured for this project",
     "noArchiveScript": "No archive script configured for this project",
-    "scriptsDisabledWhileRunning": "Cannot run scripts while a process is running"
+    "scriptsDisabledWhileRunning": "Cannot run scripts while a process is running",
+    "menu": {
+      "label": "Add to message",
+      "uploadImages": "Upload images",
+      "model": "Model",
+      "mode": "Mode",
+      "tags": "Tags"
+    }
   },
   "todos": {
     "title_one": "Todos ({{count}})",
@@ -407,7 +425,9 @@
       "forcePush": "Force Push",
       "forcePushing": "Force Pushing...",
       "creating": "Creating...",
-      "createPr": "Create PR"
+      "createPr": "Create PR",
+      "pulling": "Pulling…",
+      "pullCount": "Pull {{count}}"
     },
     "errors": {
       "changeTargetBranch": "Failed to change target branch",

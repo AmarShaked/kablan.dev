@@ -31,12 +31,17 @@ const ConfirmDialogImpl = NiceModal.create<ConfirmDialogProps>((props) => {
     icon = true,
   } = props;
 
+  // resolve settles the promise the caller is awaiting; hide is what actually takes the dialog
+  // off the screen. Without both, every answer leaves the dialog sitting there — and no caller
+  // hides it, because a dialog closing itself is the only sane contract.
   const handleConfirm = () => {
     modal.resolve('confirmed' as ConfirmResult);
+    modal.hide();
   };
 
   const handleCancel = () => {
     modal.resolve('canceled' as ConfirmResult);
+    modal.hide();
   };
 
   const getIcon = () => {

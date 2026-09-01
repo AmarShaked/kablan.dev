@@ -21,7 +21,8 @@ import { cn } from '@/lib/utils';
  */
 export function DevServerLogsPanel({ attemptId }: { attemptId: string }) {
   const { projectId } = useProject();
-  const { data: projectHasDevScript = false } = useHasDevServerScript(projectId);
+  const { data: projectHasDevScript = false } =
+    useHasDevServerScript(projectId);
   const {
     start,
     stop,
@@ -84,7 +85,9 @@ export function DevServerLogsPanel({ attemptId }: { attemptId: string }) {
           variant="outline"
           size="sm"
           className="ml-auto"
-          disabled={isStarting || isStopping || (!running && !projectHasDevScript)}
+          disabled={
+            isStarting || isStopping || (!running && !projectHasDevScript)
+          }
           onClick={() => (running ? stop() : start())}
         >
           {isStarting || isStopping ? (

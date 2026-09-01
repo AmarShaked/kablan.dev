@@ -43,11 +43,7 @@ export default function DiffViewSwitch({ className }: Props) {
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <ToggleGroupItem
-                value="unified"
-                aria-label="Inline view"
-                active={mode === 'unified'}
-              >
+              <ToggleGroupItem value="unified" aria-label="Inline view">
                 <FileText className="h-4 w-4" />
               </ToggleGroupItem>
             </TooltipTrigger>
@@ -58,11 +54,7 @@ export default function DiffViewSwitch({ className }: Props) {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <ToggleGroupItem
-                value="split"
-                aria-label="Split view"
-                active={mode === 'split'}
-              >
+              <ToggleGroupItem value="split" aria-label="Split view">
                 <Columns className="h-4 w-4" />
               </ToggleGroupItem>
             </TooltipTrigger>
@@ -86,7 +78,6 @@ export default function DiffViewSwitch({ className }: Props) {
               <ToggleGroupItem
                 value="ignoreWhitespace"
                 aria-label={t('diff.ignoreWhitespace')}
-                active={ignoreWhitespace}
               >
                 <Pilcrow className="h-4 w-4" />
               </ToggleGroupItem>
@@ -109,7 +100,6 @@ export default function DiffViewSwitch({ className }: Props) {
               <ToggleGroupItem
                 value="wrapText"
                 aria-label={t('diff.wrapText', 'Wrap text')}
-                active={wrapText}
               >
                 <WrapText className="h-4 w-4" />
               </ToggleGroupItem>

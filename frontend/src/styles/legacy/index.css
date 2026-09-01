@@ -1,3 +1,21 @@
+/* Self-hosted, like Geist before it: this app runs from a local binary and should not need the
+   network to render its own text. Latin subsets only — the same coverage Google serves by
+   default — so the two files together are under 140kB. */
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-Variable-Italic.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 @font-face {
   font-family: 'Geist';
   src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
@@ -14,6 +32,43 @@
 /* Kablan: Geist is self-hosted (see the new design's @font-face); only Noto Emoji is remote. */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@300..700&display=swap');
 
+/**
+ * The thinking mark's sweep.
+ *
+ * Written here rather than in the Tailwind config because a config-registered animation only
+ * emits its @keyframes after the dev server re-reads the config, which makes the indicator
+ * silently static until a restart. This is one component's concern and belongs with the app's
+ * own CSS.
+ */
+@keyframes kablan-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.kablan-thinking-mark {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted-foreground)) 20%,
+    hsl(var(--foreground)) 50%,
+    hsl(var(--muted-foreground)) 80%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: kablan-shimmer 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kablan-thinking-mark {
+    animation: none;
+  }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -25,8 +80,11 @@
     color-scheme: light;
     --_background: 42 30% 97%;
     --_foreground: 0 0% 8%;
-    --_primary: var(--_muted);
-    --_primary-foreground: var(--_muted-foreground);
+    /* Primary is the page inverted, not a tint of it. shadcn fills its default button, badge
+       and tooltip with --primary and writes --primary-foreground on top; aliased to --muted, as
+       it was, that pair rendered a near-background box with grey text on it — invisible. */
+    --_primary: var(--_foreground);
+    --_primary-foreground: var(--_background);
     --_secondary: 42 18% 93%;
     --_secondary-foreground: 0 0% 12%;
     --_muted: 42 18% 93%;
@@ -37,8 +95,10 @@
     --_destructive-foreground: var(--_background);
     --_border: 42 10% 85%;
     --_input: 42 10% 85%;
-    --_ring: 34 100% 45%;
-    --_radius: 0rem;
+    /* Neutral, like shadcn's. A saturated orange ring on every focused control was the single
+       loudest thing on the page. */
+    --_ring: 0 0% 45%;
+    --_radius: 0.5rem;
 
     /* Status (light) */
     --_success: 142.1 76.2% 36.3%;
@@ -74,19 +134,25 @@
     color-scheme: dark;
     --_background: 0 0% 8%;
     --_foreground: 42 21% 91%;
-    --_primary: var(--_muted);
-    --_primary-foreground: var(--_muted-foreground);
+    /* Primary is the page inverted, not a tint of it. shadcn fills its default button, badge
+       and tooltip with --primary and writes --primary-foreground on top; aliased to --muted, as
+       it was, that pair rendered a near-background box with grey text on it — invisible. */
+    --_primary: var(--_foreground);
+    --_primary-foreground: var(--_background);
     --_secondary: 0 0% 13%;
     --_secondary-foreground: 42 21% 91%;
     --_muted: 0 0% 13%;
     --_muted-foreground: 39 6% 58%;
     --_accent: 0 0% 16%;
     --_accent-foreground: 42 21% 91%;
+    /* Light mode floats popovers on the page colour; on a near-black page that reads as a hole
+       rather than a sheet, so here they sit one step above it. */
+    --popover: 0 0% 13%;
     --_destructive: 0 45% 55%;
-    --_destructive-foreground: var(--_background-foreground);
+    --_destructive-foreground: var(--_foreground);
     --_border: 0 0% 20%;
     --_input: 0 0% 18%;
-    --_ring: 34 100% 50%;
+    --_ring: 0 0% 60%;
 
     /* Status (dark) */
     --_success: 138.5 76.5% 47.7%;
@@ -123,14 +189,20 @@
     --background: var(--vscode-editor-background, var(--_background));
     --foreground: var(--vscode-editor-foreground, var(--_foreground));
 
+    /* Cards are a panel a step off the page. Form controls therefore carry their own
+       background rather than shadcn's bg-transparent: on a card, a transparent field is the same
+       grey as the thing behind it and reads as disabled. */
     --card: var(--muted);
-    --card-foreground: var(--muted-foreground);
+    --card-foreground: var(--foreground);
+    /* A popover floats over the page and reads as a sheet laid on top of it: the page's own
+       colour, lifted by its border and shadow rather than by being a different grey. On a dark
+       ground that is not enough on its own, so there the surface is raised a step instead. */
     --popover: var(--background);
     --popover-foreground: var(--foreground);
 
     --primary: var(--vscode-button-background, var(--_primary));
     --primary-foreground: var(
-      --vscode-editor-foreground,
+      --vscode-button-foreground,
       var(--_primary-foreground)
     );
     --secondary: var(--vscode-input-background, var(--_secondary));
@@ -161,6 +233,17 @@
     --ring: var(--vscode-focusBorder, var(--_ring));
 
     --radius: var(--_radius);
+
+    /* The sidebar's own scale, aliased to the tokens above so it tracks the theme (and the
+       VS Code palette) instead of carrying a second set of colours that drifts from the app. */
+    --sidebar-background: var(--muted);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
 
     /* Status */
     --success: var(--vscode-testing-iconPassed, var(--_success));
@@ -224,7 +307,7 @@
   }
 
   .legacy-design {
-    @apply bg-background text-foreground font-geist;
+    @apply bg-background text-foreground font-sans;
   }
 
   .legacy-design *:focus {

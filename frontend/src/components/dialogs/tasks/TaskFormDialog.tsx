@@ -5,14 +5,7 @@ import { defineModal } from '@/lib/modals';
 import { useDropzone } from 'react-dropzone';
 import { useForm, useStore } from '@tanstack/react-form';
 import { Image as ImageIcon } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -404,310 +397,336 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
         onOpenChange={handleDialogClose}
         uncloseable={showDiscardWarning}
       >
-        <div
-          {...getRootProps()}
-          className="h-full flex flex-col gap-4 p-4 relative min-h-0"
-        >
-          <input {...getInputProps()} />
-          {/* Drag overlay */}
-          {isDragActive && (
-            <div className="absolute inset-0 z-50 bg-primary/95 border-2 border-dashed border-primary-foreground/50 rounded-lg flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <ImageIcon className="h-12 w-12 mx-auto mb-2 text-primary-foreground" />
-                <p className="text-lg font-medium text-primary-foreground">
-                  {t('taskFormDialog.dropImagesHere')}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Title */}
-          <form.Field name="title">
-            {(field) => (
-              <Input
-                id="task-title"
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                placeholder={t('taskFormDialog.titlePlaceholder')}
-                disabled={isSubmitting}
-                className="text-base"
-                autoFocus
-              />
-            )}
-          </form.Field>
-
-          {/* Description */}
-          <form.Field name="description">
-            {(field) => (
-              <div className="border p-3">
-                <WYSIWYGEditor
-                  placeholder={t('taskFormDialog.descriptionPlaceholder')}
-                  className="w-full h-24 overflow-auto"
-                  value={field.state.value}
-                  onChange={(desc) => field.handleChange(desc)}
-                  disabled={isSubmitting}
-                  projectId={projectId}
-                  onPasteFiles={onDrop}
-                  onCmdEnter={primaryAction}
-                  onShiftCmdEnter={handleSubmitCreateOnly}
-                  taskId={editMode ? props.task.id : undefined}
-                  localImages={localImages}
-                />
-              </div>
-            )}
-          </form.Field>
-          {/* Edit mode status */}
-          {editMode && (
-            <form.Field name="status">
-              {(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="task-status" className="text-sm font-medium">
-                    {t('taskFormDialog.statusLabel')}
-                  </Label>
-                  <Select
-                    value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange(value as TaskStatus)
-                    }
-                    disabled={isSubmitting}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">
-                        {t('taskFormDialog.statusOptions.todo')}
-                      </SelectItem>
-                      <SelectItem value="inprogress">
-                        {t('taskFormDialog.statusOptions.inprogress')}
-                      </SelectItem>
-                      <SelectItem value="inreview">
-                        {t('taskFormDialog.statusOptions.inreview')}
-                      </SelectItem>
-                      <SelectItem value="done">
-                        {t('taskFormDialog.statusOptions.done')}
-                      </SelectItem>
-                      <SelectItem value="cancelled">
-                        {t('taskFormDialog.statusOptions.cancelled')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+        {/* The form is the dialog's content, not a child of its root: Radix renders anything
+            else in place, which puts the whole form inline in the page. */}
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto p-0">
+          {/* The positioning context for the discard warning below — on DialogContent itself a
+              `relative` would collide with the `fixed` that centres it. */}
+          <div className="relative">
+            <div
+              {...getRootProps()}
+              className="h-full flex flex-col gap-4 p-4 min-h-0"
+            >
+              <input {...getInputProps()} />
+              {/* Drag overlay */}
+              {isDragActive && (
+                <div className="absolute inset-0 z-50 bg-primary/95 border-2 border-dashed border-primary-foreground/50 rounded-lg flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <ImageIcon className="h-12 w-12 mx-auto mb-2 text-primary-foreground" />
+                    <p className="text-lg font-medium text-primary-foreground">
+                      {t('taskFormDialog.dropImagesHere')}
+                    </p>
+                  </div>
                 </div>
               )}
-            </form.Field>
-          )}
 
-          {/* Create mode dropdowns */}
-          {!editMode && (
-            <form.Field name="autoStart" mode="array">
-              {(autoStartField) => {
-                const isSingleRepo = repoBranchConfigs.length === 1;
-                return (
-                  <div
-                    className={cn(
-                      'transition-opacity duration-200',
-                      isSingleRepo ? '' : 'space-y-3',
-                      autoStartField.state.value
-                        ? 'opacity-100'
-                        : 'opacity-0 pointer-events-none'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <form.Field name="executorProfileId">
-                        {(field) => (
-                          <ExecutorProfileSelector
-                            profiles={profiles}
-                            selectedProfile={field.state.value}
-                            onProfileSelect={(profile) =>
-                              field.handleChange(profile)
-                            }
-                            disabled={
-                              isSubmitting || !autoStartField.state.value
-                            }
-                            showLabel={false}
-                            className="flex items-center gap-2 flex-row flex-[2] min-w-0"
-                            itemClassName="flex-1 min-w-0"
-                          />
-                        )}
-                      </form.Field>
-                      {isSingleRepo && (
-                        <form.Field name="repoBranches">
-                          {(field) => {
-                            const config = repoBranchConfigs[0];
-                            const selectedBranch =
-                              field.state.value.find(
-                                (v) => v.repoId === config.repoId
-                              )?.branch ?? config.targetBranch;
-                            return (
-                              <div
-                                className={cn(
-                                  'flex-1 min-w-0',
-                                  isSubmitting &&
-                                    'opacity-50 pointer-events-none'
-                                )}
-                              >
-                                <BranchSelector
-                                  branches={config.branches}
-                                  selectedBranch={selectedBranch}
-                                  onBranchSelect={(branch) => {
-                                    field.handleChange([
-                                      { repoId: config.repoId, branch },
-                                    ]);
-                                  }}
-                                  placeholder={
-                                    branchesLoading
-                                      ? t('createAttemptDialog.loadingBranches')
-                                      : t('createAttemptDialog.selectBranch')
-                                  }
-                                />
-                              </div>
-                            );
-                          }}
-                        </form.Field>
-                      )}
-                    </div>
-                    {!isSingleRepo && (
-                      <form.Field name="repoBranches">
-                        {(field) => {
-                          const configs = repoBranchConfigs.map((config) => ({
-                            ...config,
-                            targetBranch:
-                              field.state.value.find(
-                                (v) => v.repoId === config.repoId
-                              )?.branch ?? config.targetBranch,
-                          }));
-                          return (
-                            <RepoBranchSelector
-                              configs={configs}
-                              onBranchChange={(repoId, branch) => {
-                                const newValue = field.state.value.map((v) =>
-                                  v.repoId === repoId ? { ...v, branch } : v
-                                );
-                                if (
-                                  !newValue.find((v) => v.repoId === repoId)
-                                ) {
-                                  newValue.push({ repoId, branch });
-                                }
-                                field.handleChange(newValue);
-                              }}
-                              isLoading={branchesLoading}
-                              showLabel={true}
-                              className={cn(
-                                isSubmitting && 'opacity-50 pointer-events-none'
-                              )}
-                            />
-                          );
-                        }}
-                      </form.Field>
-                    )}
+              {/* Title */}
+              <form.Field name="title">
+                {(field) => (
+                  <Input
+                    id="task-title"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder={t('taskFormDialog.titlePlaceholder')}
+                    disabled={isSubmitting}
+                    className="text-base"
+                    autoFocus
+                  />
+                )}
+              </form.Field>
+
+              {/* Description */}
+              <form.Field name="description">
+                {(field) => (
+                  <div className="border p-3">
+                    <WYSIWYGEditor
+                      placeholder={t('taskFormDialog.descriptionPlaceholder')}
+                      className="w-full h-24 overflow-auto"
+                      value={field.state.value}
+                      onChange={(desc) => field.handleChange(desc)}
+                      disabled={isSubmitting}
+                      projectId={projectId}
+                      onPasteFiles={onDrop}
+                      onCmdEnter={primaryAction}
+                      onShiftCmdEnter={handleSubmitCreateOnly}
+                      taskId={editMode ? props.task.id : undefined}
+                      localImages={localImages}
+                    />
                   </div>
-                );
-              }}
-            </form.Field>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center justify-between gap-3">
-            {/* Attach Image*/}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={dropzoneOpen}
-                className="h-9 w-9 p-0 rounded-none"
-                aria-label={t('taskFormDialog.attachImage')}
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Autostart switch */}
-            <div className="flex items-center gap-3">
-              {!editMode && (
-                <form.Field name="autoStart">
+                )}
+              </form.Field>
+              {/* Edit mode status */}
+              {editMode && (
+                <form.Field name="status">
                   {(field) => (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="autostart-switch"
-                        checked={field.state.value}
-                        onCheckedChange={(checked) =>
-                          field.handleChange(checked)
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="task-status"
+                        className="text-sm font-medium"
+                      >
+                        {t('taskFormDialog.statusLabel')}
+                      </Label>
+                      <Select
+                        value={field.state.value}
+                        onValueChange={(value) =>
+                          field.handleChange(value as TaskStatus)
                         }
                         disabled={isSubmitting}
-                        className="data-[state=checked]:bg-gray-900 dark:data-[state=checked]:bg-gray-100"
-                        aria-label={t('taskFormDialog.startLabel')}
-                      />
-                      <Label
-                        htmlFor="autostart-switch"
-                        className="text-sm cursor-pointer"
                       >
-                        {t('taskFormDialog.startLabel')}
-                      </Label>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todo">
+                            {t('taskFormDialog.statusOptions.todo')}
+                          </SelectItem>
+                          <SelectItem value="inprogress">
+                            {t('taskFormDialog.statusOptions.inprogress')}
+                          </SelectItem>
+                          <SelectItem value="inreview">
+                            {t('taskFormDialog.statusOptions.inreview')}
+                          </SelectItem>
+                          <SelectItem value="done">
+                            {t('taskFormDialog.statusOptions.done')}
+                          </SelectItem>
+                          <SelectItem value="cancelled">
+                            {t('taskFormDialog.statusOptions.cancelled')}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </form.Field>
               )}
 
-              {/* Create/Start/Update button*/}
-              <form.Subscribe
-                selector={(state) => ({
-                  canSubmit: state.canSubmit,
-                  isSubmitting: state.isSubmitting,
-                  values: state.values,
-                })}
-              >
-                {({ canSubmit, isSubmitting, values }) => {
-                  const buttonText = editMode
-                    ? isSubmitting
-                      ? t('taskFormDialog.updating')
-                      : t('taskFormDialog.updateTask')
-                    : isSubmitting
-                      ? values.autoStart
-                        ? t('taskFormDialog.starting')
-                        : t('taskFormDialog.creating')
-                      : t('taskFormDialog.create');
+              {/* Create mode dropdowns */}
+              {!editMode && (
+                <form.Field name="autoStart" mode="array">
+                  {(autoStartField) => {
+                    const isSingleRepo = repoBranchConfigs.length === 1;
+                    return (
+                      <div
+                        className={cn(
+                          'transition-opacity duration-200',
+                          isSingleRepo ? '' : 'space-y-3',
+                          autoStartField.state.value
+                            ? 'opacity-100'
+                            : 'opacity-0 pointer-events-none'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <form.Field name="executorProfileId">
+                            {(field) => (
+                              <ExecutorProfileSelector
+                                profiles={profiles}
+                                selectedProfile={field.state.value}
+                                onProfileSelect={(profile) =>
+                                  field.handleChange(profile)
+                                }
+                                disabled={
+                                  isSubmitting || !autoStartField.state.value
+                                }
+                                showLabel={false}
+                                className="flex items-center gap-2 flex-row flex-[2] min-w-0"
+                                itemClassName="flex-1 min-w-0"
+                              />
+                            )}
+                          </form.Field>
+                          {isSingleRepo && (
+                            <form.Field name="repoBranches">
+                              {(field) => {
+                                const config = repoBranchConfigs[0];
+                                const selectedBranch =
+                                  field.state.value.find(
+                                    (v) => v.repoId === config.repoId
+                                  )?.branch ?? config.targetBranch;
+                                return (
+                                  <div
+                                    className={cn(
+                                      'flex-1 min-w-0',
+                                      isSubmitting &&
+                                        'opacity-50 pointer-events-none'
+                                    )}
+                                  >
+                                    <BranchSelector
+                                      branches={config.branches}
+                                      selectedBranch={selectedBranch}
+                                      onBranchSelect={(branch) => {
+                                        field.handleChange([
+                                          { repoId: config.repoId, branch },
+                                        ]);
+                                      }}
+                                      placeholder={
+                                        branchesLoading
+                                          ? t(
+                                              'createAttemptDialog.loadingBranches'
+                                            )
+                                          : t(
+                                              'createAttemptDialog.selectBranch'
+                                            )
+                                      }
+                                    />
+                                  </div>
+                                );
+                              }}
+                            </form.Field>
+                          )}
+                        </div>
+                        {!isSingleRepo && (
+                          <form.Field name="repoBranches">
+                            {(field) => {
+                              const configs = repoBranchConfigs.map(
+                                (config) => ({
+                                  ...config,
+                                  targetBranch:
+                                    field.state.value.find(
+                                      (v) => v.repoId === config.repoId
+                                    )?.branch ?? config.targetBranch,
+                                })
+                              );
+                              return (
+                                <RepoBranchSelector
+                                  configs={configs}
+                                  onBranchChange={(repoId, branch) => {
+                                    const newValue = field.state.value.map(
+                                      (v) =>
+                                        v.repoId === repoId
+                                          ? { ...v, branch }
+                                          : v
+                                    );
+                                    if (
+                                      !newValue.find((v) => v.repoId === repoId)
+                                    ) {
+                                      newValue.push({ repoId, branch });
+                                    }
+                                    field.handleChange(newValue);
+                                  }}
+                                  isLoading={branchesLoading}
+                                  showLabel={true}
+                                  className={cn(
+                                    isSubmitting &&
+                                      'opacity-50 pointer-events-none'
+                                  )}
+                                />
+                              );
+                            }}
+                          </form.Field>
+                        )}
+                      </div>
+                    );
+                  }}
+                </form.Field>
+              )}
 
-                  return (
-                    <Button onClick={form.handleSubmit} disabled={!canSubmit}>
-                      {buttonText}
-                    </Button>
-                  );
-                }}
-              </form.Subscribe>
-            </div>
-          </div>
-        </div>
-      </Dialog>
-      {showDiscardWarning && (
-        <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 overflow-y-auto">
-          <div
-            className="fixed inset-0 bg-black/50"
-            onClick={() => setShowDiscardWarning(false)}
-          />
-          <div className="relative z-[10000] grid w-full max-w-lg gap-4 bg-primary p-6 shadow-lg duration-200 sm:rounded-lg my-8">
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <div className="flex items-center gap-3">
-                  <DialogTitle>
-                    {t('taskFormDialog.discardDialog.title')}
-                  </DialogTitle>
+              {/* Actions */}
+              <div className="flex items-center justify-between gap-3">
+                {/* Attach Image*/}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={dropzoneOpen}
+                    className="h-9 w-9 p-0 rounded-none"
+                    aria-label={t('taskFormDialog.attachImage')}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
                 </div>
-                <DialogDescription className="text-left pt-2">
-                  {t('taskFormDialog.discardDialog.description')}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={handleContinueEditing}>
-                  {t('taskFormDialog.discardDialog.continueEditing')}
-                </Button>
-                <Button variant="destructive" onClick={handleDiscardChanges}>
-                  {t('taskFormDialog.discardDialog.discardChanges')}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+
+                {/* Autostart switch */}
+                <div className="flex items-center gap-3">
+                  {!editMode && (
+                    <form.Field name="autoStart">
+                      {(field) => (
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="autostart-switch"
+                            checked={field.state.value}
+                            onCheckedChange={(checked) =>
+                              field.handleChange(checked)
+                            }
+                            disabled={isSubmitting}
+                            className="data-[state=checked]:bg-gray-900 dark:data-[state=checked]:bg-gray-100"
+                            aria-label={t('taskFormDialog.startLabel')}
+                          />
+                          <Label
+                            htmlFor="autostart-switch"
+                            className="text-sm cursor-pointer"
+                          >
+                            {t('taskFormDialog.startLabel')}
+                          </Label>
+                        </div>
+                      )}
+                    </form.Field>
+                  )}
+
+                  {/* Create/Start/Update button*/}
+                  <form.Subscribe
+                    selector={(state) => ({
+                      canSubmit: state.canSubmit,
+                      isSubmitting: state.isSubmitting,
+                      values: state.values,
+                    })}
+                  >
+                    {({ canSubmit, isSubmitting, values }) => {
+                      const buttonText = editMode
+                        ? isSubmitting
+                          ? t('taskFormDialog.updating')
+                          : t('taskFormDialog.updateTask')
+                        : isSubmitting
+                          ? values.autoStart
+                            ? t('taskFormDialog.starting')
+                            : t('taskFormDialog.creating')
+                          : t('taskFormDialog.create');
+
+                      return (
+                        <Button
+                          onClick={form.handleSubmit}
+                          disabled={!canSubmit}
+                        >
+                          {buttonText}
+                        </Button>
+                      );
+                    }}
+                  </form.Subscribe>
+                </div>
+              </div>
+            </div>
+
+            {/* Inside the dialog, over the form it is asking about.
+              It was a second Dialog for a while, and two stacked Radix dialogs raced: closing
+              this one and reopening it before its exit animation finished left it mounted but
+              invisible, so the close button appeared to do nothing. One dialog cannot race with
+              itself, and the form stays mounted underneath, so "Continue editing" returns to a
+              form that still has everything that was typed. */}
+            {showDiscardWarning && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/95 p-6">
+                <div className="w-full max-w-sm space-y-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      {t('taskFormDialog.discardDialog.title')}
+                    </h2>
+                    <p className="pt-2 text-sm text-muted-foreground">
+                      {t('taskFormDialog.discardDialog.description')}
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={handleContinueEditing}>
+                      {t('taskFormDialog.discardDialog.continueEditing')}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDiscardChanges}
+                    >
+                      {t('taskFormDialog.discardDialog.discardChanges')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 });

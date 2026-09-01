@@ -1,28 +1,14 @@
 import {
   Loader2,
-  Send,
+  ArrowUp,
+  CornerDownLeft,
   StopCircle,
   AlertCircle,
   Clock,
   X,
-  Paperclip,
-  Terminal,
-  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 //
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ScratchType, type TaskWithAttemptStatus } from 'shared/types';
@@ -38,8 +24,9 @@ import { useEntries } from '@/contexts/EntriesContext';
 import { useKeySubmitFollowUp, Scope } from '@/keyboard';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { useProject } from '@/contexts/ProjectContext';
+import { useProjectTags } from '@/hooks/useProjectTags';
 //
-import { VariantSelector } from '@/components/tasks/VariantSelector';
+import { ComposerMenu } from '@/components/tasks/ComposerMenu';
 import { useAttemptBranch } from '@/hooks/useAttemptBranch';
 import { FollowUpConflictSection } from '@/components/tasks/follow-up/FollowUpConflictSection';
 import { ClickedElementsBanner } from '@/components/tasks/ClickedElementsBanner';
@@ -59,9 +46,7 @@ import { useScratch } from '@/hooks/useScratch';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queueApi } from '@/lib/api';
-import { imagesApi, attemptsApi } from '@/lib/api';
-import { PrCommentsDialog } from '@/components/dialogs/tasks/PrCommentsDialog';
-import type { NormalizedComment } from '@/components/ui/wysiwyg/nodes/pr-comment-node';
+import { imagesApi } from '@/lib/api';
 import type { Session } from 'shared/types';
 import { buildAgentPrompt } from '@/utils/promptMessage';
 
@@ -86,11 +71,7 @@ export function TaskFollowUpSection({
 
   const { data: branchStatus, refetch: refetchBranchStatus } =
     useBranchStatus(workspaceId);
-  const { repos, selectedRepoId } = useAttemptRepo(workspaceId);
-
-  const getSelectedRepoId = useCallback(() => {
-    return selectedRepoId ?? repos[0]?.id;
-  }, [selectedRepoId, repos]);
+  const { repos } = useAttemptRepo(workspaceId);
 
   const repoWithConflicts = useMemo(
     () =>
@@ -403,26 +384,6 @@ export function TaskFollowUpSection({
   ]);
   const isEditable = !isRetryActive && !hasPendingApproval;
 
-  const hasAnyScript = true;
-
-  const handleRunSetupScript = useCallback(async () => {
-    if (!workspaceId || isAttemptRunning) return;
-    try {
-      await attemptsApi.runSetupScript(workspaceId);
-    } catch (error) {
-      console.error('Failed to run setup script:', error);
-    }
-  }, [workspaceId, isAttemptRunning]);
-
-  const handleRunCleanupScript = useCallback(async () => {
-    if (!workspaceId || isAttemptRunning) return;
-    try {
-      await attemptsApi.runCleanupScript(workspaceId);
-    } catch (error) {
-      console.error('Failed to run cleanup script:', error);
-    }
-  }, [workspaceId, isAttemptRunning]);
-
   // Handler to queue the current message for execution after agent finishes
   const handleQueueMessage = useCallback(async () => {
     if (
@@ -566,58 +527,22 @@ export function TaskFollowUpSection({
   );
 
   // Handler for PR comments insertion
-  const handlePrCommentClick = useCallback(async () => {
-    if (!workspaceId) return;
-    const repoId = getSelectedRepoId();
-    if (!repoId) return;
 
-    const result = await PrCommentsDialog.show({
-      attemptId: workspaceId,
-      repoId,
-    });
-    if (result.comments.length > 0) {
-      // Build markdown for all selected comments
-      const markdownBlocks = result.comments.map((comment) => {
-        const payload: NormalizedComment = {
-          id:
-            comment.comment_type === 'general'
-              ? comment.id
-              : comment.id.toString(),
-          comment_type: comment.comment_type,
-          author: comment.author,
-          body: comment.body,
-          created_at: comment.created_at,
-          url: comment.url,
-          // Include review-specific fields when available
-          ...(comment.comment_type === 'review' && {
-            path: comment.path,
-            line: comment.line != null ? Number(comment.line) : null,
-            diff_hunk: comment.diff_hunk,
-          }),
-        };
-        return '```gh-comment\n' + JSON.stringify(payload, null, 2) + '\n```';
-      });
+  const { data: tags = [] } = useProjectTags(projectId);
 
-      const markdown = markdownBlocks.join('\n\n');
-
-      // Same pattern as image paste
-      const { isQueued: currentlyQueued, queuedMessage: currentQueuedMessage } =
-        getQueueState();
-      if (currentlyQueued && currentQueuedMessage) {
-        cancelMutation.mutate();
-        const base = currentQueuedMessage.data.message;
-        const newMessage = base ? `${base}\n\n${markdown}` : markdown;
-        setLocalMessage(newMessage);
-        setFollowUpMessageRef.current(newMessage);
-      } else {
-        setLocalMessage((prev) => {
-          const newMessage = prev ? `${prev}\n\n${markdown}` : markdown;
-          setFollowUpMessageRef.current(newMessage);
-          return newMessage;
-        });
-      }
-    }
-  }, [workspaceId, getSelectedRepoId, getQueueState, cancelMutation]);
+  // Appended rather than substituted: a saved prompt is usually the frame for something you are
+  // about to add to, and silently discarding what is already typed would be the one unrecoverable
+  // thing this menu could do.
+  const handleInsertPrompt = useCallback(
+    (text: string) => {
+      const next = localMessage.trim()
+        ? `${localMessage.trimEnd()}\n\n${text}`
+        : text;
+      setLocalMessage(next);
+      setFollowUpMessageRef.current(next);
+    },
+    [localMessage]
+  );
 
   // Stable onChange handler for WYSIWYGEditor
   const handleEditorChange = useCallback(
@@ -759,48 +684,26 @@ export function TaskFollowUpSection({
                 </div>
               </div>
             )}
-
-            <div
-              className="flex flex-col gap-2"
-              onFocus={() => setIsTextareaFocused(true)}
-              onBlur={(e) => {
-                // Only blur if focus is leaving the container entirely
-                if (!e.currentTarget.contains(e.relatedTarget)) {
-                  setIsTextareaFocused(false);
-                }
-              }}
-            >
-              <WYSIWYGEditor
-                placeholder={editorPlaceholder}
-                value={displayMessage}
-                onChange={handleEditorChange}
-                disabled={!isEditable}
-                onPasteFiles={handlePasteFiles}
-                repoIds={repos.map((r) => r.id)}
-                projectId={projectId}
-                executor={latestProfileId?.executor ?? null}
-                taskAttemptId={workspaceId}
-                onCmdEnter={handleSubmitShortcut}
-                className="min-h-[40px]"
-              />
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Always-visible action bar */}
-      <div className="p-4">
-        <div className="flex flex-row gap-2 items-center">
-          <div className="flex-1 flex gap-2">
-            <VariantSelector
-              currentProfile={currentProfile}
-              selectedVariant={selectedVariant}
-              onChange={setSelectedVariant}
-              disabled={!isEditable}
-            />
-          </div>
-
-          {/* Hidden file input for attachment - always present */}
+      {/* The composer, as one capsule.
+          The primary control on the right is a single button whose job changes with the state,
+          rather than a row that reflows every time the agent starts or stops:
+            idle            → Send
+            running, text   → Queue (this message runs when the current one finishes)
+            running, empty  → Stop (there is nothing to queue, so the useful act is to interrupt)
+          Cancel-queue takes the slot once something is queued, since that is the only thing you
+          can usefully do to a queued message from here. */}
+      <div className="p-3">
+        <div
+          className={cn(
+            'rounded-3xl border border-input bg-background px-4 py-3 transition-shadow',
+            'group-data-[scrolled=true]/composer:shadow-lg',
+            isTextareaFocused && 'border-ring'
+          )}
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -809,153 +712,118 @@ export function TaskFollowUpSection({
             className="hidden"
             onChange={handleFileInputChange}
           />
-
-          {/* Attach button - always visible */}
-          <Button
-            onClick={handleAttachClick}
-            disabled={!isEditable}
-            size="sm"
-            variant="outline"
-            title="Attach image"
-            aria-label="Attach image"
+          <div
+            className="flex flex-col gap-2"
+            onFocus={() => setIsTextareaFocused(true)}
+            onBlur={(e) => {
+              // Only blur if focus is leaving the container entirely
+              if (!e.currentTarget.contains(e.relatedTarget)) {
+                setIsTextareaFocused(false);
+              }
+            }}
           >
-            <Paperclip className="h-4 w-4" />
-          </Button>
+            <WYSIWYGEditor
+              placeholder={editorPlaceholder}
+              value={displayMessage}
+              onChange={handleEditorChange}
+              disabled={!isEditable}
+              onPasteFiles={handlePasteFiles}
+              repoIds={repos.map((r) => r.id)}
+              projectId={projectId}
+              executor={latestProfileId?.executor ?? null}
+              taskAttemptId={workspaceId}
+              onCmdEnter={handleSubmitShortcut}
+              className="min-h-[40px]"
+            />
+          </div>
 
-          {/* PR Comments button */}
-          <Button
-            onClick={handlePrCommentClick}
-            disabled={!isEditable}
-            size="sm"
-            variant="outline"
-            title="Insert PR comment"
-            aria-label="Insert PR comment"
-          >
-            <MessageSquare className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2 pt-3">
+            <ComposerMenu
+              onUpload={handleAttachClick}
+              tags={tags}
+              onInsertPrompt={handleInsertPrompt}
+              currentProfile={currentProfile}
+              selectedVariant={selectedVariant}
+              onVariantChange={setSelectedVariant}
+              disabled={!isEditable}
+            />
 
-          {/* Scripts dropdown - only show if project has any scripts */}
-          {hasAnyScript && (
-            <DropdownMenu>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isAttemptRunning}
-                        aria-label="Run scripts"
-                      >
-                        <Terminal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  {isAttemptRunning && (
-                    <TooltipContent side="bottom">
-                      {t('followUp.scriptsDisabledWhileRunning')}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleRunSetupScript}>
-                  {t('followUp.runSetupScript')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleRunCleanupScript}>
-                  {t('followUp.runCleanupScript')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+            <div className="min-w-0 flex-1" />
 
-          {isAttemptRunning ? (
-            <div className="flex items-center gap-2">
-              {/* Queue/Cancel Queue button when running */}
-              {isQueued ? (
-                <Button
-                  onClick={cancelQueue}
-                  disabled={isQueueLoading}
-                  size="sm"
-                  variant="outline"
-                >
-                  {isQueueLoading ? (
-                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  ) : (
-                    <>
-                      <X className="h-4 w-4 mr-2" />
-                      {t('followUp.cancelQueue', 'Cancel Queue')}
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleQueueMessage}
-                  disabled={
-                    isQueueLoading ||
-                    (!localMessage.trim() &&
-                      !conflictResolutionInstructions &&
-                      !reviewMarkdown &&
-                      !clickedMarkdown)
-                  }
-                  size="sm"
-                >
-                  {isQueueLoading ? (
-                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  ) : (
-                    <>
-                      <Clock className="h-4 w-4 mr-2" />
-                      {t('followUp.queue', 'Queue')}
-                    </>
-                  )}
-                </Button>
-              )}
+            {comments.length > 0 && (
               <Button
-                onClick={stopExecution}
-                disabled={isStopping}
+                onClick={clearComments}
                 size="sm"
-                variant="destructive"
+                variant="ghost"
+                className="h-8 shrink-0 rounded-full text-xs text-destructive"
+                disabled={!isEditable}
               >
-                {isStopping ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : (
-                  <>
-                    <StopCircle className="h-4 w-4 mr-2" />
-                    {t('followUp.stop')}
-                  </>
-                )}
+                {t('followUp.clearReviewComments')}
               </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              {comments.length > 0 && (
-                <Button
-                  onClick={clearComments}
-                  size="sm"
-                  variant="destructive"
-                  disabled={!isEditable}
-                >
-                  {t('followUp.clearReviewComments')}
-                </Button>
-              )}
-              <Button
-                onClick={onSendFollowUp}
-                disabled={!canSendFollowUp || !isEditable}
-                size="sm"
-              >
-                {isSendingFollowUp ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    {conflictResolutionInstructions
+            )}
+
+            {(() => {
+              const busy = isQueueLoading || isStopping || isSendingFollowUp;
+              const hasText = Boolean(
+                localMessage.trim() ||
+                  conflictResolutionInstructions ||
+                  reviewMarkdown ||
+                  clickedMarkdown
+              );
+
+              const action = !isAttemptRunning
+                ? {
+                    onClick: onSendFollowUp,
+                    disabled: !canSendFollowUp || !isEditable,
+                    label: conflictResolutionInstructions
                       ? t('followUp.resolveConflicts')
-                      : t('followUp.send')}
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
+                      : t('followUp.send'),
+                    icon: <ArrowUp className="h-4 w-4" />,
+                    destructive: false,
+                  }
+                : isQueued
+                  ? {
+                      onClick: cancelQueue,
+                      disabled: isQueueLoading,
+                      label: t('followUp.cancelQueue', 'Cancel Queue'),
+                      icon: <X className="h-4 w-4" />,
+                      destructive: false,
+                    }
+                  : hasText
+                    ? {
+                        onClick: handleQueueMessage,
+                        disabled: isQueueLoading,
+                        label: t('followUp.queue', 'Queue'),
+                        icon: <CornerDownLeft className="h-4 w-4" />,
+                        destructive: false,
+                      }
+                    : {
+                        onClick: stopExecution,
+                        disabled: isStopping,
+                        label: t('followUp.stop'),
+                        icon: <StopCircle className="h-4 w-4" />,
+                        destructive: true,
+                      };
+
+              return (
+                <Button
+                  onClick={action.onClick}
+                  disabled={action.disabled || busy}
+                  variant={action.destructive ? 'destructive' : 'default'}
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-full"
+                  title={action.label}
+                  aria-label={action.label}
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    action.icon
+                  )}
+                </Button>
+              );
+            })()}
+          </div>
         </div>
       </div>
     </div>

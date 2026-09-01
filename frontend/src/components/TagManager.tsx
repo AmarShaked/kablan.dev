@@ -1,14 +1,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PlusIcon, PencilSimpleIcon, TrashIcon } from '@phosphor-icons/react';
-import { SpinnerGap } from '@phosphor-icons/react';
+import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+
 import { tagsApi } from '@/lib/api';
+import { ConfirmDialog } from '@/components/dialogs';
 import { TagEditDialog } from '@/components/dialogs/tasks/TagEditDialog';
-import { PrimaryButton } from '@/components/ui-new/primitives/PrimaryButton';
-import { IconButton } from '@/components/ui-new/primitives/IconButton';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/table';
 import type { Tag } from 'shared/types';
 
-export function TagManager() {
+/**
+ * Create, edit and delete tags.
+ *
+ * Scoped when a project is given — the list then shows that project's tags alongside the global
+ * ones, and anything created here belongs to the project. Unscoped, in the app's own settings,
+ * it manages every tag there is.
+ */
+export function TagManager({ projectId }: { projectId?: string } = {}) {
   const { t } = useTranslation('settings');
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,14 +33,14 @@ export function TagManager() {
   const fetchTags = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await tagsApi.list();
+      const data = await tagsApi.list({ project_id: projectId ?? null });
       setTags(data);
     } catch (err) {
       console.error('Failed to fetch tags:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     fetchTags();
@@ -34,6 +51,7 @@ export function TagManager() {
       try {
         const result = await TagEditDialog.show({
           tag: tag || null,
+          projectId,
         });
 
         if (result === 'saved') {
@@ -43,20 +61,22 @@ export function TagManager() {
         // User cancelled - do nothing
       }
     },
-    [fetchTags]
+    [fetchTags, projectId]
   );
 
   const handleDelete = useCallback(
     async (tag: Tag) => {
-      if (
-        !confirm(
-          t('settings.general.tags.manager.deleteConfirm', {
-            tagName: tag.tag_name,
-          })
-        )
-      ) {
-        return;
-      }
+      // The app's own dialog rather than window.confirm: the native one is styled by the
+      // browser, cannot be themed, and says "localhost:5310 says" above the question.
+      const result = await ConfirmDialog.show({
+        title: `Delete @${tag.tag_name}?`,
+        message: t('settings.general.tags.manager.deleteConfirm', {
+          tagName: tag.tag_name,
+        }),
+        confirmText: 'Delete',
+        variant: 'destructive',
+      }).catch(() => 'canceled');
+      if (result !== 'confirmed') return;
 
       try {
         await tagsApi.delete(tag.id);
@@ -71,91 +91,93 @@ export function TagManager() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <SpinnerGap className="h-8 w-8 animate-spin" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">
-          {t('settings.general.tags.manager.title')}
-        </h3>
-        <PrimaryButton
-          variant="tertiary"
-          onClick={() => handleOpenDialog()}
-          actionIcon={PlusIcon}
-        >
+    <div className="space-y-3">
+      <div className="flex items-center justify-end">
+        <Button variant="outline" size="sm" onClick={() => handleOpenDialog()}>
+          <Plus className="mr-2 h-3.5 w-3.5" />
           {t('settings.general.tags.manager.addTag')}
-        </PrimaryButton>
+        </Button>
       </div>
 
-      {tags.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          {t('settings.general.tags.manager.noTags')}
-        </div>
-      ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <div className="max-h-[400px] overflow-auto">
-            <table className="w-full">
-              <thead className="border-b bg-muted/50 sticky top-0">
-                <tr>
-                  <th className="text-left p-2 text-sm font-medium">
-                    {t('settings.general.tags.manager.table.tagName')}
-                  </th>
-                  <th className="text-left p-2 text-sm font-medium">
-                    {t('settings.general.tags.manager.table.content')}
-                  </th>
-                  <th className="text-right p-2 text-sm font-medium">
-                    {t('settings.general.tags.manager.table.actions')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {tags.map((tag) => (
-                  <tr
-                    key={tag.id}
-                    className="border-b hover:bg-muted/30 transition-colors"
-                  >
-                    <td className="p-2 text-sm font-medium">@{tag.tag_name}</td>
-                    <td className="p-2 text-sm">
-                      <div
-                        className="max-w-[400px] truncate"
-                        title={tag.content || ''}
+      <div className="max-h-[400px] overflow-auto rounded-md border">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell className="w-[14rem] px-3 py-2 text-xs font-medium text-muted-foreground">
+                {t('settings.general.tags.manager.table.tagName')}
+              </TableHeaderCell>
+              <TableHeaderCell className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                {t('settings.general.tags.manager.table.content')}
+              </TableHeaderCell>
+              <TableHeaderCell className="w-[6rem] px-3 py-2 text-right text-xs font-medium text-muted-foreground">
+                {t('settings.general.tags.manager.table.actions')}
+              </TableHeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tags.map((tag) => (
+              <TableRow key={tag.id}>
+                <TableCell className="px-3 font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    @{tag.tag_name}
+                    {/* Only worth saying inside a project, where the two kinds sit together. */}
+                    {projectId && !tag.project_id && (
+                      <Badge
+                        variant="secondary"
+                        className="px-1.5 py-0 text-[10px] font-normal"
                       >
-                        {tag.content || (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      <div className="flex justify-end gap-1">
-                        <IconButton
-                          icon={PencilSimpleIcon}
-                          aria-label="edit"
-                          onClick={() => handleOpenDialog(tag)}
-                          title={t(
-                            'settings.general.tags.manager.actions.editTag'
-                          )}
-                        />
-                        <IconButton
-                          icon={TrashIcon}
-                          aria-label="delete"
-                          onClick={() => handleDelete(tag)}
-                          title={t(
-                            'settings.general.tags.manager.actions.deleteTag'
-                          )}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                        global
+                      </Badge>
+                    )}
+                  </span>
+                </TableCell>
+                <TableCell className="px-3 text-muted-foreground">
+                  <div className="max-w-[28rem] truncate" title={tag.content}>
+                    {tag.content || '—'}
+                  </div>
+                </TableCell>
+                <TableCell className="px-3">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => handleOpenDialog(tag)}
+                      aria-label={t(
+                        'settings.general.tags.manager.actions.editTag'
+                      )}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(tag)}
+                      aria-label={t(
+                        'settings.general.tags.manager.actions.deleteTag'
+                      )}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {tags.length === 0 && (
+              <TableEmpty colSpan={3}>
+                {t('settings.general.tags.manager.noTags')}
+              </TableEmpty>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

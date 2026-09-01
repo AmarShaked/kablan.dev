@@ -1,11 +1,6 @@
 import { UserSystemContext } from '@/contexts/UserSystemContext';
 import type { UserSystemContextType } from '@/contexts/UserSystemContext';
-import {
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-} from 'react';
+import { ReactNode, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type Config,
@@ -16,8 +11,6 @@ import {
 import type { ExecutorConfig } from 'shared/types';
 import { configApi } from '../lib/api';
 import { updateLanguageFromConfig } from '../i18n/config';
-
-
 
 interface UserSystemProviderProps {
   children: ReactNode;
@@ -34,7 +27,6 @@ export function UserSystemProvider({ children }: UserSystemProviderProps) {
 
   const config = userSystemInfo?.config || null;
   const environment = userSystemInfo?.environment || null;
-  const analyticsUserId = userSystemInfo?.analytics_user_id || null;
   const loginStatus = userSystemInfo?.login_status || null;
   const profiles =
     (userSystemInfo?.executors as Record<string, ExecutorConfig> | null) ||
@@ -147,14 +139,12 @@ export function UserSystemProvider({ children }: UserSystemProviderProps) {
         environment,
         profiles,
         capabilities,
-        analyticsUserId,
         loginStatus,
       },
       config,
       environment,
       profiles,
       capabilities,
-      analyticsUserId,
       loginStatus,
       updateConfig,
       saveConfig,
@@ -170,7 +160,6 @@ export function UserSystemProvider({ children }: UserSystemProviderProps) {
       environment,
       profiles,
       capabilities,
-      analyticsUserId,
       loginStatus,
       updateConfig,
       saveConfig,

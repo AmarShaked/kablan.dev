@@ -689,28 +689,39 @@ export function GeneralSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t('settings.general.privacy.title')}</CardTitle>
+          <CardTitle>Task archive</CardTitle>
           <CardDescription>
-            {t('settings.general.privacy.description')}
+            Finished tasks leave the board and the task lists once they have
+            been done or cancelled for a while. They stay reachable under
+            Archive in the Tasks view.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="analytics-enabled"
-              checked={draft?.analytics_enabled ?? false}
-              onCheckedChange={(checked: boolean) =>
-                updateDraft({ analytics_enabled: checked })
-              }
+        <CardContent className="space-y-2">
+          <Label htmlFor="archive-after-days">Archive after</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="archive-after-days"
+              type="number"
+              min={0}
+              className="w-24"
+              value={draft?.archive_tasks_after_days ?? ''}
+              placeholder="Off"
+              onChange={(e) => {
+                const value = e.target.value.trim();
+                const days = Number(value);
+                // Empty or zero is off: a delay of nothing would archive a task the moment it
+                // was finished, which is what deleting the setting is for.
+                updateDraft({
+                  archive_tasks_after_days:
+                    value === '' || !Number.isFinite(days) || days <= 0
+                      ? null
+                      : Math.floor(days),
+                });
+              }}
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="analytics-enabled" className="cursor-pointer">
-                {t('settings.general.privacy.telemetry.label')}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.general.privacy.telemetry.helper')}
-              </p>
-            </div>
+            <span className="text-sm text-muted-foreground">
+              days. Leave empty to never archive automatically.
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -760,34 +771,6 @@ export function GeneralSettings() {
             <Button variant="outline" onClick={resetOnboarding}>
               {t('settings.general.safety.onboarding.button')}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('settings.general.beta.title')}</CardTitle>
-          <CardDescription>
-            {t('settings.general.beta.description')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="beta-workspaces"
-              checked={draft?.beta_workspaces ?? false}
-              onCheckedChange={(checked: boolean) =>
-                updateDraft({ beta_workspaces: checked })
-              }
-            />
-            <div className="space-y-0.5">
-              <Label htmlFor="beta-workspaces" className="cursor-pointer">
-                {t('settings.general.beta.workspaces.label')}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.general.beta.workspaces.helper')}
-              </p>
-            </div>
           </div>
         </CardContent>
       </Card>

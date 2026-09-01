@@ -12,7 +12,6 @@ import './i18n'; // side effect: initialises i18next
 // Import modal type definitions
 import './types/modals';
 
-
 // Kablan fork: product analytics and crash reporting are removed. Upstream initialised Sentry
 // (against Bloop AI's own DSN) and PostHog here; nothing is sent from this build.
 

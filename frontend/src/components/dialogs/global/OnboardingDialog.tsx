@@ -79,7 +79,7 @@ const OnboardingDialogImpl = NiceModal.create<NoProps>(() => {
       <DialogContent className="sm:max-w-[600px] space-y-4">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <HandMetal className="h-6 w-6 text-primary text-primary-foreground" />
+            <HandMetal className="h-6 w-6 text-foreground" />
             <DialogTitle>Welcome to Kablan</DialogTitle>
           </div>
           <DialogDescription className="text-left pt-2">

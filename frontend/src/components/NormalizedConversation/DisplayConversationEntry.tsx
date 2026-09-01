@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import RawLogText from '../common/RawLogText';
 import UserMessage from './UserMessage';
+import { ThinkingIndicator } from './ThinkingIndicator';
 import PendingApprovalEntry from './PendingApprovalEntry';
 import { NextActionCard } from './NextActionCard';
 import { cn } from '@/lib/utils';
@@ -217,11 +218,10 @@ const MessageCard: React.FC<{
   expanded?: boolean;
   onToggle?: () => void;
 }> = ({ children, variant, expanded, onToggle }) => {
-  const frameBase =
-    'border px-3 py-2 w-full cursor-pointer  bg-[hsl(var(--card))] border-[hsl(var(--border))]';
-  const systemTheme = 'border-400/40 text-zinc-500';
+  const frameBase = 'w-full cursor-pointer';
+  const systemTheme = 'py-0.5 text-xs text-muted-foreground/70';
   const errorTheme =
-    'border-red-400/40 bg-red-50 dark:bg-[hsl(var(--card))] text-[hsl(var(--foreground))]';
+    'border border-red-400/40 bg-red-50 px-3 py-2 text-[hsl(var(--foreground))] dark:bg-[hsl(var(--card))]';
 
   return (
     <div
@@ -230,7 +230,18 @@ const MessageCard: React.FC<{
       }`}
       onClick={onToggle}
     >
-      <div className="flex items-center gap-1.5">
+      <div
+        className={cn(
+          'flex gap-1.5',
+          variant === 'system' ? 'items-start' : 'items-center'
+        )}
+      >
+        {variant === 'system' && (
+          <Settings
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
+            aria-hidden
+          />
+        )}
         <div className="min-w-0 flex-1">{children}</div>
         {onToggle && (
           <ExpandChevron
@@ -512,7 +523,7 @@ const ToolCallCard: React.FC<{
     : {};
 
   const headerClassName = cn(
-    'w-full flex items-center gap-1.5 text-left text-secondary-foreground'
+    'w-full flex items-center gap-1.5 text-left text-muted-foreground/70'
   );
 
   return (
@@ -524,9 +535,9 @@ const ToolCallCard: React.FC<{
             {entryType && getEntryIcon(entryType)}
           </span>
           {showInlineSummary ? (
-            <span className="text-sm font-mono">{inlineText}</span>
+            <span className="font-mono text-xs">{inlineText}</span>
           ) : (
-            <span className="text-sm font-mono">{label}</span>
+            <span className="font-mono text-xs">{label}</span>
           )}
         </span>
       </HeaderWrapper>
@@ -666,16 +677,7 @@ const ScriptToolCallCard: React.FC<{
   );
 };
 
-const LoadingCard = () => {
-  return (
-    <div className="flex animate-pulse space-x-2 items-center">
-      <div className="size-3 bg-foreground/10"></div>
-      <div className="flex-1 h-3 bg-foreground/10"></div>
-      <div className="flex-1 h-3"></div>
-      <div className="flex-1 h-3"></div>
-    </div>
-  );
-};
+const LoadingCard = () => <ThinkingIndicator />;
 
 const isPendingApprovalStatus = (
   status: ToolStatus
@@ -772,7 +774,7 @@ function DisplayConversationEntry({
           <WYSIWYGEditor
             value={entry.content}
             disabled
-            className="whitespace-pre-wrap break-words flex flex-col gap-1 font-light py-3"
+            className="whitespace-pre-wrap break-words flex flex-col gap-1 font-normal py-3"
             taskAttemptId={taskAttempt?.id}
           />
         </div>
@@ -932,7 +934,7 @@ function DisplayConversationEntry({
           <WYSIWYGEditor
             value={isNormalizedEntry(entry) ? entry.content : ''}
             disabled
-            className="whitespace-pre-wrap break-words flex flex-col gap-1 font-light"
+            className="whitespace-pre-wrap break-words flex flex-col gap-1 font-normal"
             taskAttemptId={taskAttempt?.id}
           />
         ) : isNormalizedEntry(entry) ? (

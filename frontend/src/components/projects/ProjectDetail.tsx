@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { useNavigateWithSearch } from '@/hooks';
 import {
@@ -39,12 +40,14 @@ export function ProjectDetail({ projectId, onBack }: ProjectDetailProps) {
 
   const handleDelete = async () => {
     if (!project) return;
-    if (
-      !confirm(
-        `Are you sure you want to delete "${project.name}"? This action cannot be undone.`
-      )
-    )
-      return;
+    const result = await ConfirmDialog.show({
+      title: `Delete ${project.name}?`,
+      message:
+        'The project and its tasks are removed from Kablan. The repositories on disk are left alone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    }).catch(() => 'canceled');
+    if (result !== 'confirmed') return;
 
     try {
       await projectsApi.delete(projectId);

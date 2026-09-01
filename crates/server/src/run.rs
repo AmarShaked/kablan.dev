@@ -13,10 +13,7 @@ use services::services::container::ContainerService;
 use sqlx::Error as SqlxError;
 use thiserror::Error;
 use tracing_subscriber::{EnvFilter, prelude::*};
-use utils::{
-    assets::asset_dir,
-    sentry::{self as sentry_utils, SentrySource, sentry_layer},
-};
+use utils::assets::asset_dir;
 
 use crate::{DeploymentImpl, routes};
 
@@ -38,11 +35,9 @@ static INIT: Once = Once::new();
 ///
 /// The desktop app calls this from its own runtime, so it has to tolerate being reached twice
 /// (installing the rustls provider a second time is an error, not a no-op).
-pub fn init_process(source: SentrySource) {
+pub fn init_process() {
     INIT.call_once(|| {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-
-        sentry_utils::init_once(source);
 
         let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
         let filter_string = format!(
@@ -53,7 +48,6 @@ pub fn init_process(source: SentrySource) {
             EnvFilter::try_new(filter_string).expect("Failed to create tracing filter");
         tracing_subscriber::registry()
             .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
-            .with(sentry_layer())
             .init();
     });
 }
@@ -67,7 +61,6 @@ pub async fn build_deployment() -> Result<DeploymentImpl, KablanError> {
     }
 
     let deployment = DeploymentImpl::new().await?;
-    deployment.update_sentry_scope().await?;
     deployment
         .container()
         .cleanup_orphan_executions()
@@ -83,9 +76,6 @@ pub async fn build_deployment() -> Result<DeploymentImpl, KablanError> {
         .backfill_repo_names()
         .await
         .map_err(DeploymentError::from)?;
-    deployment
-        .track_if_analytics_allowed("session_start", serde_json::json!({}))
-        .await;
 
     // Warming the search cache is slow and nothing waits on it.
     let deployment_for_cache = deployment.clone();

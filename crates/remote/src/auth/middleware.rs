@@ -98,7 +98,6 @@ pub async fn require_session(
         }
     };
 
-    configure_user_scope(user.id, user.username.as_deref(), Some(user.email.as_str()));
 
     req.extensions_mut().insert(RequestContext {
         user,

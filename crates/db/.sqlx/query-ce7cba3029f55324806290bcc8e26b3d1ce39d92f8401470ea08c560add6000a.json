@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tasks\n                  SET archived_at = $1\n                WHERE archived_at IS NULL\n                  AND status IN ('done', 'cancelled')\n                  AND updated_at < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ce7cba3029f55324806290bcc8e26b3d1ce39d92f8401470ea08c560add6000a"
+}

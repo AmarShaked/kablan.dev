@@ -56,8 +56,10 @@ export function StatusGlyph({
       viewBox="0 0 16 16"
       aria-hidden="true"
       // Inline rather than a Tailwind class so the colour comes from the same map the
-      // section and column headings read, and cannot drift from them.
-      style={{ color: `hsl(var(${statusColorVars[status]}))` }}
+      // section and column headings read, and cannot drift from them. Held back from full
+      // strength: a column of saturated glyphs competes with the titles beside them, which are
+      // the thing you are actually reading.
+      style={{ color: `hsl(var(${statusColorVars[status]}) / 0.7)` }}
       className={cn('shrink-0', className)}
     >
       {status === 'done' ? (
@@ -112,10 +114,20 @@ export function TaskStatusControl({
   task,
   size = 16,
   className,
+  style,
+  children,
 }: {
   task: TaskWithAttemptStatus;
   size?: number;
   className?: string;
+  /** For a trigger that carries the status colour, which lives in a CSS variable. */
+  style?: React.CSSProperties;
+  /**
+   * Rendered inside the trigger, beside the glyph. The properties pane puts the status name here
+   * so the whole value opens the menu; on a board card, where the glyph sits next to a title that
+   * opens the task instead, it is left out.
+   */
+  children?: React.ReactNode;
 }) {
   const { projectId } = useProject();
   const { updateTask } = useTaskMutations(projectId ?? undefined);
@@ -154,13 +166,15 @@ export function TaskStatusControl({
             'hover:bg-border focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             className
           )}
+          style={style}
         >
           <StatusGlyph status={task.status} size={size} />
+          {children}
         </button>
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-60 p-0"
+        className="w-52 p-0"
         // Portalled content still bubbles through the React tree, so without this a click on a
         // status would also open the task behind it.
         onClick={(e) => e.stopPropagation()}
@@ -177,15 +191,15 @@ export function TaskStatusControl({
         }}
       >
         <Command loop>
-          <div className="flex items-center gap-2 border-b px-3 py-2">
-            <StatusGlyph status={task.status} />
+          <div className="flex items-center gap-2 border-b px-2.5 py-1.5">
+            <StatusGlyph status={task.status} size={14} />
             <Command.Input
               placeholder="Change status…"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             />
           </div>
           <Command.List className="max-h-64 overflow-y-auto p-1">
-            <Command.Empty className="px-3 py-3 text-center text-sm text-muted-foreground">
+            <Command.Empty className="px-3 py-2.5 text-center text-xs text-muted-foreground">
               No matching status
             </Command.Empty>
             {STATUS_ORDER.map((status, i) => (
@@ -193,12 +207,12 @@ export function TaskStatusControl({
                 key={status}
                 value={statusLabels[status]}
                 onSelect={() => setStatus(status)}
-                className="flex cursor-pointer select-none items-center gap-2 rounded px-2 py-1.5 text-sm data-[selected=true]:bg-accent"
+                className="flex cursor-pointer select-none items-center gap-2 rounded px-2 py-1 text-xs data-[selected=true]:bg-accent"
               >
-                <StatusGlyph status={status} />
+                <StatusGlyph status={status} size={14} />
                 <span className="flex-1">{statusLabels[status]}</span>
                 {status === task.status && (
-                  <Check className="h-3.5 w-3.5 shrink-0" />
+                  <Check className="h-3 w-3 shrink-0" />
                 )}
                 <span className="font-ibm-plex-mono w-3 text-right text-[11px] text-muted-foreground">
                   {i + 1}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+import { ConfirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { repoApi } from '@/lib/api';
 import type { EnvFile } from 'shared/types';
@@ -45,8 +46,16 @@ export function EnvFilesSection({ repoId }: { repoId: string }) {
     };
   }, [repoId]);
 
-  const select = (name: string) => {
-    if (dirty && !confirm('Discard unsaved changes to this file?')) return;
+  const select = async (name: string) => {
+    if (dirty) {
+      const result = await ConfirmDialog.show({
+        title: 'Discard unsaved changes?',
+        message: 'The edits to this file have not been saved.',
+        confirmText: 'Discard',
+        variant: 'destructive',
+      }).catch(() => 'canceled');
+      if (result !== 'confirmed') return;
+    }
     const file = files?.find((f) => f.name === name);
     setSelected(name);
     setContent(file?.content ?? '');

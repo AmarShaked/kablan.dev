@@ -203,8 +203,9 @@ impl GitService {
     ) -> Result<git2::Signature<'a>, GitServiceError> {
         match repo.signature() {
             Ok(sig) => Ok(sig),
-            Err(_) => git2::Signature::now("Kablan", "noreply@kablan.dev")
-                .map_err(GitServiceError::from),
+            Err(_) => {
+                git2::Signature::now("Kablan", "noreply@kablan.dev").map_err(GitServiceError::from)
+            }
         }
     }
 
@@ -987,6 +988,92 @@ impl GitService {
         let remote = self.get_remote_from_branch_ref(&repo, &base_branch_ref)?;
         self.fetch_all_from_remote(&repo, &remote)?;
         self.get_branch_status_inner(&repo, &branch_ref, &base_branch_ref)
+    }
+
+    /// How far the branch is from its upstream, using what has already been fetched.
+    ///
+    /// Unlike `get_remote_branch_status` this makes no network call. Branch status is polled
+    /// every few seconds for every open attempt, and a fetch on that path means talking to the
+    /// remote — and possibly prompting for credentials — several times a minute per repository.
+    /// The remote-tracking ref is as fresh as the last fetch, which is what a git client shows
+    /// you too.
+    pub fn get_upstream_divergence(
+        &self,
+        repo_path: &Path,
+        branch_name: &str,
+    ) -> Result<(usize, usize), GitServiceError> {
+        let repo = Repository::open(repo_path)?;
+        let branch = repo.find_branch(branch_name, BranchType::Local)?;
+        let upstream = branch.upstream()?;
+
+        let local_oid = branch
+            .get()
+            .target()
+            .ok_or_else(|| GitServiceError::InvalidRepository("Branch has no target".into()))?;
+        let upstream_oid = upstream.get().target().ok_or_else(|| {
+            GitServiceError::InvalidRepository("Upstream branch has no target".into())
+        })?;
+
+        let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid)?;
+        Ok((ahead, behind))
+    }
+
+    /// Bring the worktree's branch up to date with its upstream.
+    ///
+    /// Fast-forward only. A pull that could merge or rebase would be making a decision about
+    /// someone's history on their behalf, from a button with no options on it; when the branches
+    /// have both moved this says so and leaves the choice — rebase is right there beside it.
+    ///
+    /// Returns how many commits arrived, so "already up to date" can be told from "pulled 3".
+    pub fn pull_from_remote(
+        &self,
+        worktree_path: &Path,
+        branch_name: &str,
+    ) -> Result<usize, GitServiceError> {
+        let repo = Repository::open(worktree_path)?;
+        self.check_worktree_clean(&repo)?;
+
+        // Fetch first: the counts we hold are only as good as the last fetch, and pulling is
+        // exactly the moment to go and look.
+        let upstream_ref = repo
+            .find_branch(branch_name, BranchType::Local)?
+            .upstream()?
+            .into_reference();
+        self.fetch_branch_from_remote(&repo, &upstream_ref)?;
+
+        let branch = repo.find_branch(branch_name, BranchType::Local)?;
+        let local_oid = branch
+            .get()
+            .target()
+            .ok_or_else(|| GitServiceError::InvalidRepository("Branch has no target".into()))?;
+        let upstream_oid = repo
+            .find_branch(branch_name, BranchType::Local)?
+            .upstream()?
+            .get()
+            .target()
+            .ok_or_else(|| {
+                GitServiceError::InvalidRepository("Upstream branch has no target".into())
+            })?;
+
+        let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid)?;
+        if behind == 0 {
+            return Ok(0);
+        }
+        if ahead > 0 {
+            return Err(GitServiceError::BranchesDiverged(format!(
+                "{branch_name} has {ahead} commit(s) the remote does not, and the remote has \
+                 {behind} this branch does not — rebase instead of pulling"
+            )));
+        }
+
+        let object = repo.find_object(upstream_oid, None)?;
+        repo.checkout_tree(&object, None)?;
+        repo.find_branch(branch_name, BranchType::Local)?
+            .get_mut()
+            .set_target(upstream_oid, "pull: fast-forward")?;
+        repo.set_head(&format!("refs/heads/{branch_name}"))?;
+
+        Ok(behind)
     }
 
     pub fn is_worktree_clean(&self, worktree_path: &Path) -> Result<bool, GitServiceError> {

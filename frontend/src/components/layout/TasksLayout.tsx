@@ -242,8 +242,6 @@ export function TasksLayout({
   isMobile = false,
   rightHeader,
 }: TasksLayoutProps) {
-  const desktopKey = isPanelOpen ? 'desktop-with-panel' : 'kanban-only';
-
   if (isMobile) {
     // When panel is open and mode is set, show aux content (preview/diffs)
     // Otherwise show attempt content
@@ -271,20 +269,11 @@ export function TasksLayout({
     );
   }
 
-  let desktopNode: ReactNode;
-
-  if (!isPanelOpen) {
-    desktopNode = (
-      <div
-        className="h-full min-h-0 min-w-0 overflow-hidden"
-        role="region"
-        aria-label="Kanban board"
-      >
-        {kanban}
-      </div>
-    );
-  } else {
-    desktopNode = (
+  // The task list is the left column whether or not a task is open, so the desktop layout no
+  // longer swaps between "list only" and "list plus panel" — it is one split, and the right side
+  // fills in. Crossfading the whole thing on selection made the list flash on every click.
+  return (
+    <div className="h-full min-h-0">
       <DesktopSimple
         kanban={kanban}
         attempt={attempt}
@@ -292,21 +281,6 @@ export function TasksLayout({
         mode={mode}
         rightHeader={rightHeader}
       />
-    );
-  }
-
-  return (
-    <AnimatePresence initial={false} mode="popLayout">
-      <motion.div
-        key={desktopKey}
-        className="h-full min-h-0"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
-      >
-        {desktopNode}
-      </motion.div>
-    </AnimatePresence>
+    </div>
   );
 }

@@ -17,7 +17,6 @@ use super::{
     provider::{AuthorizationGrant, AuthorizationProvider, ProviderUser},
 };
 use crate::{
-    configure_user_scope,
     db::{
         auth::{AuthSessionError, AuthSessionRepository, MAX_SESSION_INACTIVITY_DURATION},
         identity_errors::IdentityError,
@@ -302,7 +301,6 @@ impl OAuthHandoffService {
         )
         .await?;
 
-        configure_user_scope(user.id, user.username.as_deref(), Some(user.email.as_str()));
 
         Ok(CallbackResult::Success {
             handoff_id: record.id,
@@ -383,7 +381,6 @@ impl OAuthHandoffService {
         session_repo.touch(session.id).await?;
         repo.mark_redeemed(record.id).await?;
 
-        configure_user_scope(user.id, user.username.as_deref(), Some(user.email.as_str()));
 
         Ok(RedeemResponse {
             access_token: tokens.access_token,

@@ -1,12 +1,11 @@
 import {
+  ArrowDownToLine,
   ArrowRight,
+  ArrowUpFromLine,
   GitBranch as GitBranchIcon,
-  GitPullRequest,
   RefreshCw,
   Settings,
   AlertTriangle,
-  CheckCircle,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import {
@@ -16,24 +15,18 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip.tsx';
 import { useCallback, useMemo, useState } from 'react';
-import type {
-  RepoBranchStatus,
-  Merge,
-  TaskWithAttemptStatus,
-  Workspace,
-} from 'shared/types';
+import type { RepoBranchStatus, Merge, Workspace } from 'shared/types';
 import { ChangeTargetBranchDialog } from '@/components/dialogs/tasks/ChangeTargetBranchDialog';
 import RepoSelector from '@/components/tasks/RepoSelector';
 import { RebaseDialog } from '@/components/dialogs/tasks/RebaseDialog';
-import { CreatePRDialog } from '@/components/dialogs/tasks/CreatePRDialog';
 import { useTranslation } from 'react-i18next';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 import { useGitOperations } from '@/hooks/useGitOperations';
 import { useRepoBranches } from '@/hooks';
+import { BranchStatusChips } from './BranchStatus';
 
 interface GitOperationsProps {
   selectedAttempt: Workspace;
-  task: TaskWithAttemptStatus;
   branchStatus: RepoBranchStatus[] | null;
   branchStatusError?: Error | null;
   isAttemptRunning: boolean;
@@ -76,7 +69,6 @@ function ActionTooltip({
 
 function GitOperations({
   selectedAttempt,
-  task,
   branchStatus,
   branchStatusError,
   isAttemptRunning,
@@ -95,6 +87,7 @@ function GitOperations({
   // Local state for git operations
   const [merging, setMerging] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [rebasing, setRebasing] = useState(false);
   const [mergeSuccess, setMergeSuccess] = useState(false);
   const [pushSuccess, setPushSuccess] = useState(false);
@@ -141,6 +134,12 @@ function GitOperations({
 
   const hasConflictsCalculated =
     (selectedRepoStatus?.conflicted_files?.length ?? 0) > 0;
+
+  const commitsAhead = selectedRepoStatus?.commits_ahead ?? 0;
+  const remoteAhead = selectedRepoStatus?.remote_commits_ahead ?? 0;
+  // How many commits the remote has that this branch does not — what a pull would bring.
+  const remoteBehind = selectedRepoStatus?.remote_commits_behind ?? 0;
+  const recentlyActed = pushSuccess || mergeSuccess;
 
   // Memoize merge status information to avoid repeated calculations
   const mergeInfo = useMemo(() => {
@@ -190,16 +189,30 @@ function GitOperations({
     return t('git.states.rebase');
   }, [rebasing, t]);
 
-  const prButtonLabel = useMemo(() => {
-    if (mergeInfo.hasOpenPR) {
-      return pushSuccess
-        ? t('git.states.pushed')
-        : pushing
-          ? t('git.states.pushing')
-          : t('git.states.push');
+  const pullButtonLabel = useMemo(() => {
+    if (pulling) return t('git.states.pulling', 'Pulling…');
+    // The count is the reason the button is there, so it is on the button.
+    return t('git.states.pullCount', 'Pull {{count}}', { count: remoteBehind });
+  }, [pulling, remoteBehind, t]);
+
+  const pushButtonLabel = useMemo(() => {
+    return pushSuccess
+      ? t('git.states.pushed')
+      : pushing
+        ? t('git.states.pushing')
+        : t('git.states.push');
+  }, [pushSuccess, pushing, t]);
+
+  const handlePullClick = async () => {
+    const repoId = getSelectedRepoId();
+    if (!repoId) return;
+    try {
+      setPulling(true);
+      await git.actions.pull({ repo_id: repoId });
+    } finally {
+      setPulling(false);
     }
-    return t('git.states.createPr');
-  }, [mergeInfo.hasOpenPR, pushSuccess, pushing, t]);
+  };
 
   const handleMergeClick = async () => {
     // Directly perform merge without checking branch status
@@ -276,20 +289,9 @@ function GitOperations({
     }
   };
 
-  const handlePRButtonClick = async () => {
-    // If PR already exists, push to it
-    if (mergeInfo.hasOpenPR) {
-      await handlePushClick();
-      return;
-    }
-
-    CreatePRDialog.show({
-      attempt: selectedAttempt,
-      task,
-      repoId: getSelectedRepoId(),
-      targetBranch: getSelectedRepoStatus()?.target_branch_name,
-    });
-  };
+  // Opening the request itself is left to the host: what it is called and how it is opened
+  // differ between them — a pull request on GitHub, a merge request on GitLab — and this pushes
+  // the branch so that whichever one it is can be opened where it belongs.
 
   /**
    * Why each action is unavailable, or null when it is available.
@@ -298,10 +300,6 @@ function GitOperations({
    * no reason given is a question the person has to bring to someone else, and these have six
    * different causes that are not interchangeable.
    */
-  const commitsAhead = selectedRepoStatus?.commits_ahead ?? 0;
-  const remoteAhead = selectedRepoStatus?.remote_commits_ahead ?? 0;
-  const recentlyActed = pushSuccess || mergeSuccess;
-
   const mergeDisabledReason: string | null = mergeInfo.hasMergedPR
     ? t('git.why.alreadyMerged', 'Already merged')
     : mergeInfo.hasOpenPR
@@ -318,7 +316,7 @@ function GitOperations({
             : selectedRepoStatus?.is_target_remote
               ? t(
                   'git.why.targetRemote',
-                  'The target branch is on a remote — open a pull request instead'
+                  'The target branch is on a remote — push and open the request there'
                 )
               : commitsAhead === 0 && !recentlyActed
                 ? t(
@@ -327,25 +325,28 @@ function GitOperations({
                   )
                 : null;
 
-  const prDisabledReason: string | null = mergeInfo.hasMergedPR
-    ? t('git.why.alreadyMerged', 'Already merged')
-    : pushing
-      ? t('git.why.pushing', 'Pushing…')
-      : isAttemptRunning
-        ? t('git.why.running', 'Wait for the agent to finish')
+  const pullDisabledReason: string | null = pulling
+    ? t('git.states.pulling', 'Pulling…')
+    : isAttemptRunning
+      ? t('git.why.running', 'Wait for the agent to finish')
+      : selectedRepoStatus?.is_rebase_in_progress
+        ? t('git.why.rebaseInProgress', 'Finish the rebase first')
         : hasConflictsCalculated
           ? t('git.why.conflicts', 'Resolve the conflicts first')
-          : mergeInfo.hasOpenPR && remoteAhead === 0
-            ? t(
-                'git.why.prUpToDate',
-                'The open pull request already has these commits'
-              )
-            : commitsAhead === 0 && remoteAhead === 0 && !recentlyActed
-              ? t(
-                  'git.why.nothingToPr',
-                  'Nothing to open a pull request about — this attempt has made no commits'
-                )
-              : null;
+          : null;
+
+  const pushDisabledReason: string | null = pushing
+    ? t('git.why.pushing', 'Pushing…')
+    : isAttemptRunning
+      ? t('git.why.running', 'Wait for the agent to finish')
+      : hasConflictsCalculated
+        ? t('git.why.conflicts', 'Resolve the conflicts first')
+        : commitsAhead === 0 && remoteAhead === 0 && !recentlyActed
+          ? t(
+              'git.why.nothingToPush',
+              'Nothing to push — this attempt has made no commits'
+            )
+          : null;
 
   const rebaseDisabledReason: string | null = rebasing
     ? t('git.why.rebasing', 'Rebasing…')
@@ -369,93 +370,7 @@ function GitOperations({
     ? 'flex flex-wrap items-center gap-2'
     : 'shrink-0 flex flex-wrap items-center gap-2 overflow-y-hidden overflow-x-visible max-h-8';
 
-  const statusChips = (
-    <div className="flex items-center gap-2 text-xs min-w-0 overflow-hidden whitespace-nowrap">
-      {(() => {
-        const commitsAhead = selectedRepoStatus?.commits_ahead ?? 0;
-        const commitsBehind = selectedRepoStatus?.commits_behind ?? 0;
-
-        if (hasConflictsCalculated) {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {t('git.status.conflicts')}
-            </span>
-          );
-        }
-
-        if (selectedRepoStatus?.is_rebase_in_progress) {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              {t('git.states.rebasing')}
-            </span>
-          );
-        }
-
-        if (mergeInfo.hasMergedPR) {
-          return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-              <CheckCircle className="h-3.5 w-3.5" />
-              {t('git.states.merged')}
-            </span>
-          );
-        }
-
-        if (mergeInfo.hasOpenPR && mergeInfo.openPR?.type === 'pr') {
-          const prMerge = mergeInfo.openPR;
-          return (
-            <button
-              onClick={() => window.open(prMerge.pr_info.url, '_blank')}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100/60 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 hover:underline truncate max-w-[180px] sm:max-w-none"
-              aria-label={t('git.pr.open', {
-                number: Number(prMerge.pr_info.number),
-              })}
-            >
-              <GitPullRequest className="h-3.5 w-3.5" />
-              {t('git.pr.number', {
-                number: Number(prMerge.pr_info.number),
-              })}
-              <ExternalLink className="h-3.5 w-3.5" />
-            </button>
-          );
-        }
-
-        const chips: React.ReactNode[] = [];
-        if (commitsAhead > 0) {
-          chips.push(
-            <span
-              key="ahead"
-              className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-            >
-              +{commitsAhead} {t('git.status.commits', { count: commitsAhead })}{' '}
-              {t('git.status.ahead')}
-            </span>
-          );
-        }
-        if (commitsBehind > 0) {
-          chips.push(
-            <span
-              key="behind"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-            >
-              {commitsBehind}{' '}
-              {t('git.status.commits', { count: commitsBehind })}{' '}
-              {t('git.status.behind')}
-            </span>
-          );
-        }
-        if (chips.length > 0)
-          return <div className="flex items-center gap-2">{chips}</div>;
-
-        return (
-          <span className="text-muted-foreground hidden sm:inline">
-            {t('git.status.upToDate')}
-          </span>
-        );
-      })()}
-    </div>
-  );
+  const statusChips = <BranchStatusChips status={selectedRepoStatus} />;
 
   const branchChips = (
     <>
@@ -533,10 +448,6 @@ function GitOperations({
                 placeholder={t('repos.selector.placeholder', 'Select repo')}
               />
             )}
-            <div className="flex flex-wrap items-center gap-2 min-w-0">
-              {branchChips}
-              {statusChips}
-            </div>
           </>
         ) : (
           <>
@@ -583,19 +494,37 @@ function GitOperations({
               </Button>
             </ActionTooltip>
 
-            <ActionTooltip reason={prDisabledReason}>
+            <ActionTooltip reason={pushDisabledReason}>
               <Button
-                onClick={handlePRButtonClick}
-                disabled={prDisabledReason !== null}
+                onClick={handlePushClick}
+                disabled={pushDisabledReason !== null}
                 variant="outline"
                 size="xs"
                 className="h-6 gap-1 px-2 text-xs font-normal shrink-0"
-                aria-label={prButtonLabel}
+                aria-label={pushButtonLabel}
               >
-                <GitPullRequest className="h-3.5 w-3.5" />
-                <span className="truncate max-w-[10ch]">{prButtonLabel}</span>
+                <ArrowUpFromLine className="h-3.5 w-3.5" />
+                <span className="truncate max-w-[10ch]">{pushButtonLabel}</span>
               </Button>
             </ActionTooltip>
+
+            {remoteBehind > 0 && (
+              <ActionTooltip reason={pullDisabledReason}>
+                <Button
+                  onClick={handlePullClick}
+                  disabled={pullDisabledReason !== null}
+                  variant="outline"
+                  size="xs"
+                  className="h-6 gap-1 px-2 text-xs font-normal shrink-0"
+                  aria-label={pullButtonLabel}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  <span className="truncate max-w-[12ch]">
+                    {pullButtonLabel}
+                  </span>
+                </Button>
+              </ActionTooltip>
+            )}
 
             <ActionTooltip reason={rebaseDisabledReason}>
               <Button

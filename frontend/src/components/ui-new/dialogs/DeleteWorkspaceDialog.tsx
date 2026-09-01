@@ -82,7 +82,9 @@ const DeleteWorkspaceDialogImpl = NiceModal.create<DeleteWorkspaceDialogProps>(
               <Checkbox
                 id="delete-branches"
                 checked={deleteBranches}
-                onCheckedChange={(checked) => setDeleteBranches(checked)}
+                onCheckedChange={(checked) =>
+                  setDeleteBranches(checked === true)
+                }
                 disabled={!canDeleteBranches}
               />
               <div className="flex flex-col gap-1">

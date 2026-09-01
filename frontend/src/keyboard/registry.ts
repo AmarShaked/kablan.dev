@@ -163,14 +163,6 @@ export const sequentialBindings: SequentialBinding[] = [
 
   // Git (X = eXecute)
   {
-    id: 'seq-git-pr',
-    keys: ['x', 'p'],
-    scopes: [Scope.WORKSPACE],
-    description: 'Create Pull Request',
-    group: 'Git',
-    actionId: 'git-create-pr',
-  },
-  {
     id: 'seq-git-merge',
     keys: ['x', 'm'],
     scopes: [Scope.WORKSPACE],

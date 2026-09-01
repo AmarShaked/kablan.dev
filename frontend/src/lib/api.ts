@@ -78,7 +78,9 @@ import {
   ScratchType,
   CreateScratch,
   UpdateScratch,
+  PullError,
   PushError,
+  ArchiveFilter,
   TokenResponse,
   CurrentUserResponse,
   QueueStatus,
@@ -340,12 +342,24 @@ export const tasksApi = {
   /** One-shot fetch of a project's tasks. The board streams over WS; this is for places that
    *  just need a snapshot, like expanding a project row. */
   listByProject: async (
-    projectId: string
+    projectId: string,
+    archived: ArchiveFilter = 'active'
   ): Promise<TaskWithAttemptStatus[]> => {
     const response = await makeRequest(
-      `/api/tasks?project_id=${encodeURIComponent(projectId)}`
+      `/api/tasks?project_id=${encodeURIComponent(projectId)}&archived=${archived}`
     );
     return handleApiResponse<TaskWithAttemptStatus[]>(response);
+  },
+
+  setArchived: async (
+    taskIds: string[],
+    archived: boolean
+  ): Promise<number> => {
+    const response = await makeRequest(`/api/tasks/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ task_ids: taskIds, archived }),
+    });
+    return handleApiResponse<number>(response);
   },
 
   getById: async (taskId: string): Promise<Task> => {
@@ -658,6 +672,17 @@ export const attemptsApi = {
       }
     );
     return handleApiResponseAsResult<void, PushError>(response);
+  },
+
+  pull: async (
+    attemptId: string,
+    data: PushTaskAttemptRequest
+  ): Promise<Result<number, PullError>> => {
+    const response = await makeRequest(`/api/task-attempts/${attemptId}/pull`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponseAsResult<number, PullError>(response);
   },
 
   rebase: async (
@@ -1047,13 +1072,16 @@ export const configApi = {
   },
 };
 
-// Task Tags APIs (all tags are global)
+// Task tags. A tag belongs to a project, or to none and therefore to all of them.
 export const tagsApi = {
-  list: async (params?: TagSearchParams): Promise<Tag[]> => {
-    const queryParam = params?.search
-      ? `?search=${encodeURIComponent(params.search)}`
-      : '';
-    const response = await makeRequest(`/api/tags${queryParam}`);
+  list: async (params?: Partial<TagSearchParams>): Promise<Tag[]> => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    // With a project, the server returns that project's tags plus the global ones; without one,
+    // every tag — which is what the screen that manages them wants.
+    if (params?.project_id) query.set('project_id', params.project_id);
+    const qs = query.toString();
+    const response = await makeRequest(`/api/tags${qs ? `?${qs}` : ''}`);
     return handleApiResponse<Tag[]>(response);
   },
 

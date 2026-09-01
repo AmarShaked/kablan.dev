@@ -22,7 +22,11 @@ const NewCardHeader = React.forwardRef<HTMLDivElement, NewCardHeaderProps>(
         // One plain rule underneath. It used to be dashed, with a solid line drawn on top of
         // the next header by a pseudo-element, so wherever a header sat inside a bordered
         // container two lines stacked a pixel apart and read as a rendering fault.
-        'relative bg-background text-foreground text-base flex items-center gap-2 px-3 border-b',
+        //
+        // The floor of 48px is the same one the task column's header uses: these two sit side by
+        // side, and a three-pixel difference puts a visible step in the rule that runs across
+        // the top of the page.
+        'relative min-h-12 bg-background text-foreground text-base flex items-center gap-2 px-3 border-b',
         actions && 'justify-between',
         className
       )}
