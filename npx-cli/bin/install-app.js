@@ -111,9 +111,92 @@ function infoPlist(version) {
 `;
 }
 
+
+/**
+ * Stop a Kablan that is already running, and say whether one was.
+ *
+ * Replacing the bundle under a live process does nothing to that process: it keeps serving, the
+ * launcher finds its port file and simply opens a browser at it, and the update looks like it
+ * failed — the app still reports the version it was started with. So the install stops it first.
+ *
+ * The port file is the only handle we have on it. Whoever is listening on that port has to look
+ * like Kablan before it is signalled, because a stale port file plus a recycled port would
+ * otherwise point at some unrelated process. SIGTERM first so the server can close its database
+ * cleanly; SIGKILL only if it is still there after a grace period.
+ *
+ * @returns the pid stopped, or null when nothing was running
+ */
+function stopRunningApp() {
+  const bin = APP_NAME.toLowerCase();
+  const tmp = process.env.TMPDIR || "/tmp";
+  const portFile = path.join(tmp, bin, `${bin}.port`);
+
+  let port;
+  try {
+    port = fs.readFileSync(portFile, "utf8").trim();
+  } catch {
+    return null;
+  }
+  if (!/^\d+$/.test(port)) return null;
+
+  let pids;
+  try {
+    pids = execFileSync("/usr/sbin/lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    // Nothing listening: the port file outlived the process it described.
+    return null;
+  }
+
+  for (const pid of pids) {
+    let command = "";
+    try {
+      command = execFileSync("/bin/ps", ["-o", "command=", "-p", pid], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      continue;
+    }
+    // Ours: either a cached release binary or the one inside the bundle.
+    if (!command.includes(`.${bin}/bin/`) && !command.includes(`${bin}-server`)) continue;
+
+    try {
+      process.kill(Number(pid), "SIGTERM");
+    } catch {
+      continue;
+    }
+
+    // Give it a moment to close its database before resorting to SIGKILL.
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      try {
+        process.kill(Number(pid), 0);
+      } catch {
+        return pid; // gone
+      }
+      execFileSync("/bin/sleep", ["0.2"]);
+    }
+    try {
+      process.kill(Number(pid), "SIGKILL");
+    } catch {
+      // Raced us to exit.
+    }
+    return pid;
+  }
+
+  return null;
+}
+
 /**
  * @param binPath  the extracted server binary to install
  * @param version  the wrapper's version, shown in Finder's Get Info
+ * @returns {{ app: string, stoppedPid: string | null }}
  */
 function installMacApp(binPath, version) {
   if (process.platform !== "darwin") {
@@ -122,6 +205,10 @@ function installMacApp(binPath, version) {
         `On Linux and Windows, run \`npx kablan\` directly.`
     );
   }
+
+  // Before anything is replaced: a running copy would survive the swap and keep serving the
+  // version it started with.
+  const stoppedPid = stopRunningApp();
 
   const app = appDir();
   const macos = path.join(app, "Contents", "MacOS");
@@ -160,14 +247,16 @@ function installMacApp(binPath, version) {
     // Cosmetic only — the app works either way.
   }
 
-  return app;
+  return { app, stoppedPid };
 }
 
 function uninstallMacApp() {
+  // Removing the bundle from under a running server leaves it running with no way back to it.
+  const stoppedPid = stopRunningApp();
   const app = appDir();
-  if (!fs.existsSync(app)) return null;
+  if (!fs.existsSync(app)) return { app: null, stoppedPid };
   fs.rmSync(app, { recursive: true, force: true });
-  return app;
+  return { app, stoppedPid };
 }
 
-module.exports = { installMacApp, uninstallMacApp, appDir, APP_NAME };
+module.exports = { installMacApp, uninstallMacApp, stopRunningApp, appDir, APP_NAME };

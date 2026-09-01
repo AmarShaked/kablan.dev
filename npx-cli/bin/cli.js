@@ -148,10 +148,12 @@ async function main() {
   const args = process.argv.slice(2);
   const isMcpMode = args.includes("--mcp");
 
-  // `--install` puts a double-clickable app in ~/Applications and exits; it never starts a
-  // server itself, so re-running it to update is safe while Kablan is open.
+  // `--install` puts a double-clickable app in ~/Applications and exits. It stops a running
+  // Kablan first: the swap would otherwise leave the old process serving, and the update would
+  // look like it had not happened.
   if (args.includes("--uninstall")) {
-    const removed = uninstallMacApp();
+    const { app: removed, stoppedPid } = uninstallMacApp();
+    if (stoppedPid) console.log(`Stopped the running Kablan (pid ${stoppedPid})`);
     console.log(removed ? `Removed ${removed}` : `Nothing installed at ${appDir()}`);
     console.log("Cached binaries are still in ~/.kablan/bin; delete that to reclaim the space.");
     return;
@@ -159,7 +161,10 @@ async function main() {
 
   if (args.includes("--install")) {
     await extractAndRun("kablan", (bin) => {
-      const app = installMacApp(bin, CLI_VERSION);
+      const { app, stoppedPid } = installMacApp(bin, CLI_VERSION);
+      if (stoppedPid) {
+        console.log(`\nStopped the running Kablan (pid ${stoppedPid}) so this version replaces it`);
+      }
       console.log(`\nInstalled ${app}`);
       console.log("Open it from Launchpad or Spotlight — it starts Kablan in the background");
       console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
