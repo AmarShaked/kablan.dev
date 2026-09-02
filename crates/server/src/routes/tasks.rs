@@ -71,8 +71,24 @@ pub async fn set_tasks_archived(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<SetArchivedRequest>,
 ) -> Result<ResponseJson<ApiResponse<u64>>, ApiError> {
-    let updated =
-        Task::set_archived(&deployment.db().pool, &payload.task_ids, payload.archived).await?;
+    let pool = &deployment.db().pool;
+
+    // Archiving hides a task, so anything it left running is now running for something nobody is
+    // looking at — most visibly a dev server, which holds the project's port until it is stopped.
+    // A restore starts work again from scratch, so there is nothing to keep alive. Worktrees stay
+    // put, though: unlike delete, archive is reversible, and the files are what a restore needs.
+    if payload.archived {
+        for task_id in &payload.task_ids {
+            let workspaces = Workspace::fetch_all(pool, Some(*task_id))
+                .await
+                .unwrap_or_default();
+            for workspace in &workspaces {
+                deployment.container().try_stop(workspace, true).await;
+            }
+        }
+    }
+
+    let updated = Task::set_archived(pool, &payload.task_ids, payload.archived).await?;
 
     Ok(ResponseJson(ApiResponse::success(updated)))
 }
