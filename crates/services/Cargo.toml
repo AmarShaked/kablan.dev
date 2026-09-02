@@ -4,6 +4,8 @@ version = "0.1.8"
 edition = "2024"
 
 [features]
+# Passthrough: see crates/executors for what this costs.
+codex = ["executors/codex"]
 default = []
 cloud = []
 qa-mode = ["executors/qa-mode"]

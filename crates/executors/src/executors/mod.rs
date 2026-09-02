@@ -21,8 +21,8 @@ use crate::{
     command::CommandBuildError,
     env::ExecutionEnv,
     executors::{
-        amp::Amp, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
-        droid::Droid, gemini::Gemini, opencode::Opencode, qwen::QwenCode,
+        amp::Amp, claude::ClaudeCode, copilot::Copilot, cursor::CursorAgent, droid::Droid,
+        gemini::Gemini, opencode::Opencode, qwen::QwenCode,
     },
     logs::utils::patch,
     mcp_config::McpConfig,
@@ -31,11 +31,15 @@ use crate::{
 pub mod acp;
 pub mod amp;
 pub mod claude;
+#[cfg(feature = "codex")]
 pub mod codex;
+#[cfg(feature = "codex")]
+use crate::executors::codex::Codex;
 pub mod copilot;
 pub mod cursor;
 pub mod droid;
 pub mod gemini;
+pub mod log_writer;
 pub mod opencode;
 #[cfg(feature = "qa-mode")]
 pub mod qa_mock;
@@ -108,6 +112,7 @@ pub enum CodingAgent {
     ClaudeCode,
     Amp,
     Gemini,
+    #[cfg(feature = "codex")]
     Codex,
     Opencode,
     #[serde(alias = "CURSOR")]
@@ -124,6 +129,7 @@ pub enum CodingAgent {
 impl CodingAgent {
     pub fn get_mcp_config(&self) -> McpConfig {
         match self {
+            #[cfg(feature = "codex")]
             Self::Codex(_) => McpConfig::new(
                 vec!["mcp_servers".to_string()],
                 serde_json::json!({
@@ -182,6 +188,7 @@ impl CodingAgent {
                 BaseAgentCapability::SessionFork,
                 BaseAgentCapability::ContextUsage,
             ],
+            #[cfg(feature = "codex")]
             Self::Codex(_) => vec![
                 BaseAgentCapability::SessionFork,
                 BaseAgentCapability::SetupHelper,

@@ -20,15 +20,15 @@ const TOPIC_IDS = [
 ] as const;
 
 const TOPIC_IMAGES: Record<(typeof TOPIC_IDS)[number], string> = {
-  welcome: '/guide-images/welcome.png',
-  commandBar: '/guide-images/command-bar.png',
-  contextBar: '/guide-images/context-bar.png',
-  sidebar: '/guide-images/sidebar.png',
-  multiRepo: '/guide-images/multi-repo.png',
-  sessions: '/guide-images/sessions.png',
-  preview: '/guide-images/preview.png',
-  diffs: '/guide-images/diffs.png',
-  classicUi: '/guide-images/classic-ui.png',
+  welcome: '/guide-images/welcome.webp',
+  commandBar: '/guide-images/command-bar.webp',
+  contextBar: '/guide-images/context-bar.webp',
+  sidebar: '/guide-images/sidebar.webp',
+  multiRepo: '/guide-images/multi-repo.webp',
+  sessions: '/guide-images/sessions.webp',
+  preview: '/guide-images/preview.webp',
+  diffs: '/guide-images/diffs.webp',
+  classicUi: '/guide-images/classic-ui.webp',
 };
 
 const WorkspacesGuideDialogImpl = NiceModal.create<NoProps>(() => {

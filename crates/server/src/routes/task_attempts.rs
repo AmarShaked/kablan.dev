@@ -1,3 +1,4 @@
+#[cfg(feature = "codex")]
 pub mod codex_setup;
 pub mod cursor_setup;
 pub mod env_files;
@@ -308,6 +309,7 @@ pub async fn run_agent_setup(
         CodingAgent::CursorAgent(_) => {
             cursor_setup::run_cursor_setup(&deployment, &workspace).await?;
         }
+        #[cfg(feature = "codex")]
         CodingAgent::Codex(codex) => {
             codex_setup::run_codex_setup(&deployment, &workspace, &codex).await?;
         }

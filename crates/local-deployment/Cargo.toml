@@ -28,3 +28,7 @@ portable-pty = "0.8"
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[features]
+# Passthrough: see crates/executors for what this costs.
+codex = ["executors/codex"]

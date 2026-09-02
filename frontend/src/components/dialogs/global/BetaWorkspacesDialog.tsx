@@ -26,7 +26,7 @@ const BetaWorkspacesDialogImpl = NiceModal.create<NoProps>(() => {
     <Dialog open={modal.visible} uncloseable>
       <DialogContent className="sm:max-w-[640px]">
         <img
-          src="/beta-workspaces-preview.png"
+          src="/beta-workspaces-preview.webp"
           alt={t('betaWorkspaces.title')}
           className="w-full rounded-lg border"
         />

@@ -109,8 +109,47 @@ impl Config {
     }
 }
 
+/// Rewrite an executor this build no longer has into one it does.
+///
+/// Codex is compiled out by default (see crates/executors). A config that still names it fails
+/// to deserialize, and the fallback for a config that fails to deserialize is *every* setting
+/// reset — theme, GitHub, editor, the lot. One agent going away should not cost someone their
+/// whole configuration, so it is renamed on the way in and saved back on the next write.
+#[cfg(not(feature = "codex"))]
+fn retire_missing_executors(raw_config: String) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&raw_config) else {
+        return raw_config;
+    };
+
+    fn walk(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(executor)) = map.get("executor")
+                    && executor == "CODEX"
+                {
+                    map.insert("executor".to_string(), "CLAUDE_CODE".into());
+                }
+                for (_, v) in map.iter_mut() {
+                    walk(v);
+                }
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(walk),
+            _ => {}
+        }
+    }
+
+    walk(&mut value);
+    serde_json::to_string(&value).unwrap_or(raw_config)
+}
+
+#[cfg(feature = "codex")]
+fn retire_missing_executors(raw_config: String) -> String {
+    raw_config
+}
+
 impl From<String> for Config {
     fn from(raw_config: String) -> Self {
+        let raw_config = retire_missing_executors(raw_config);
         if let Ok(config) = serde_json::from_str::<Config>(&raw_config)
             && config.config_version == "v8"
         {

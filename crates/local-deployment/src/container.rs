@@ -1157,22 +1157,30 @@ impl ContainerService for LocalContainerService {
             )))?;
         let current_dir = PathBuf::from(container_ref);
 
-        let approvals_service: Arc<dyn ExecutorApprovalService> =
-            match executor_action.base_executor() {
-                Some(
-                    BaseCodingAgent::Codex
-                    | BaseCodingAgent::ClaudeCode
-                    | BaseCodingAgent::Gemini
-                    | BaseCodingAgent::QwenCode
-                    | BaseCodingAgent::Opencode,
-                ) => ExecutorApprovalBridge::new(
-                    self.approvals.clone(),
-                    self.db.clone(),
-                    self.notification_service.clone(),
-                    execution_process.id,
-                ),
-                _ => Arc::new(NoopExecutorApprovalService {}),
-            };
+        // Which agents can ask for approval. Written as a predicate rather than one or-pattern
+        // because Codex is behind a cargo feature, and an arm of a `|` pattern cannot be
+        // conditionally compiled.
+        let wants_approvals = match executor_action.base_executor() {
+            Some(
+                BaseCodingAgent::ClaudeCode
+                | BaseCodingAgent::Gemini
+                | BaseCodingAgent::QwenCode
+                | BaseCodingAgent::Opencode,
+            ) => true,
+            #[cfg(feature = "codex")]
+            Some(BaseCodingAgent::Codex) => true,
+            _ => false,
+        };
+        let approvals_service: Arc<dyn ExecutorApprovalService> = if wants_approvals {
+            ExecutorApprovalBridge::new(
+                self.approvals.clone(),
+                self.db.clone(),
+                self.notification_service.clone(),
+                execution_process.id,
+            )
+        } else {
+            Arc::new(NoopExecutorApprovalService {})
+        };
 
         let repos = WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await?;
         let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();

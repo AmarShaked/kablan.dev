@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 // vite.config.ts
 import { createLogger, defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -103,15 +104,36 @@ export default defineConfig({
     executorSchemasPlugin(),
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      shared: path.resolve(__dirname, '../shared'),
+    // The array form, because one of these has to match exactly: a plain object key would also
+    // rewrite `lowlight/lib/index.js`, which the shim itself imports.
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: 'shared', replacement: path.resolve(__dirname, '../shared') },
       // Kablan fork: analytics is removed. Aliasing the package itself (rather than editing
       // each call site) guarantees nothing is sent, including from code added later that
       // imports it.
-      'posthog-js/react': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
-      'posthog-js': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
-    },
+      {
+        find: 'posthog-js/react',
+        replacement: path.resolve(__dirname, './src/lib/noop/posthog.ts'),
+      },
+      {
+        find: 'posthog-js',
+        replacement: path.resolve(__dirname, './src/lib/noop/posthog.ts'),
+      },
+      // `@git-diff-view/lowlight` asks lowlight for *every* highlight.js grammar — 156 of them,
+      // ~900kB of the bundle. The shim hands back the same exports with the languages a diff
+      // here actually contains.
+      {
+        find: /^lowlight$/,
+        replacement: path.resolve(__dirname, './src/lib/lowlightSlim.ts'),
+      },
+      // …and a way back to the real package for the shim itself, since lowlight's `exports`
+      // map only exposes its root entry.
+      {
+        find: /^lowlight-original$/,
+        replacement: createRequire(import.meta.url).resolve('lowlight'),
+      },
+    ],
   },
   server: {
     port: parseInt(process.env.FRONTEND_PORT || '5310'),

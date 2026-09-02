@@ -22,10 +22,7 @@ use codex_app_server_protocol::{
 use codex_protocol::{ThreadId, protocol::ReviewDecision};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{self, Value};
-use tokio::{
-    io::{AsyncWrite, AsyncWriteExt, BufWriter},
-    sync::Mutex,
-};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use workspace_utils::approvals::ApprovalStatus;
 
@@ -33,7 +30,7 @@ use super::jsonrpc::{JsonRpcCallbacks, JsonRpcPeer};
 use crate::{
     approvals::{ExecutorApprovalError, ExecutorApprovalService},
     env::RepoContext,
-    executors::{ExecutorError, codex::normalize_logs::Approval},
+    executors::{ExecutorError, codex::normalize_logs::Approval, log_writer::LogWriter},
 };
 
 pub struct AppServerClient {
@@ -565,29 +562,5 @@ fn request_id(request: &ClientRequest) -> RequestId {
         | ClientRequest::ReviewStart { request_id, .. }
         | ClientRequest::McpServerStatusList { request_id, .. } => request_id.clone(),
         _ => unreachable!("request_id called for unsupported request variant"),
-    }
-}
-
-#[derive(Clone)]
-pub struct LogWriter {
-    writer: Arc<Mutex<BufWriter<Box<dyn AsyncWrite + Send + Unpin>>>>,
-}
-
-impl LogWriter {
-    pub fn new(writer: impl AsyncWrite + Send + Unpin + 'static) -> Self {
-        Self {
-            writer: Arc::new(Mutex::new(BufWriter::new(Box::new(writer)))),
-        }
-    }
-
-    pub async fn log_raw(&self, raw: &str) -> Result<(), ExecutorError> {
-        let mut guard = self.writer.lock().await;
-        guard
-            .write_all(raw.as_bytes())
-            .await
-            .map_err(ExecutorError::Io)?;
-        guard.write_all(b"\n").await.map_err(ExecutorError::Io)?;
-        guard.flush().await.map_err(ExecutorError::Io)?;
-        Ok(())
     }
 }

@@ -14,15 +14,12 @@ use codex_protocol::{
 };
 use serde_json::json;
 
-use super::{
-    AskForApproval, Codex, SandboxMode,
-    client::{AppServerClient, LogWriter},
-    session::SessionHandler,
-};
+use super::{AskForApproval, Codex, SandboxMode, client::AppServerClient, session::SessionHandler};
 use crate::{
     env::ExecutionEnv,
     executors::{
         ExecutorError, ExecutorExitResult, SpawnedChild,
+        log_writer::LogWriter,
         utils::{SlashCommandCall, parse_slash_command},
     },
     stdout_dup::spawn_local_output_process,

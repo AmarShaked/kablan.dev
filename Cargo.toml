@@ -36,6 +36,15 @@ async-trait = "0.1"
 debug = 1
 split-debuginfo = "packed"
 strip = true
+# Whole-program optimisation across crate boundaries, and one codegen unit so it can actually
+# see everything. Slower to link, materially smaller and faster to run.
+lto = "fat"
+codegen-units = 1
+# No unwinding: a panic aborts instead of walking the stack running destructors. This drops the
+# unwind tables, which were ~10MB of the binary — pure metadata that only runs when something
+# panics. The trade-off is that a panic in one request kills the process rather than that task,
+# so it is a deliberate choice: nothing in the workspace catches unwinds anyway.
+panic = "abort"
 
 # Patches for codex-core's forked tokio-tungstenite with proxy support
 # For reference: https://github.com/openai/codex/blob/5c0fd62ff10bd6abff9ff41884b303c0290d7fa4/codex-rs/Cargo.toml#L325

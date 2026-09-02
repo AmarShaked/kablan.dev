@@ -277,6 +277,7 @@ fn adapt_cursor(servers: ServerMap, meta: Option<Value>) -> Value {
     attach_meta(servers, meta)
 }
 
+#[cfg(feature = "codex")]
 fn adapt_codex(mut servers: ServerMap, mut meta: Option<Value>) -> Value {
     servers.retain(|_, v| v.as_object().map(is_stdio).unwrap_or(false));
 
@@ -371,6 +372,7 @@ enum Adapter {
     Passthrough,
     Gemini,
     Cursor,
+    #[cfg(feature = "codex")]
     Codex,
     Opencode,
     Copilot,
@@ -386,6 +388,7 @@ fn apply_adapter(adapter: Adapter, canonical: Value) -> Value {
         Adapter::Passthrough => adapt_passthrough(servers_only, meta),
         Adapter::Gemini => adapt_gemini(servers_only, meta),
         Adapter::Cursor => adapt_cursor(servers_only, meta),
+        #[cfg(feature = "codex")]
         Adapter::Codex => adapt_codex(servers_only, meta),
         Adapter::Opencode => adapt_opencode(servers_only, meta),
         Adapter::Copilot => adapt_copilot(servers_only, meta),
@@ -400,6 +403,7 @@ impl CodingAgent {
             CodingAgent::ClaudeCode(_) | CodingAgent::Amp(_) | CodingAgent::Droid(_) => Passthrough,
             CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) => Gemini,
             CodingAgent::CursorAgent(_) => Cursor,
+            #[cfg(feature = "codex")]
             CodingAgent::Codex(_) => Codex,
             CodingAgent::Opencode(_) => Opencode,
             CodingAgent::Copilot(..) => Copilot,

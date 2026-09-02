@@ -40,7 +40,7 @@ use ts_rs::TS;
 use workspace_utils::msg_store::MsgStore;
 
 use self::{
-    client::{AppServerClient, LogWriter},
+    client::AppServerClient,
     jsonrpc::{ExitSignalSender, JsonRpcPeer},
     normalize_logs::{Error, normalize_logs},
     session::SessionHandler,
@@ -51,7 +51,7 @@ use crate::{
     env::ExecutionEnv,
     executors::{
         AppendPrompt, AvailabilityInfo, ExecutorError, ExecutorExitResult, SlashCommandDescription,
-        SpawnedChild, StandardCodingAgentExecutor,
+        SpawnedChild, StandardCodingAgentExecutor, log_writer::LogWriter,
     },
     logs::utils::patch,
     stdout_dup::create_stdout_pipe_writer,

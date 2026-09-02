@@ -10,7 +10,6 @@ export const agentLabels: Record<BaseCodingAgent, string> = {
   [BaseCodingAgent.CLAUDE_CODE]: 'Claude Code',
   [BaseCodingAgent.AMP]: 'Amp',
   [BaseCodingAgent.GEMINI]: 'Gemini',
-  [BaseCodingAgent.CODEX]: 'Codex',
   [BaseCodingAgent.OPENCODE]: 'OpenCode',
   [BaseCodingAgent.CURSOR_AGENT]: 'Cursor Agent',
   [BaseCodingAgent.QWEN_CODE]: 'Qwen Code',

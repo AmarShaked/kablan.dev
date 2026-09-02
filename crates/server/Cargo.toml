@@ -51,5 +51,7 @@ regex = "1"
 dotenv = "0.15"
 
 [features]
+# Passthrough: see crates/executors for what this costs.
+codex = ["executors/codex", "local-deployment/codex", "services/codex"]
 default = []
 qa-mode = ["services/qa-mode", "executors/qa-mode"]

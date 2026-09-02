@@ -200,11 +200,17 @@ fn generate_types_content() -> String {
         executors::executors::claude::ClaudeCode::decl(),
         executors::executors::gemini::Gemini::decl(),
         executors::executors::amp::Amp::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::Codex::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::SandboxMode::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::AskForApproval::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::ReasoningEffort::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::ReasoningSummary::decl(),
+        #[cfg(feature = "codex")]
         executors::executors::codex::ReasoningSummaryFormat::decl(),
         executors::executors::cursor::CursorAgent::decl(),
         executors::executors::copilot::Copilot::decl(),
@@ -291,6 +297,7 @@ fn generate_schemas() -> Result<HashMap<&'static str, String>, serde_json::Error
             "gemini",
             generate_json_schema::<executors::executors::gemini::Gemini>()?,
         ),
+        #[cfg(feature = "codex")]
         (
             "codex",
             generate_json_schema::<executors::executors::codex::Codex>()?,
