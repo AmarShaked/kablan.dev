@@ -284,16 +284,15 @@ function TaskRow({
               <span
                 className={cn(
                   'text-xs tabular-nums text-muted-foreground transition-opacity',
-                  hasActions &&
-                    'group-hover/row:opacity-0 group-focus-within/row:opacity-0'
+                  hasActions && 'group-hover/row:opacity-0'
                 )}
               >
                 {relativeDay(task.updated_at)}
               </span>
               {hasActions && (
-                // Opacity rather than display, so the buttons stay in the tab order and a
-                // keyboard reader can reach them without a pointer.
-                <div className="pointer-events-none absolute right-0 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100">
+                // Hover only: a selected row keeps focus, and buttons that linger on the
+                // row you are reading read as part of it rather than as a passing offer.
+                <div className="pointer-events-none absolute right-0 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100">
                   {onArchive && (
                     <RowAction
                       label="Archive task"

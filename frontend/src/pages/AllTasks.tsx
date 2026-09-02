@@ -150,7 +150,7 @@ function Group({
                   )}
 
                   {/* Hidden under the hover actions, which take this corner of the row. */}
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0">
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
                     {relativeDay(task.updated_at)}
                   </span>
                 </div>
@@ -160,9 +160,9 @@ function Group({
                 </div>
               </button>
 
-              {/* Outside the row button — a button cannot hold buttons — and opacity rather than
-                  display, so the keyboard can still reach them. */}
-              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100">
+              {/* Outside the row button — a button cannot hold buttons. Hover only: a row
+                  that keeps focus should not keep the buttons with it. */}
+              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100">
                 <button
                   type="button"
                   aria-label={
