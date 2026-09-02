@@ -462,9 +462,15 @@ export function TaskGroupSidebar({
         <div className="flex h-full min-h-0 flex-col bg-background">
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
             <span className="text-sm font-medium">Tasks</span>
-            <span className="mr-auto font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
               {total}
             </span>
+
+            <TaskFilterChips
+              value={filters}
+              onChange={onFiltersChange}
+              className="mr-auto overflow-hidden"
+            />
             <TaskFilterMenu
               value={filters}
               onChange={onFiltersChange}
@@ -511,8 +517,6 @@ export function TaskGroupSidebar({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
-
-          <TaskFilterChips value={filters} onChange={onFiltersChange} />
 
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
             {grouping === 'none' ? (

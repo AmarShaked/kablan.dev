@@ -232,18 +232,25 @@ export function FilterChip({
   );
 }
 
-/** The chips for whatever is on, or nothing when the list is unfiltered. */
+/**
+ * The chips for whatever is on, or nothing when the list is unfiltered.
+ *
+ * They sit on the same line as the count they qualify, rather than in a strip of their own that
+ * exists only sometimes and shoves the list down when it appears.
+ */
 export function TaskFilterChips({
   value,
   onChange,
+  className,
 }: {
   value: TaskFilters;
   onChange: (next: TaskFilters) => void;
+  className?: string;
 }) {
   if (!filtersActive(value)) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 px-3 pb-2">
+    <div className={cn('flex min-w-0 items-center gap-1', className)}>
       {value.status !== ALL_STATUSES && (
         <FilterChip
           label={
