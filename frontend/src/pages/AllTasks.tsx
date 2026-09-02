@@ -89,10 +89,6 @@ function Row({
         selected && 'bg-muted'
       )}
     >
-      {showStatus && (
-        <StatusGlyph status={task.status} size={14} className="shrink-0" />
-      )}
-
       <Checkbox
         checked={selected}
         onCheckedChange={() => onToggle(task.id)}
@@ -102,6 +98,10 @@ function Row({
           selected && 'opacity-100'
         )}
       />
+
+      {showStatus && (
+        <StatusGlyph status={task.status} size={14} className="shrink-0" />
+      )}
 
       <button
         type="button"
