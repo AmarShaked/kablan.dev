@@ -40,11 +40,9 @@ strip = true
 # see everything. Slower to link, materially smaller and faster to run.
 lto = "fat"
 codegen-units = 1
-# No unwinding: a panic aborts instead of walking the stack running destructors. This drops the
-# unwind tables, which were ~10MB of the binary — pure metadata that only runs when something
-# panics. The trade-off is that a panic in one request kills the process rather than that task,
-# so it is a deliberate choice: nothing in the workspace catches unwinds anyway.
-panic = "abort"
+# Unwinding stays on, deliberately. `panic = "abort"` would take ~9MB of unwind tables out of
+# the binary, but it also turns a panic in any one of the 61 spawned tasks into the whole app
+# closing on someone. A local tool disappearing costs more than the megabytes are worth.
 
 # Patches for codex-core's forked tokio-tungstenite with proxy support
 # For reference: https://github.com/openai/codex/blob/5c0fd62ff10bd6abff9ff41884b303c0290d7fa4/codex-rs/Cargo.toml#L325
