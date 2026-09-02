@@ -48,6 +48,11 @@ jobs:
             "cd frontend && npm run format:check" \
             "cd frontend && npm run build"
 
+      # The installer decides what to stop and what to leave alone; getting that wrong either
+      # leaves the old version serving or signals a process that is not ours.
+      - name: Run npx CLI tests
+        run: npm run test:cli
+
   backend-schema-checks:
     runs-on: *runner_label
     env:

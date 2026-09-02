@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const { ensureBinary, BINARY_TAG, CACHE_DIR, LOCAL_DEV_MODE, LOCAL_DIST_DIR, getLatestVersion } = require("./download");
 const { installMacApp, uninstallMacApp, appDir } = require("./install-app");
+const { createInstallLogger, installLogPath } = require("./install-log");
 
 const CLI_VERSION = require("../package.json").version;
 
@@ -142,6 +143,19 @@ async function extractAndRun(baseName, launch) {
   return launch(binPath);
 }
 
+/**
+ * One line saying what was stopped, so the terminal and the log both show whether the update
+ * actually displaced anything — the failure this reporting exists to catch is an update that
+ * leaves the old version serving and says nothing.
+ */
+function summariseStopped(stopped) {
+  if (!stopped || stopped.length === 0) return "Stopped 0 running processes";
+  const detail = stopped
+    .map((p) => `${p.kind} ${p.version || "(unknown version)"} pid ${p.pid} via ${p.signal}`)
+    .join(", ");
+  return `Stopped ${stopped.length} running process${stopped.length === 1 ? "" : "es"}: ${detail}`;
+}
+
 async function main() {
   fs.mkdirSync(versionCacheDir, { recursive: true });
 
@@ -152,22 +166,25 @@ async function main() {
   // Kablan first: the swap would otherwise leave the old process serving, and the update would
   // look like it had not happened.
   if (args.includes("--uninstall")) {
-    const { app: removed, stoppedPid } = uninstallMacApp();
-    if (stoppedPid) console.log(`Stopped the running Kablan (pid ${stoppedPid})`);
-    console.log(removed ? `Removed ${removed}` : `Nothing installed at ${appDir()}`);
+    const log = createInstallLogger();
+    log(`Uninstalling (wrapper ${CLI_VERSION})`);
+    const { app: removed, stopped } = uninstallMacApp(log);
+    log(summariseStopped(stopped));
+    log(removed ? `Removed ${removed}` : `Nothing installed at ${appDir()}`);
     console.log("Cached binaries are still in ~/.kablan/bin; delete that to reclaim the space.");
     return;
   }
 
   if (args.includes("--install")) {
     await extractAndRun("kablan", (bin) => {
-      const { app, stoppedPid } = installMacApp(bin, CLI_VERSION);
-      if (stoppedPid) {
-        console.log(`\nStopped the running Kablan (pid ${stoppedPid}) so this version replaces it`);
-      }
-      console.log(`\nInstalled ${app}`);
-      console.log("Open it from Launchpad or Spotlight — it starts Kablan in the background");
+      const log = createInstallLogger();
+      log(`Installing ${CLI_VERSION}`);
+      const { app, stopped } = installMacApp(bin, CLI_VERSION, log);
+      log(summariseStopped(stopped));
+      log(`Installed ${app}`);
+      console.log("\nOpen it from Launchpad or Spotlight — it starts Kablan in the background");
       console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
+      console.log(`Install log: ${installLogPath()}`);
       console.log("\nUpdate with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.");
     });
     return;
@@ -214,10 +231,15 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err.message);
-  if (process.env.KABLAN_DEBUG) {
-    console.error(err.stack);
-  }
-  process.exit(1);
-});
+// Only when run as a command. Requiring this file — the tests do — must not start Kablan.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Fatal error:", err.message);
+    if (process.env.KABLAN_DEBUG) {
+      console.error(err.stack);
+    }
+    process.exit(1);
+  });
+}
+
+module.exports = { summariseStopped };

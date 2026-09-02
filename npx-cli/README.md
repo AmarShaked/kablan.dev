@@ -28,6 +28,11 @@ window — and opens your browser. Output goes to `~/Library/Logs/Kablan/kablan.
 Because the bundle is assembled on your machine rather than downloaded, macOS does not quarantine
 it: no "unidentified developer" prompt, and nothing to notarise.
 
+Installing stops every copy of Kablan that is already running first — a surviving process keeps
+serving the version it started with, which makes an update look like it did nothing. What it
+stopped is printed, and appended to `~/Library/Logs/Kablan/install.log`. A server you built
+yourself is left alone.
+
 - Update: `npx kablan@latest --install`
 - Remove: `npx kablan --uninstall` (cached binaries stay in `~/.kablan/bin`)
 

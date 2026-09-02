@@ -113,92 +113,163 @@ function infoPlist(version) {
 
 
 /**
- * Stop a Kablan that is already running, and say whether one was.
+ * Stops every Kablan server this installer manages, and says what it did.
  *
- * Replacing the bundle under a live process does nothing to that process: it keeps serving, the
- * launcher finds its port file and simply opens a browser at it, and the update looks like it
- * failed — the app still reports the version it was started with. So the install stops it first.
+ * The version is baked into the running process, so a copy that survives an update keeps serving
+ * the old build — the update looks like it silently failed. This used to read
+ * `$TMPDIR/kablan/kablan.port` and stop whoever held that port, which turned out to be one slot
+ * shared by every instance: a second server (a release build run from a checkout, say)
+ * overwrites it, and the installer then goes looking at the wrong port and stops nothing while
+ * the real app keeps running. That is a silent wrong answer, so the port file is no longer the
+ * handle.
  *
- * The port file is the only handle we have on it. Whoever is listening on that port has to look
- * like Kablan before it is signalled, because a stale port file plus a recycled port would
- * otherwise point at some unrelated process. SIGTERM first so the server can close its database
- * cleanly; SIGKILL only if it is still there after a grace period.
+ * Instead every process is examined and the ones that are ours are stopped — all of them, not
+ * the first. "Ours" means the executable lives in a directory this CLI owns: the version cache
+ * under ~/.kablan/bin, or the app bundle it builds. A server someone compiled themselves is
+ * deliberately left alone: it is not what an update replaces.
  *
- * @returns the pid stopped, or null when nothing was running
+ * SIGTERM first, so the server closes its database cleanly; SIGKILL only for one that outstays
+ * the grace period.
+ *
+ * @param {object} [deps] seams for the tests: every call to the outside world goes through one
+ * @returns {{stopped: Array<{pid: number, kind: string, version: string|null, signal: string}>,
+ *            skipped: Array<{pid: number, reason: string}>}}
  */
-function stopRunningApp() {
-  const bin = APP_NAME.toLowerCase();
-  const tmp = process.env.TMPDIR || "/tmp";
-  const portFile = path.join(tmp, bin, `${bin}.port`);
+function stopRunningApps(deps = {}) {
+  const {
+    listProcesses = defaultListProcesses,
+    kill = (pid, signal) => process.kill(pid, signal),
+    alive = (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    sleep = () => execFileSync("/bin/sleep", ["0.2"]),
+    now = () => Date.now(),
+    graceMs = 5000,
+    selfPid = process.pid,
+    parentPid = process.ppid,
+    log = () => {},
+  } = deps;
 
-  let port;
-  try {
-    port = fs.readFileSync(portFile, "utf8").trim();
-  } catch {
-    return null;
+  const stopped = [];
+  const skipped = [];
+
+  for (const { pid, command } of listProcesses()) {
+    const kind = classify(command);
+    if (!kind) continue;
+
+    // Signalling ourselves or the npx wrapper that spawned us would end the install midway.
+    if (pid === selfPid || pid === parentPid) {
+      skipped.push({ pid, reason: "self" });
+      continue;
+    }
+
+    const version = versionFromPath(command);
+    log(`Stopping ${kind}${version ? ` ${version}` : ""} (pid ${pid})`);
+
+    try {
+      kill(pid, "SIGTERM");
+    } catch {
+      // Gone between listing and signalling, or not ours to signal.
+      skipped.push({ pid, reason: "could not signal" });
+      continue;
+    }
+
+    let signal = "SIGTERM";
+    const deadline = now() + graceMs;
+    while (alive(pid)) {
+      if (now() >= deadline) {
+        try {
+          kill(pid, "SIGKILL");
+          signal = "SIGKILL";
+          log(`  pid ${pid} ignored SIGTERM for ${graceMs / 1000}s; sent SIGKILL`);
+        } catch {
+          // Raced us to exit.
+        }
+        break;
+      }
+      sleep();
+    }
+
+    stopped.push({ pid, kind, version, signal });
   }
-  if (!/^\d+$/.test(port)) return null;
 
-  let pids;
+  return { stopped, skipped };
+}
+
+/**
+ * Is this command line one of ours, and which kind? Anything else returns null and is left
+ * running — including a server built from a checkout, which no update of ours replaces.
+ *
+ * Only the executable is examined, never the arguments. `ps` prints the whole command line, so a
+ * shell that launched a server, a `tail` on its log, or an editor with the path open all carry
+ * our directory in their arguments; matching anywhere in the line would signal them.
+ */
+function classify(command) {
+  const bin = APP_NAME.toLowerCase();
+  const executable = executableOf(command);
+  if (executable.includes(`/.${bin}/bin/`)) {
+    return executable.endsWith(`${bin}-mcp`) ? "MCP server" : "server";
+  }
+  if (executable.includes(`/${APP_NAME}.app/Contents/MacOS/`)) return "installed app";
+  return null;
+}
+
+/**
+ * The executable out of a `ps` command line — everything up to the first space.
+ *
+ * A path containing a space would be cut short and so not recognised as ours; the alternative,
+ * matching the whole line, mistakes every process that merely mentions the path for a server,
+ * and signalling the wrong process is the worse failure.
+ */
+function executableOf(command) {
+  const space = command.indexOf(" ");
+  return space === -1 ? command : command.slice(0, space);
+}
+
+/** ~/.kablan/bin/v0.9.1/macos-arm64/kablan -> "v0.9.1". Best effort; null when the path differs. */
+function versionFromPath(command) {
+  const match = command.match(/\/\.?[a-z]+\/bin\/(v[\d.]+)\//);
+  return match ? match[1] : null;
+}
+
+/** Every process on the machine, as {pid, command}. */
+function defaultListProcesses() {
+  let out = "";
   try {
-    pids = execFileSync("/usr/sbin/lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+    out = execFileSync("/bin/ps", ["-axo", "pid=,command="], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
-    })
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+      maxBuffer: 8 * 1024 * 1024,
+    });
   } catch {
-    // Nothing listening: the port file outlived the process it described.
-    return null;
+    return [];
   }
-
-  for (const pid of pids) {
-    let command = "";
-    try {
-      command = execFileSync("/bin/ps", ["-o", "command=", "-p", pid], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {
-      continue;
-    }
-    // Ours: either a cached release binary or the one inside the bundle.
-    if (!command.includes(`.${bin}/bin/`) && !command.includes(`${bin}-server`)) continue;
-
-    try {
-      process.kill(Number(pid), "SIGTERM");
-    } catch {
-      continue;
-    }
-
-    // Give it a moment to close its database before resorting to SIGKILL.
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline) {
-      try {
-        process.kill(Number(pid), 0);
-      } catch {
-        return pid; // gone
-      }
-      execFileSync("/bin/sleep", ["0.2"]);
-    }
-    try {
-      process.kill(Number(pid), "SIGKILL");
-    } catch {
-      // Raced us to exit.
-    }
-    return pid;
-  }
-
-  return null;
+  return out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const space = line.indexOf(" ");
+      if (space === -1) return null;
+      const pid = Number(line.slice(0, space));
+      if (!Number.isInteger(pid)) return null;
+      return { pid, command: line.slice(space + 1).trim() };
+    })
+    .filter(Boolean);
 }
 
 /**
  * @param binPath  the extracted server binary to install
  * @param version  the wrapper's version, shown in Finder's Get Info
- * @returns {{ app: string, stoppedPid: string | null }}
+ * @param log      where progress goes; the caller tees this to the console and a file
+ * @returns {{ app: string, stopped: Array<object> }}
  */
-function installMacApp(binPath, version) {
+function installMacApp(binPath, version, log = () => {}) {
   if (process.platform !== "darwin") {
     throw new Error(
       `--install builds a macOS app bundle and this is ${process.platform}.\n` +
@@ -208,7 +279,8 @@ function installMacApp(binPath, version) {
 
   // Before anything is replaced: a running copy would survive the swap and keep serving the
   // version it started with.
-  const stoppedPid = stopRunningApp();
+  const { stopped } = stopRunningApps({ log });
+  if (stopped.length === 0) log("No running Kablan found; nothing to stop");
 
   const app = appDir();
   const macos = path.join(app, "Contents", "MacOS");
@@ -247,16 +319,25 @@ function installMacApp(binPath, version) {
     // Cosmetic only — the app works either way.
   }
 
-  return { app, stoppedPid };
+  return { app, stopped };
 }
 
-function uninstallMacApp() {
+function uninstallMacApp(log = () => {}) {
   // Removing the bundle from under a running server leaves it running with no way back to it.
-  const stoppedPid = stopRunningApp();
+  const { stopped } = stopRunningApps({ log });
   const app = appDir();
-  if (!fs.existsSync(app)) return { app: null, stoppedPid };
+  if (!fs.existsSync(app)) return { app: null, stopped };
   fs.rmSync(app, { recursive: true, force: true });
-  return { app, stoppedPid };
+  return { app, stopped };
 }
 
-module.exports = { installMacApp, uninstallMacApp, stopRunningApp, appDir, APP_NAME };
+module.exports = {
+  installMacApp,
+  uninstallMacApp,
+  stopRunningApps,
+  classify,
+  executableOf,
+  versionFromPath,
+  appDir,
+  APP_NAME,
+};
