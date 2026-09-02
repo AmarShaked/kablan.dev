@@ -43,6 +43,8 @@ export const useJsonPatchWsStream = <T extends object>(
   const dataRef = useRef<T | undefined>(undefined);
   const retryTimerRef = useRef<number | null>(null);
   const retryAttemptsRef = useRef<number>(0);
+  /** When the current socket opened, so a connection that dies instantly is not called healthy. */
+  const openedAtRef = useRef<number>(0);
   const [retryNonce, setRetryNonce] = useState(0);
   const finishedRef = useRef<boolean>(false);
 
@@ -51,9 +53,11 @@ export const useJsonPatchWsStream = <T extends object>(
 
   function scheduleReconnect() {
     if (retryTimerRef.current) return; // already scheduled
-    // Exponential backoff with cap: 1s, 2s, 4s, 8s (max), then stay at 8s
+    // Exponential backoff with cap: 1s, 2s, 4s … 30s, then stay at 30s. The cap matters: an
+    // endpoint that will never work (an attempt whose worktree is gone) otherwise costs a
+    // connection a second for as long as the tab is open.
     const attempt = retryAttemptsRef.current;
-    const delay = Math.min(8000, 1000 * Math.pow(2, attempt));
+    const delay = Math.min(30_000, 1000 * Math.pow(2, attempt));
     retryTimerRef.current = window.setTimeout(() => {
       retryTimerRef.current = null;
       setRetryNonce((n) => n + 1);
@@ -103,8 +107,10 @@ export const useJsonPatchWsStream = <T extends object>(
       ws.onopen = () => {
         setError(null);
         setIsConnected(true);
-        // Reset backoff on successful connection
-        retryAttemptsRef.current = 0;
+        openedAtRef.current = Date.now();
+        // Deliberately not resetting the backoff here. A server that accepts the upgrade and
+        // then drops the socket still counts as a failure — resetting on open alone turned
+        // every such endpoint into a one-connection-per-second loop that never backed off.
         if (retryTimerRef.current) {
           window.clearTimeout(retryTimerRef.current);
           retryTimerRef.current = null;
@@ -139,6 +145,9 @@ export const useJsonPatchWsStream = <T extends object>(
             setIsInitialized(true);
           }
 
+          // A stream that has said something is working: this is what earns a reset.
+          retryAttemptsRef.current = 0;
+
           // Handle finished messages ({finished: true})
           // Treat finished as terminal - do NOT reconnect
           if ('finished' in msg) {
@@ -166,7 +175,13 @@ export const useJsonPatchWsStream = <T extends object>(
           return;
         }
 
-        // Otherwise, reconnect on unexpected/error closures
+        // Otherwise, reconnect on unexpected/error closures. A socket that lived a while
+        // before dropping is treated as healthy, so a long-running stream that blips does not
+        // inherit the backoff of an endpoint that never worked.
+        if (openedAtRef.current && Date.now() - openedAtRef.current > 30_000) {
+          retryAttemptsRef.current = 0;
+        }
+        openedAtRef.current = 0;
         retryAttemptsRef.current += 1;
         scheduleReconnect();
       };

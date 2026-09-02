@@ -344,10 +344,31 @@ async fn handle_task_attempt_diff_ws(
     use futures_util::{SinkExt, StreamExt, TryStreamExt};
     use utils::log_msg::LogMsg;
 
-    let stream = deployment
+    let stream = match deployment
         .container()
         .stream_diff(&workspace, stats_only)
-        .await?;
+        .await
+    {
+        Ok(stream) => stream,
+        Err(e) => {
+            // Usually the worktree is gone — pruned from /tmp, or deleted by hand. There is no
+            // diff to stream and there never will be for this attempt, so say so and close.
+            // Dropping the socket instead reads to the client as a connection that failed, and
+            // it reconnects: one dead attempt left open in a tab was costing a connection every
+            // second for as long as the tab lived.
+            tracing::debug!(
+                "diff stream unavailable for workspace {}: {}",
+                workspace.id,
+                e
+            );
+            let (mut sender, _) = socket.split();
+            let _ = sender
+                .send(LogMsg::Finished.to_ws_message_unchecked())
+                .await;
+            let _ = sender.close().await;
+            return Ok(());
+        }
+    };
 
     let mut stream = stream.map_ok(|msg: LogMsg| msg.to_ws_message_unchecked());
 
