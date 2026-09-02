@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ListFilter,
   Loader2,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -19,6 +20,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -51,6 +55,117 @@ import type { ArchiveFilter, TaskStatus } from 'shared/types';
 /** Newest first: a list this long is read from the top, and recent work is what you came for. */
 function byRecency(a: TaskAcrossProjects, b: TaskAcrossProjects) {
   return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+}
+
+/**
+ * One task, as the row a mail list uses: title and time on the first line, where it comes from
+ * on the second, and the two things you can do to it without opening it on hover.
+ */
+function Row({
+  task,
+  selected,
+  onToggle,
+  onOpen,
+  onArchive,
+  onDelete,
+  showStatus,
+}: {
+  task: TaskAcrossProjects;
+  selected: boolean;
+  onToggle: (id: string) => void;
+  onOpen: (task: TaskAcrossProjects) => void;
+  /** Archiving flips: an archived row is restored, not archived again. */
+  onArchive: (task: TaskAcrossProjects, archived: boolean) => void;
+  onDelete: (task: TaskAcrossProjects) => void;
+  /** Ungrouped, the row carries its own status — there is no header saying it. */
+  showStatus?: boolean;
+}) {
+  return (
+    <li
+      className={cn(
+        // The row is the whole card-width target, and the hover tint is the only thing
+        // separating one from the next — no rules between rows.
+        'group/row relative flex items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
+        selected && 'bg-muted'
+      )}
+    >
+      {showStatus && (
+        <StatusGlyph status={task.status} size={14} className="shrink-0" />
+      )}
+
+      <Checkbox
+        checked={selected}
+        onCheckedChange={() => onToggle(task.id)}
+        aria-label={`Select ${task.title}`}
+        className={cn(
+          'shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100',
+          selected && 'opacity-100'
+        )}
+      />
+
+      <button
+        type="button"
+        onClick={() => onOpen(task)}
+        className="min-w-0 flex-1 space-y-0.5 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {task.title}
+          </span>
+
+          {/* What is live on the task, in the same two dots the rest of the app uses. */}
+          {task.has_running_dev_server && (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
+              title="Dev server running"
+            />
+          )}
+          {task.has_in_progress_attempt && (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
+              title="Attempt running"
+            />
+          )}
+
+          {/* Hidden under the hover actions, which take this corner of the row. */}
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
+            {relativeDay(task.updated_at)}
+          </span>
+        </div>
+
+        <div className="truncate text-xs text-muted-foreground">
+          {task.projectName}
+        </div>
+      </button>
+
+      {/* Outside the row button — a button cannot hold buttons. Hover only: a row
+          that keeps focus should not keep the buttons with it. */}
+      <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100">
+        <button
+          type="button"
+          aria-label={task.archived_at ? 'Restore task' : 'Archive task'}
+          title={task.archived_at ? 'Restore task' : 'Archive task'}
+          onClick={() => onArchive(task, !task.archived_at)}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {task.archived_at ? (
+            <ArchiveRestore className="h-3.5 w-3.5" />
+          ) : (
+            <Archive className="h-3.5 w-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
+          aria-label="Delete task"
+          title="Delete task"
+          onClick={() => onDelete(task)}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </li>
+  );
 }
 
 /**
@@ -106,89 +221,15 @@ function Group({
       {open && (
         <ul className="space-y-1 p-2">
           {tasks.map((task) => (
-            <li
+            <Row
               key={task.id}
-              className={cn(
-                // The row is the whole card-width target, and the hover tint is the only thing
-                // separating one from the next — no rules between rows.
-                'group/row relative flex items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
-                selected.has(task.id) && 'bg-muted'
-              )}
-            >
-              <Checkbox
-                checked={selected.has(task.id)}
-                onCheckedChange={() => onToggle(task.id)}
-                aria-label={`Select ${task.title}`}
-                className={cn(
-                  'shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100',
-                  selected.has(task.id) && 'opacity-100'
-                )}
-              />
-
-              <button
-                type="button"
-                onClick={() => onOpen(task)}
-                className="min-w-0 flex-1 space-y-0.5 text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {task.title}
-                  </span>
-
-                  {/* What is live on the task, in the same two dots the rest of the app uses. */}
-                  {task.has_running_dev_server && (
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
-                      title="Dev server running"
-                    />
-                  )}
-                  {task.has_in_progress_attempt && (
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
-                      title="Attempt running"
-                    />
-                  )}
-
-                  {/* Hidden under the hover actions, which take this corner of the row. */}
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
-                    {relativeDay(task.updated_at)}
-                  </span>
-                </div>
-
-                <div className="truncate text-xs text-muted-foreground">
-                  {task.projectName}
-                </div>
-              </button>
-
-              {/* Outside the row button — a button cannot hold buttons. Hover only: a row
-                  that keeps focus should not keep the buttons with it. */}
-              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100">
-                <button
-                  type="button"
-                  aria-label={
-                    task.archived_at ? 'Restore task' : 'Archive task'
-                  }
-                  title={task.archived_at ? 'Restore task' : 'Archive task'}
-                  onClick={() => onArchive(task, !task.archived_at)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  {task.archived_at ? (
-                    <ArchiveRestore className="h-3.5 w-3.5" />
-                  ) : (
-                    <Archive className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete task"
-                  title="Delete task"
-                  onClick={() => onDelete(task)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </li>
+              task={task}
+              selected={selected.has(task.id)}
+              onToggle={onToggle}
+              onOpen={onOpen}
+              onArchive={onArchive}
+              onDelete={onDelete}
+            />
           ))}
         </ul>
       )}
@@ -197,6 +238,23 @@ function Group({
 }
 
 const ALL = 'all';
+const GROUPING_KEY = 'kablan.allTasks.grouping';
+
+/**
+ * How the list is laid out: by status, or as one list newest first.
+ *
+ * Grouping answers "what is in review across everything"; the flat list answers "what did I
+ * touch last", which is the question when the statuses are not what you are navigating by.
+ */
+type Grouping = 'status' | 'none';
+
+function loadGrouping(): Grouping {
+  try {
+    return localStorage.getItem(GROUPING_KEY) === 'none' ? 'none' : 'status';
+  } catch {
+    return 'status';
+  }
+}
 
 /** One active filter, and the way to drop it. */
 function FilterChip({
@@ -230,6 +288,7 @@ export function AllTasks() {
   const projectFilter = params.get('project') ?? ALL;
   const statusFilter = params.get('status') ?? ALL;
   // 'active' is the resting state, so it is the one the URL leaves out.
+  const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
   const archiveFilter = (params.get('archive') ?? 'active') as ArchiveFilter;
   const { tasks, projectCount, isLoading } = useAllTasks(archiveFilter);
   const filtering =
@@ -237,6 +296,15 @@ export function AllTasks() {
     projectFilter !== ALL ||
     statusFilter !== ALL ||
     archiveFilter !== 'active';
+
+  const chooseGrouping = (next: Grouping) => {
+    setGrouping(next);
+    try {
+      localStorage.setItem(GROUPING_KEY, next);
+    } catch {
+      // Blocked storage: the choice just won't persist.
+    }
+  };
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -278,6 +346,10 @@ export function AllTasks() {
         (!needle || task.title.toLowerCase().includes(needle))
     );
   }, [tasks, query, projectFilter, statusFilter]);
+
+  // Ungrouped, the order has to come from somewhere: most recently touched first, the same
+  // order each group uses inside itself.
+  const flat = useMemo(() => [...filtered].sort(byRecency), [filtered]);
 
   const grouped = useMemo(() => {
     const byStatus = new Map<TaskStatus, TaskAcrossProjects[]>();
@@ -435,6 +507,37 @@ export function AllTasks() {
             <Button
               variant="ghost"
               size="icon"
+              className="h-7 w-7 shrink-0"
+              aria-label="Display options"
+              title="Display"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Grouping
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={grouping}
+              onValueChange={(v) => chooseGrouping(v as Grouping)}
+            >
+              <DropdownMenuRadioItem value="status" className="text-sm">
+                Status
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="none" className="text-sm">
+                No grouping
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               className={cn(
                 'h-7 w-7 shrink-0',
                 filtering && 'bg-accent text-foreground'
@@ -577,18 +680,41 @@ export function AllTasks() {
             </p>
           </div>
         ) : (
-          STATUS_ORDER.map((status) => (
-            <Group
-              key={status}
-              status={status}
-              tasks={grouped.get(status) ?? []}
-              onOpen={(task) => navigate(paths.task(task.projectId, task.id))}
-              selected={selected}
-              onToggle={toggle}
-              onArchive={rowArchive}
-              onDelete={rowDelete}
-            />
-          ))
+          <>
+            {grouping === 'none' ? (
+              // No card: its border is what separates one group from the next, and here there
+              // is nothing to separate.
+              <ul className="space-y-1">
+                {flat.map((task) => (
+                  <Row
+                    key={task.id}
+                    task={task}
+                    selected={selected.has(task.id)}
+                    onToggle={toggle}
+                    onOpen={(t) => navigate(paths.task(t.projectId, t.id))}
+                    onArchive={rowArchive}
+                    onDelete={rowDelete}
+                    showStatus
+                  />
+                ))}
+              </ul>
+            ) : (
+              STATUS_ORDER.map((status) => (
+                <Group
+                  key={status}
+                  status={status}
+                  tasks={grouped.get(status) ?? []}
+                  onOpen={(task) =>
+                    navigate(paths.task(task.projectId, task.id))
+                  }
+                  selected={selected}
+                  onToggle={toggle}
+                  onArchive={rowArchive}
+                  onDelete={rowDelete}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
 
