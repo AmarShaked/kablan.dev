@@ -82,6 +82,7 @@ import type {
   TaskWithAttemptStatus,
   TaskStatus,
 } from 'shared/types';
+import { taskKeys } from '@/lib/queryKeys';
 
 type Task = TaskWithAttemptStatus;
 
@@ -341,7 +342,7 @@ export function ProjectTasks() {
   // it is a different request — and archived work does not change under you, so a snapshot is
   // the honest thing to show.
   const { data: archivedTasks } = useQuery({
-    queryKey: ['tasks', 'byProject', projectId, filters.archive],
+    queryKey: taskKeys.byProjectFiltered(projectId!, filters.archive),
     queryFn: () => tasksApi.listByProject(projectId!, filters.archive),
     enabled: !!projectId && filters.archive !== 'active',
   });

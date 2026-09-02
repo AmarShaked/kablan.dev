@@ -23,6 +23,7 @@ import {
   SettingsCheckbox,
   SettingsSaveBar,
 } from './SettingsComponents';
+import { repoKeys } from '@/lib/queryKeys';
 
 interface RepoScriptsFormState {
   display_name: string;
@@ -66,7 +67,7 @@ export function ReposSettingsSection({
     isLoading: reposLoading,
     error: reposError,
   } = useQuery({
-    queryKey: ['repos'],
+    queryKey: repoKeys.all,
     queryFn: () => repoApi.list(),
   });
 

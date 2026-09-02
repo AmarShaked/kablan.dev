@@ -2,10 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { tasksApi } from '@/lib/api';
 import type { Task } from 'shared/types';
 
-export const taskKeys = {
-  all: ['tasks'] as const,
-  byId: (taskId: string | undefined) => ['tasks', taskId] as const,
-};
+// Defined with the rest of the keys; re-exported so existing imports keep working.
+import { taskKeys } from '@/lib/queryKeys';
+export { taskKeys };
 
 type Options = {
   enabled?: boolean;

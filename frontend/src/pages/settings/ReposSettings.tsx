@@ -30,6 +30,7 @@ import { MultiFileSearchTextarea } from '@/components/ui/multi-file-search-texta
 import { repoApi } from '@/lib/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Repo, UpdateRepo } from 'shared/types';
+import { repoKeys } from '@/lib/queryKeys';
 
 interface RepoScriptsFormState {
   display_name: string;
@@ -63,7 +64,7 @@ export function ReposSettings() {
     isLoading: reposLoading,
     error: reposError,
   } = useQuery({
-    queryKey: ['repos'],
+    queryKey: repoKeys.all,
     queryFn: () => repoApi.list(),
   });
 
@@ -204,14 +205,13 @@ export function ReposSettings() {
       const updatedRepo = await repoApi.update(selectedRepo.id, updateData);
       setSelectedRepo(updatedRepo);
       setDraft(repoToFormState(updatedRepo));
-      queryClient.setQueryData(['repos'], (old: Repo[] | undefined) =>
+      queryClient.setQueryData(repoKeys.all, (old: Repo[] | undefined) =>
         old?.map((r) => (r.id === updatedRepo.id ? updatedRepo : r))
       );
       // Whether an attempt offers to run a dev server is a separate query — it asks a project
       // for its repositories and looks for a script — so saving one here left the button
       // insisting there was no dev script until the page was reloaded.
-      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
-      queryClient.invalidateQueries({ queryKey: ['repos'] });
+      queryClient.invalidateQueries({ queryKey: repoKeys.all });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

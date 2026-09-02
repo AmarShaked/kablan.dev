@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { projectKeys, taskKeys } from '@/lib/queryKeys';
 
 /**
  * Refresh every cached view a task change can be seen through.
@@ -21,14 +22,14 @@ export function invalidateTaskViews(
   const unique = [...new Set(projectIds ?? [])];
 
   if (unique.length === 0) {
-    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    queryClient.invalidateQueries({ queryKey: taskKeys.all });
   } else {
     for (const id of unique) {
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'byProject', id] });
+      queryClient.invalidateQueries({ queryKey: taskKeys.byProject(id) });
     }
   }
 
   // The sidebar's counts and unread dots are drawn from the project stats, which no task write
   // touches on its own.
-  queryClient.invalidateQueries({ queryKey: ['projects', 'with-stats'] });
+  queryClient.invalidateQueries({ queryKey: projectKeys.withStats });
 }

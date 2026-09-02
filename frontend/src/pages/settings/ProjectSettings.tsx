@@ -31,6 +31,7 @@ import { RepoPickerDialog } from '@/components/dialogs/shared/RepoPickerDialog';
 import { projectsApi } from '@/lib/api';
 import { repoBranchKeys } from '@/hooks/useRepoBranches';
 import type { Project, Repo, UpdateProject } from 'shared/types';
+import { repoKeys } from '@/lib/queryKeys';
 
 interface ProjectFormState {
   name: string;
@@ -240,14 +241,9 @@ export function ProjectSettings() {
         git_repo_path: repo.path,
       });
       setRepositories((prev) => [...prev, newRepo]);
-      queryClient.invalidateQueries({
-        queryKey: ['projectRepositories', selectedProjectId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['repos'],
-      });
-      // Adding a repository can be what gives a project a dev script.
-      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
+      // The repos prefix reaches this project's list and the dev-script answer, which adding a
+      // repository can change.
+      queryClient.invalidateQueries({ queryKey: repoKeys.all });
       queryClient.invalidateQueries({
         queryKey: repoBranchKeys.byRepo(newRepo.id),
       });
@@ -268,14 +264,8 @@ export function ProjectSettings() {
     try {
       await projectsApi.deleteRepository(selectedProjectId, repoId);
       setRepositories((prev) => prev.filter((r) => r.id !== repoId));
-      queryClient.invalidateQueries({
-        queryKey: ['projectRepositories', selectedProjectId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['repos'],
-      });
-      // …and removing the last one with a script takes it away again.
-      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
+      // …and removing the last one with a script takes the dev-script answer away again.
+      queryClient.invalidateQueries({ queryKey: repoKeys.all });
       queryClient.invalidateQueries({
         queryKey: repoBranchKeys.byRepo(repoId),
       });

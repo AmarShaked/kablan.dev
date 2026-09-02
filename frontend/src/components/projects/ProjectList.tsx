@@ -12,6 +12,7 @@ import { ProjectCard } from '@/components/projects/ProjectCard';
 import { useKeyCreate, Scope } from '@/keyboard';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectStatsApi, projectsApi } from '@/lib/api';
+import { projectKeys } from '@/lib/queryKeys';
 
 export function ProjectList() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export function ProjectList() {
     isLoading,
     error: projectsError,
   } = useQuery({
-    queryKey: ['projects', 'with-stats'],
+    queryKey: projectKeys.withStats,
     queryFn: projectStatsApi.listWithStats,
   });
   const [error, setError] = useState('');
@@ -31,7 +32,7 @@ export function ProjectList() {
     // Optimistic: picking an icon is a single click, so waiting on the round trip would make the
     // picker feel stuck. Refetch afterwards, and surface a failure rather than leaving a lie up.
     queryClient.setQueryData(
-      ['projects', 'with-stats'],
+      projectKeys.withStats,
       (old: typeof projects | undefined) =>
         (old ?? []).map((p) => (p.id === projectId ? { ...p, icon } : p))
     );
@@ -40,7 +41,7 @@ export function ProjectList() {
     } catch {
       setError('Failed to save the project icon');
     } finally {
-      queryClient.invalidateQueries({ queryKey: ['projects', 'with-stats'] });
+      queryClient.invalidateQueries({ queryKey: projectKeys.withStats });
     }
   };
 

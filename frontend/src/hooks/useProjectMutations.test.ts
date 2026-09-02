@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { useProjectMutations } from './useProjectMutations';
 import { projectsApi } from '@/lib/api';
+import { projectKeys } from '@/lib/queryKeys';
 import type { Project } from 'shared/types';
 
 vi.mock('@/lib/api', () => ({
@@ -37,10 +38,7 @@ describe('useProjectMutations', () => {
     // by hand, and nothing invalidated it until a reload.
     vi.mocked(projectsApi.update).mockResolvedValue(project);
     const { client, wrapper } = harness();
-    client.setQueryData(
-      ['projects', 'with-stats'],
-      [{ ...project, icon: 'heart' }]
-    );
+    client.setQueryData(projectKeys.withStats, [{ ...project, icon: 'heart' }]);
     client.setQueryData(['projects'], [{ ...project, icon: 'heart' }]);
 
     const { result } = renderHook(() => useProjectMutations(), { wrapper });
@@ -52,7 +50,7 @@ describe('useProjectMutations', () => {
     await waitFor(() => {
       const stats = client
         .getQueryCache()
-        .find({ queryKey: ['projects', 'with-stats'] });
+        .find({ queryKey: projectKeys.withStats });
       expect(stats?.isStale()).toBe(true);
     });
   });
@@ -69,7 +67,7 @@ describe('useProjectMutations', () => {
     });
 
     await waitFor(() => {
-      expect(client.getQueryData(['project', 'p1'])).toEqual(project);
+      expect(client.getQueryData(projectKeys.detail('p1'))).toEqual(project);
       expect(client.getQueryData<Project[]>(['projects'])?.[0].icon).toBe(
         'rocket'
       );

@@ -27,6 +27,7 @@ import { attemptsApi, repoApi } from '@/lib/api';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { SearchableDropdownContainer } from '@/components/ui-new/containers/SearchableDropdownContainer';
 import type { OpenPrInfo, GitRemote } from 'shared/types';
+import { repoKeys, taskKeys } from '@/lib/queryKeys';
 
 export interface CreateWorkspaceFromPrDialogProps {}
 
@@ -48,7 +49,7 @@ const CreateWorkspaceFromPrDialogImpl =
     const [runSetup, setRunSetup] = useState(true);
 
     const { data: repos = [], isLoading: isLoadingRepos } = useQuery({
-      queryKey: ['repos'],
+      queryKey: repoKeys.all,
       queryFn: () => repoApi.list(),
       enabled: modal.visible,
     });
@@ -181,7 +182,7 @@ const CreateWorkspaceFromPrDialogImpl =
         return result.data;
       },
       onSuccess: (data) => {
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: taskKeys.all });
         queryClient.invalidateQueries({ queryKey: ['workspaces'] });
         modal.hide();
         navigate(`/workspaces/${data.workspace.id}`);

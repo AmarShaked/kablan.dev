@@ -17,6 +17,11 @@ interface UseJsonPatchStreamOptions<T> {
    * Filter/deduplicate patches before applying them
    */
   deduplicatePatches?: (patches: Operation[]) => Operation[];
+  /**
+   * See every batch of operations as it arrives, before it is applied. For a reader that does
+   * not want the state at all — one that only needs to know something changed.
+   */
+  onPatches?: (patches: Operation[]) => void;
 }
 
 interface UseJsonPatchStreamResult<T> {
@@ -50,6 +55,8 @@ export const useJsonPatchWsStream = <T extends object>(
 
   const injectInitialEntry = options?.injectInitialEntry;
   const deduplicatePatches = options?.deduplicatePatches;
+  const onPatchesRef = useRef(options?.onPatches);
+  onPatchesRef.current = options?.onPatches;
 
   function scheduleReconnect() {
     if (retryTimerRef.current) return; // already scheduled
@@ -124,6 +131,7 @@ export const useJsonPatchWsStream = <T extends object>(
           // Handle JsonPatch messages (same as SSE json_patch event)
           if ('JsonPatch' in msg) {
             const patches: Operation[] = msg.JsonPatch;
+            onPatchesRef.current?.(patches);
             const filtered = deduplicatePatches
               ? deduplicatePatches(patches)
               : patches;

@@ -27,6 +27,7 @@ import { repoApi, attemptsApi } from '@/lib/api';
 import { useLogStream } from '@/hooks/useLogStream';
 import { useExecutionProcesses } from '@/hooks/useExecutionProcesses';
 import type { RepoWithTargetBranch, PatchType, UpdateRepo } from 'shared/types';
+import { repoKeys } from '@/lib/queryKeys';
 
 export type ScriptType = 'setup' | 'cleanup' | 'dev_server' | 'archive';
 
@@ -188,8 +189,7 @@ const ScriptFixerDialogImpl = NiceModal.create<ScriptFixerDialogProps>(
         await repoApi.update(selectedRepoId, updateData as UpdateRepo);
 
         // Invalidate repos cache
-        queryClient.invalidateQueries({ queryKey: ['repos'] });
-        queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
+        queryClient.invalidateQueries({ queryKey: repoKeys.all });
 
         setOriginalScript(script);
         modal.resolve({ action: 'saved' } as ScriptFixerDialogResult);
@@ -224,8 +224,7 @@ const ScriptFixerDialogImpl = NiceModal.create<ScriptFixerDialogProps>(
         await repoApi.update(selectedRepoId, updateData as UpdateRepo);
 
         // Invalidate repos cache
-        queryClient.invalidateQueries({ queryKey: ['repos'] });
-        queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
+        queryClient.invalidateQueries({ queryKey: repoKeys.all });
 
         setOriginalScript(script);
 

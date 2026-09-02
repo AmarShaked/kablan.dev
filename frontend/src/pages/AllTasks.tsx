@@ -45,6 +45,7 @@ import { relativeDay } from '@/utils/relativeDay';
 import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { STATUS_ORDER, statusLabels } from '@/utils/statusLabels';
 import type { ArchiveFilter, TaskStatus } from 'shared/types';
+import { projectKeys } from '@/lib/queryKeys';
 
 /**
  * Every task, across every project, grouped by status.
@@ -440,7 +441,7 @@ export function AllTasks() {
         .then(() => {
           // The sidebar's dot is drawn from the project stats, which nothing else refreshes here.
           queryClient.invalidateQueries({
-            queryKey: ['projects', 'with-stats'],
+            queryKey: projectKeys.withStats,
           });
         })
         .catch(() => {});

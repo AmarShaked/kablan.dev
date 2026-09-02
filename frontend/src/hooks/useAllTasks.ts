@@ -3,6 +3,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 
 import { projectStatsApi, tasksApi } from '@/lib/api';
 import type { ArchiveFilter, TaskWithAttemptStatus } from 'shared/types';
+import { projectKeys, taskKeys } from '@/lib/queryKeys';
 
 export type TaskAcrossProjects = TaskWithAttemptStatus & {
   projectId: string;
@@ -24,7 +25,7 @@ export type TaskAcrossProjects = TaskWithAttemptStatus & {
  */
 export function useAllTasks(archived: ArchiveFilter = 'active') {
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
-    queryKey: ['projects', 'with-stats'],
+    queryKey: projectKeys.withStats,
     queryFn: projectStatsApi.listWithStats,
   });
 
@@ -32,7 +33,7 @@ export function useAllTasks(archived: ArchiveFilter = 'active') {
     queries: projects.map((project) => ({
       // The filter is part of the key: the archived listing and the active one are different
       // answers, and caching them together would show one where the other was asked for.
-      queryKey: ['tasks', 'byProject', project.id, archived],
+      queryKey: taskKeys.byProjectFiltered(project.id, archived),
       queryFn: () => tasksApi.listByProject(project.id, archived),
       staleTime: 15_000,
     })),

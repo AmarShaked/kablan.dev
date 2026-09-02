@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '@/lib/api';
+import { repoKeys } from '@/lib/queryKeys';
 
 export function useHasDevServerScript(projectId?: string) {
   return useQuery({
-    queryKey: ['hasDevServerScript', projectId],
+    queryKey: repoKeys.hasDevServerScript(projectId),
     queryFn: async () => {
       if (!projectId) return false;
 

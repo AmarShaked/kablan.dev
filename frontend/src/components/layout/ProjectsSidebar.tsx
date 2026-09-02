@@ -29,6 +29,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
+import { projectKeys } from '@/lib/queryKeys';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -50,7 +51,7 @@ export function ProjectsSidebar() {
 
   // The same query the projects page uses, so the two share one fetch and one cache.
   const { data: projects = [] } = useQuery({
-    queryKey: ['projects', 'with-stats'],
+    queryKey: projectKeys.withStats,
     queryFn: projectStatsApi.listWithStats,
     // The dot is the only thing outside a project that says it wants attention, and nothing
     // pushes turns at this query — so it asks, at the pace an agent finishes work.

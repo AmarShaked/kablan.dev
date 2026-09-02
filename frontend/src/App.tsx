@@ -27,6 +27,7 @@ import { SearchProvider } from '@/contexts/SearchContext';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 
 import { ProjectProvider } from '@/contexts/ProjectContext';
+import { useLiveInvalidation } from '@/hooks/useLiveInvalidation';
 import { ThemeMode } from 'shared/types';
 
 import { DisclaimerDialog } from '@/components/dialogs/global/DisclaimerDialog';
@@ -47,6 +48,9 @@ function AppContent() {
 
   // Sync UI preferences with server scratch storage
   useUiPreferencesScratch();
+
+  // One socket that keeps every cached view current, wherever in the app it is.
+  useLiveInvalidation();
 
   useEffect(() => {
     if (!config) return;
