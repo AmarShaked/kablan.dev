@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.id           as \"id!: Uuid\",\n                      p.name,\n                      p.default_agent_working_dir,\n                      p.icon,\n                      p.remote_project_id as \"remote_project_id: Uuid\",\n                      p.created_at   as \"created_at!: DateTime<Utc>\",\n                      p.updated_at   as \"updated_at!: DateTime<Utc>\",\n                      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id)\n                        as \"task_count!: i64\",\n                      (SELECT COUNT(*)\n                         FROM tasks t\n                         JOIN workspaces w  ON w.task_id = t.id\n                         JOIN sessions s    ON s.workspace_id = w.id\n                         JOIN execution_processes ep ON ep.session_id = s.id\n                        WHERE t.project_id = p.id\n                          AND ep.status = 'running'\n                          AND ep.run_reason IN ('setupscript','cleanupscript','codingagent'))\n                        as \"running_count!: i64\",\n                      EXISTS(SELECT 1\n                         FROM tasks t\n                         JOIN workspaces w  ON w.task_id = t.id\n                         JOIN sessions s    ON s.workspace_id = w.id\n                         JOIN execution_processes ep ON ep.session_id = s.id\n                         JOIN coding_agent_turns cat ON cat.execution_process_id = ep.id\n                        WHERE t.project_id = p.id\n                          AND t.archived_at IS NULL\n                          AND cat.seen = 0)\n                        as \"has_unseen_turns!: bool\"\n               FROM projects p\n               ORDER BY p.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_agent_working_dir",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "icon",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "remote_project_id: Uuid",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_count!: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "running_count!: i64",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "has_unseen_turns!: bool",
+        "ordinal": 9,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4f3021bda918f7d406a2d37cb3733bea1cc1c94fbe39c6311cb2f782dffd6a75"
+}

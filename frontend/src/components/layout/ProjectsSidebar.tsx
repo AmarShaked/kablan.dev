@@ -49,6 +49,9 @@ export function ProjectsSidebar() {
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', 'with-stats'],
     queryFn: projectStatsApi.listWithStats,
+    // The dot is the only thing outside a project that says it wants attention, and nothing
+    // pushes turns at this query — so it asks, at the pace an agent finishes work.
+    refetchInterval: 30_000,
   });
 
   const activeId = location.pathname.match(/^\/local-projects\/([^/]+)/)?.[1];
@@ -133,8 +136,6 @@ export function ProjectsSidebar() {
             <SidebarMenu>
               {projects.map((project) => {
                 const Icon = projectIcon(project.icon);
-                const running = Number(project.running_count);
-                const tasks = Number(project.task_count);
                 const isActive = project.id === activeId;
 
                 return (
@@ -143,8 +144,8 @@ export function ProjectsSidebar() {
                       asChild
                       isActive={isActive}
                       tooltip={
-                        running > 0
-                          ? `${project.name} — ${running} running`
+                        project.has_unseen_turns
+                          ? `${project.name} — something to read`
                           : project.name
                       }
                     >
@@ -153,14 +154,17 @@ export function ProjectsSidebar() {
                         <span>{project.name}</span>
                       </Link>
                     </SidebarMenuButton>
-                    {/* Running beats total: when something is moving, that is the number worth
-                        the space, and the colour says which kind it is. */}
-                    {running > 0 ? (
-                      <SidebarMenuBadge className="text-info">
-                        {running}
+                    {/* A dot, not a number: the count switched between "running" and "total"
+                        with only its colour to say which, and neither number told you whether
+                        the project wanted anything from you. This does. */}
+                    {project.has_unseen_turns && (
+                      <SidebarMenuBadge>
+                        <span
+                          className="h-2 w-2 rounded-full bg-info"
+                          aria-label="Unread agent messages"
+                          role="img"
+                        />
                       </SidebarMenuBadge>
-                    ) : (
-                      tasks > 0 && <SidebarMenuBadge>{tasks}</SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
                 );

@@ -26,7 +26,12 @@ export type ProjectWithStats = { task_count: bigint,
 /**
  * Tasks in this project with an attempt currently running.
  */
-running_count: bigint, id: string, name: string, default_agent_working_dir: string | null, 
+running_count: bigint, 
+/**
+ * An agent here has finished saying something nobody has read. What the sidebar shows
+ * instead of a number: a project is worth opening when it is waiting on you.
+ */
+has_unseen_turns: boolean, id: string, name: string, default_agent_working_dir: string | null, 
 /**
  * Lucide icon key chosen by the user (see the frontend's icon picker). None = default glyph.
  */

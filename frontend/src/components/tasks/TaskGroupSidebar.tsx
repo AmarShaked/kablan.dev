@@ -89,31 +89,6 @@ function defaultCollapsed(status: TaskStatus, count: number): boolean {
 }
 
 /**
- * A status dot.
- *
- * `pulse` is for the one state that is still changing while you look at it: a spinner says
- * "busy", a pulse says "alive", which is what you are checking when you glance at a list of
- * agents. It holds still for anyone who has asked the system for less motion.
- */
-function Dot({ className, pulse }: { className: string; pulse?: boolean }) {
-  return (
-    <span className="relative flex h-2 w-2">
-      {pulse && (
-        <span
-          className={cn(
-            'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 motion-reduce:animate-none',
-            className
-          )}
-        />
-      )}
-      <span
-        className={cn('relative inline-flex h-2 w-2 rounded-full', className)}
-      />
-    </span>
-  );
-}
-
-/**
  * The two things you do to a row without opening it, on the hover the mail clients taught
  * everyone to expect: they take the place of the date, so the row keeps its shape and nothing
  * shifts under the pointer.
@@ -208,7 +183,7 @@ function TaskRow({
         {...dragHandle}
         {...attributes}
         className={cn(
-          'group/row flex cursor-pointer items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
+          'group/row flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-muted',
           selected && 'bg-muted',
           isDragging && 'opacity-40'
         )}
@@ -217,12 +192,12 @@ function TaskRow({
             It stops the pointer itself, so pressing it opens the menu rather than starting a
             drag or opening the task. */}
         <TaskStatusControl task={task} size={16} className="-ml-1 mt-px" />
-        <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="min-w-0 flex-1 space-y-[5px]">
           <div className="flex items-center gap-2">
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-sm',
-                unread ? 'font-semibold' : 'font-medium'
+                unread ? 'font-bold' : 'font-semibold'
               )}
             >
               {task.title}
@@ -231,7 +206,7 @@ function TaskRow({
             <div className="relative flex shrink-0 items-center">
               <span
                 className={cn(
-                  'text-xs tabular-nums text-muted-foreground transition-opacity',
+                  'text-[13px] leading-[18px] tabular-nums text-muted-foreground transition-opacity',
                   hasActions && 'group-hover/row:opacity-0'
                 )}
               >
@@ -267,7 +242,7 @@ function TaskRow({
           <div className="flex min-w-0 items-center gap-2">
             <span
               className={cn(
-                'min-w-0 flex-1 truncate text-xs text-muted-foreground',
+                'min-w-0 flex-1 truncate text-[13px] leading-[18px] text-muted-foreground',
                 !activity && 'italic opacity-75'
               )}
             >
@@ -301,11 +276,6 @@ function TaskGroup({
   onDelete?: (task: TaskWithAttemptStatus) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: status });
-  const running = tasks.filter((t) => t.has_in_progress_attempt).length;
-  // Groups collapse, so a group that hides the serving task has to say so itself — otherwise
-  // the indicator only works when you already know where to look.
-  const serving = tasks.some((t) => t.has_running_dev_server);
-
   return (
     // Each status is its own card, so the boundary between groups is the edge of a surface
     // rather than a rule drawn across a flat list.
@@ -336,8 +306,6 @@ function TaskGroup({
         <span className="text-xs tabular-nums text-muted-foreground">
           ({tasks.length})
         </span>
-        {serving && <Dot className="ml-1 bg-info" />}
-        {running > 0 && <Dot className="bg-success" pulse />}
         <ChevronRight
           className={cn(
             'ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform',
@@ -356,7 +324,7 @@ function TaskGroup({
             Drop a task here.
           </p>
         ) : (
-          <ul id={`sidebar-tasks-${status}`} className="space-y-1 p-2">
+          <ul id={`sidebar-tasks-${status}`} className="space-y-2 p-2">
             {tasks.map((task, index) => (
               <TaskRow
                 key={task.id}
@@ -522,7 +490,7 @@ export function TaskGroupSidebar({
             {grouping === 'none' ? (
               // No card here: the border of a card is what separates one group from the next,
               // and ungrouped there is nothing to separate — just the rows on the page.
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {flat.map((task, index) => (
                   <TaskRow
                     key={task.id}

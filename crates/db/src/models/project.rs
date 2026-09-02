@@ -53,6 +53,9 @@ pub struct ProjectWithStats {
     pub task_count: i64,
     /// Tasks in this project with an attempt currently running.
     pub running_count: i64,
+    /// An agent here has finished saying something nobody has read. What the sidebar shows
+    /// instead of a number: a project is worth opening when it is waiting on you.
+    pub has_unseen_turns: bool,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -121,7 +124,17 @@ impl Project {
                         WHERE t.project_id = p.id
                           AND ep.status = 'running'
                           AND ep.run_reason IN ('setupscript','cleanupscript','codingagent'))
-                        as "running_count!: i64"
+                        as "running_count!: i64",
+                      EXISTS(SELECT 1
+                         FROM tasks t
+                         JOIN workspaces w  ON w.task_id = t.id
+                         JOIN sessions s    ON s.workspace_id = w.id
+                         JOIN execution_processes ep ON ep.session_id = s.id
+                         JOIN coding_agent_turns cat ON cat.execution_process_id = ep.id
+                        WHERE t.project_id = p.id
+                          AND t.archived_at IS NULL
+                          AND cat.seen = 0)
+                        as "has_unseen_turns!: bool"
                FROM projects p
                ORDER BY p.created_at DESC"#
         )
@@ -142,6 +155,7 @@ impl Project {
                 },
                 task_count: r.task_count,
                 running_count: r.running_count,
+                has_unseen_turns: r.has_unseen_turns,
             })
             .collect())
     }

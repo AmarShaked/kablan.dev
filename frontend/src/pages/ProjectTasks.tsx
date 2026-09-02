@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
@@ -482,6 +483,8 @@ export function ProjectTasks() {
     }
   );
 
+  const queryClient = useQueryClient();
+
   const handleClosePanel = useCallback(() => {
     if (projectId) {
       navigate(`/local-projects/${projectId}/tasks`, { replace: true });
@@ -495,7 +498,15 @@ export function ProjectTasks() {
       // Opening the task is reading it. Fire and forget: the stream brings the row back without
       // its unread mark, and a failure here is not worth interrupting navigation for.
       if (task.has_unseen_turns) {
-        tasksApi.markSeen(task.id).catch(() => {});
+        tasksApi
+          .markSeen(task.id)
+          .then(() => {
+            // The sidebar's dot is drawn from the project stats, which nothing else refreshes here.
+            queryClient.invalidateQueries({
+              queryKey: ['projects', 'with-stats'],
+            });
+          })
+          .catch(() => {});
       }
 
       if (attemptIdToShow) {

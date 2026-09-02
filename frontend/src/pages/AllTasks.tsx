@@ -92,7 +92,7 @@ function Row({
       className={cn(
         // The row is the whole card-width target, and the hover tint is the only thing
         // separating one from the next — no rules between rows.
-        'group/row relative flex items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
+        'group/row relative flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-muted',
         selected && 'bg-muted'
       )}
     >
@@ -118,13 +118,13 @@ function Row({
       <button
         type="button"
         onClick={() => onOpen(task)}
-        className="min-w-0 flex-1 space-y-0.5 text-left"
+        className="min-w-0 flex-1 space-y-[5px] text-left"
       >
         <div className="flex items-center gap-2">
           <span
             className={cn(
               'min-w-0 flex-1 truncate text-sm',
-              unread ? 'font-semibold' : 'font-medium'
+              unread ? 'font-bold' : 'font-semibold'
             )}
           >
             {task.title}
@@ -132,13 +132,13 @@ function Row({
           </span>
 
           {/* Hidden under the hover actions, which take this corner of the row. */}
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
+          <span className="shrink-0 text-[13px] leading-[18px] tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
             {relativeDay(task.updated_at)}
           </span>
         </div>
 
         {/* Always a second line: which project, what last happened, and what is true now. */}
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-[13px] leading-[18px] text-muted-foreground">
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-px leading-4">
             <ProjectGlyph className="h-3 w-3" aria-hidden />
             {task.projectName}
@@ -236,7 +236,7 @@ function Group({
       </button>
 
       {open && (
-        <ul className="space-y-1 p-2">
+        <ul className="space-y-2 p-2">
           {tasks.map((task) => (
             <Row
               key={task.id}
@@ -441,7 +441,15 @@ export function AllTasks() {
   const openTask = (task: TaskAcrossProjects) => {
     // Opening the task is reading it; the project's own list picks the change up from the stream.
     if (task.has_unseen_turns) {
-      tasksApi.markSeen(task.id).catch(() => {});
+      tasksApi
+        .markSeen(task.id)
+        .then(() => {
+          // The sidebar's dot is drawn from the project stats, which nothing else refreshes here.
+          queryClient.invalidateQueries({
+            queryKey: ['projects', 'with-stats'],
+          });
+        })
+        .catch(() => {});
     }
     navigate(paths.task(task.projectId, task.id));
   };
@@ -709,7 +717,7 @@ export function AllTasks() {
             {grouping === 'none' ? (
               // No card: its border is what separates one group from the next, and here there
               // is nothing to separate.
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {flat.map((task) => (
                   <Row
                     key={task.id}
