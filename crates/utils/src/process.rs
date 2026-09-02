@@ -39,3 +39,25 @@ pub async fn kill_process_group(child: &mut AsyncGroupChild) -> std::io::Result<
     let _ = child.wait().await;
     Ok(())
 }
+
+/// Ask our own process to shut down the graceful way — the same path Ctrl-C and a `kill` take.
+///
+/// The update flow uses this: it spawns a detached helper that waits for us to exit, then quits
+/// through the normal shutdown so child agents and dev servers are cleaned up first, rather than
+/// calling `exit()` and orphaning them. A no-op off Unix; the installed app is macOS only.
+#[cfg(unix)]
+pub fn request_self_shutdown() {
+    use nix::{
+        sys::signal::{Signal, kill},
+        unistd::getpid,
+    };
+
+    if let Err(e) = kill(getpid(), Signal::SIGTERM) {
+        tracing::error!("Failed to signal self for shutdown: {e}");
+    }
+}
+
+#[cfg(not(unix))]
+pub fn request_self_shutdown() {
+    tracing::warn!("request_self_shutdown is only implemented on Unix");
+}

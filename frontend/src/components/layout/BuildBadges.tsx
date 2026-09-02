@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpCircle, Check, Copy } from 'lucide-react';
+import { ArrowUpCircle, Check, Copy, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useLatestRelease } from '@/hooks/useLatestRelease';
+import { useSelfUpdate } from '@/hooks/useSelfUpdate';
 
 const UPDATE_COMMAND = 'npx kablan@latest';
 
@@ -26,6 +27,7 @@ const UPDATE_COMMAND = 'npx kablan@latest';
  */
 export function BuildBadges() {
   const { latest, current, updateAvailable } = useLatestRelease();
+  const { state, update } = useSelfUpdate();
   const [copied, setCopied] = useState(false);
 
   const isDev = import.meta.env.MODE === 'development';
@@ -67,11 +69,31 @@ export function BuildBadges() {
           <PopoverContent side="right" align="start" className="w-64 p-3">
             <p className="text-sm font-medium">Kablan {latest} is available</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              You have {current}. Kablan runs from a downloaded binary, so
-              updating means quitting and running the command again.
+              You have {current}.{' '}
+              {state.status === 'unsupported'
+                ? 'This build cannot restart itself — quit and run the command.'
+                : 'Update and reopen in one step, or run the command yourself.'}
             </p>
-            {/* The command, not an install button: nothing in the page can replace the binary
-                it is running from. */}
+
+            {state.status === 'updating' ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {state.message}
+              </p>
+            ) : (
+              state.status !== 'unsupported' && (
+                <button
+                  type="button"
+                  onClick={update}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-info/40 bg-info/10 px-2 py-1.5 text-xs font-medium text-info transition-colors hover:bg-info/20"
+                >
+                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                  Update &amp; restart
+                </button>
+              )
+            )}
+
+            {/* Always here as the fallback: if the app cannot restart itself, this is the way. */}
             <button
               type="button"
               onClick={() => {

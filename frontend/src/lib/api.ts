@@ -1559,3 +1559,27 @@ export const searchApi = {
     return handleApiResponse<SearchResult[]>(response);
   },
 };
+
+// System API (self-update on the installed app)
+export const systemApi = {
+  /**
+   * Ask the running app to update to the latest release and reopen itself.
+   *
+   * Resolves with a message while the app goes down and comes back; rejects with the reason when
+   * the build cannot restart itself (a dev build, or a bare binary), so the caller can fall back
+   * to showing the manual command. The socket drops as the server exits — that is success, not an
+   * error, so callers should expect the connection to end rather than await a second response.
+   */
+  updateAndRestart: async (): Promise<{ message: string }> => {
+    const response = await makeRequest('/api/system/update-and-restart', {
+      method: 'POST',
+    });
+    const body = (await response.json()) as
+      | { success: true; data: { message: string } }
+      | { success: false; message?: string };
+    if (!body.success) {
+      throw new Error(body.message ?? 'Could not start the update.');
+    }
+    return body.data;
+  },
+};
