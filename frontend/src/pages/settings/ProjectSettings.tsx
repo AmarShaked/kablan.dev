@@ -246,6 +246,8 @@ export function ProjectSettings() {
       queryClient.invalidateQueries({
         queryKey: ['repos'],
       });
+      // Adding a repository can be what gives a project a dev script.
+      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
       queryClient.invalidateQueries({
         queryKey: repoBranchKeys.byRepo(newRepo.id),
       });
@@ -272,6 +274,8 @@ export function ProjectSettings() {
       queryClient.invalidateQueries({
         queryKey: ['repos'],
       });
+      // …and removing the last one with a script takes it away again.
+      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
       queryClient.invalidateQueries({
         queryKey: repoBranchKeys.byRepo(repoId),
       });

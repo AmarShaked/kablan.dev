@@ -55,6 +55,7 @@ import {
 import { TaskGroupSidebarSkeleton } from '@/components/tasks/TaskGroupSidebarSkeleton';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
+import { invalidateTaskViews } from '@/lib/taskCache';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { TasksLayout, type LayoutMode } from '@/components/layout/TasksLayout';
@@ -715,15 +716,22 @@ export function ProjectTasks() {
   );
 
   // Row hover actions. Both go through the same paths as their menu equivalents — archiving is
-  // a flag on the task, deleting asks first — and the stream brings the list back without a
-  // refetch here.
-  const handleArchiveTask = useCallback(async (task: TaskWithAttemptStatus) => {
-    try {
-      await tasksApi.setArchived([task.id], true);
-    } catch (err) {
-      console.error('Failed to archive task:', err);
-    }
-  }, []);
+  // a flag on the task, deleting asks first.
+  //
+  // The stream takes the row off this board on its own, but it is the only view that knows: the
+  // archived listing below, and the sidebar's counts, are cached under their own keys and would
+  // go on showing the task where it no longer is.
+  const handleArchiveTask = useCallback(
+    async (task: TaskWithAttemptStatus) => {
+      try {
+        await tasksApi.setArchived([task.id], true);
+        invalidateTaskViews(queryClient, projectId ? [projectId] : undefined);
+      } catch (err) {
+        console.error('Failed to archive task:', err);
+      }
+    },
+    [projectId, queryClient]
+  );
 
   const handleDeleteTask = useCallback(
     (task: TaskWithAttemptStatus) => {

@@ -207,6 +207,11 @@ export function ReposSettings() {
       queryClient.setQueryData(['repos'], (old: Repo[] | undefined) =>
         old?.map((r) => (r.id === updatedRepo.id ? updatedRepo : r))
       );
+      // Whether an attempt offers to run a dev server is a separate query — it asks a project
+      // for its repositories and looks for a script — so saving one here left the button
+      // insisting there was no dev script until the page was reloaded.
+      queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
+      queryClient.invalidateQueries({ queryKey: ['repos'] });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

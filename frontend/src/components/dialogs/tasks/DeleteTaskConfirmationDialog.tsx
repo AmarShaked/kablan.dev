@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { tasksApi } from '@/lib/api';
+import { invalidateTaskViews } from '@/lib/taskCache';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
@@ -20,8 +22,9 @@ export interface DeleteTaskConfirmationDialogProps {
 }
 
 const DeleteTaskConfirmationDialogImpl =
-  NiceModal.create<DeleteTaskConfirmationDialogProps>(({ task }) => {
+  NiceModal.create<DeleteTaskConfirmationDialogProps>(({ task, projectId }) => {
     const modal = useModal();
+    const queryClient = useQueryClient();
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +34,9 @@ const DeleteTaskConfirmationDialogImpl =
 
       try {
         await tasksApi.delete(task.id);
+        // The board hears about this on its stream; the archived listing and the sidebar counts
+        // do not, and would keep offering a task that no longer exists.
+        invalidateTaskViews(queryClient, projectId ? [projectId] : undefined);
         modal.resolve();
         modal.hide();
       } catch (err: unknown) {

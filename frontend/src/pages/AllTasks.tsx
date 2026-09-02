@@ -39,6 +39,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAllTasks, type TaskAcrossProjects } from '@/hooks/useAllTasks';
 import { tasksApi } from '@/lib/api';
 import { paths } from '@/lib/paths';
+import { invalidateTaskViews } from '@/lib/taskCache';
 import { cn } from '@/lib/utils';
 import { relativeDay } from '@/utils/relativeDay';
 import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
@@ -393,14 +394,7 @@ export function AllTasks() {
 
   /** Refresh the projects the acted-on tasks belong to, and the counts in the sidebar. */
   const refresh = async (projectIds: string[]) => {
-    await Promise.all(
-      [...new Set(projectIds)].map((id) =>
-        // Prefix key: the active, archived and all listings of this project are separate
-        // entries, and archiving moves a task between them.
-        queryClient.invalidateQueries({ queryKey: ['tasks', 'byProject', id] })
-      )
-    );
-    queryClient.invalidateQueries({ queryKey: ['projects', 'with-stats'] });
+    invalidateTaskViews(queryClient, projectIds);
   };
 
   const bulkStatus = async (status: TaskStatus) => {

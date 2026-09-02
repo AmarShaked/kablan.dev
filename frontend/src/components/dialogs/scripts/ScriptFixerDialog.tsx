@@ -189,6 +189,7 @@ const ScriptFixerDialogImpl = NiceModal.create<ScriptFixerDialogProps>(
 
         // Invalidate repos cache
         queryClient.invalidateQueries({ queryKey: ['repos'] });
+        queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
 
         setOriginalScript(script);
         modal.resolve({ action: 'saved' } as ScriptFixerDialogResult);
@@ -224,6 +225,7 @@ const ScriptFixerDialogImpl = NiceModal.create<ScriptFixerDialogProps>(
 
         // Invalidate repos cache
         queryClient.invalidateQueries({ queryKey: ['repos'] });
+        queryClient.invalidateQueries({ queryKey: ['hasDevServerScript'] });
 
         setOriginalScript(script);
 
