@@ -60,6 +60,16 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   );
 }
 
+/**
+ * The project of the page you are on, or nothing when the page is not about one project.
+ *
+ * The cross-project list renders the same task components as a project page does; those need the
+ * project a task belongs to, which they are given, not the one the route names.
+ */
+export function useOptionalProject(): ProjectContextValue | null {
+  return useContext(ProjectContext);
+}
+
 export function useProject(): ProjectContextValue {
   const context = useContext(ProjectContext);
   if (!context) {

@@ -8,7 +8,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
-import { useProject } from '@/contexts/ProjectContext';
+import { useOptionalProject } from '@/contexts/ProjectContext';
 import { cn } from '@/lib/utils';
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import {
@@ -112,12 +112,15 @@ export function StatusGlyph({
 
 export function TaskStatusControl({
   task,
+  projectId: projectIdProp,
   size = 16,
   className,
   style,
   children,
 }: {
   task: TaskWithAttemptStatus;
+  /** For lists that span projects, where the route does not say which project a task is in. */
+  projectId?: string;
   size?: number;
   className?: string;
   /** For a trigger that carries the status colour, which lives in a CSS variable. */
@@ -129,7 +132,8 @@ export function TaskStatusControl({
    */
   children?: React.ReactNode;
 }) {
-  const { projectId } = useProject();
+  const routeProject = useOptionalProject();
+  const projectId = projectIdProp ?? routeProject?.projectId;
   const { updateTask } = useTaskMutations(projectId ?? undefined);
   const [open, setOpen] = useState(false);
 
@@ -174,7 +178,9 @@ export function TaskStatusControl({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-52 p-0"
+        // `!` because cn is plain clsx here: the primitive's own w-72 and p-4 would otherwise
+        // win on stylesheet order, which is what made this menu wide and padded.
+        className="!w-44 !p-0"
         // Portalled content still bubbles through the React tree, so without this a click on a
         // status would also open the task behind it.
         onClick={(e) => e.stopPropagation()}

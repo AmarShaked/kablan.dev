@@ -12,7 +12,12 @@ import {
   X,
 } from 'lucide-react';
 
-import { StatusGlyph } from '@/components/tasks/TaskStatusControl';
+import {
+  StatusGlyph,
+  TaskStatusControl,
+} from '@/components/tasks/TaskStatusControl';
+import { TaskStatePills } from '@/components/tasks/TaskStatePills';
+import { projectIcon } from '@/components/projects/projectIcons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog } from '@/components/dialogs';
@@ -69,7 +74,6 @@ function Row({
   onOpen,
   onArchive,
   onDelete,
-  showStatus,
 }: {
   task: TaskAcrossProjects;
   selected: boolean;
@@ -78,17 +82,10 @@ function Row({
   /** Archiving flips: an archived row is restored, not archived again. */
   onArchive: (task: TaskAcrossProjects, archived: boolean) => void;
   onDelete: (task: TaskAcrossProjects) => void;
-  /** Ungrouped, the row carries its own status — there is no header saying it. */
-  showStatus?: boolean;
 }) {
   const activity = taskActivity(task);
   const unread = taskIsUnread(task);
-  // The line's own dot, for the two states worth a colour: work in flight, and work that broke.
-  const stateDot = task.has_in_progress_attempt ? (
-    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-  ) : task.last_attempt_failed ? (
-    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" />
-  ) : null;
+  const ProjectGlyph = projectIcon(task.projectIcon);
 
   return (
     <li
@@ -109,9 +106,14 @@ function Row({
         )}
       />
 
-      {showStatus && (
-        <StatusGlyph status={task.status} size={14} className="shrink-0" />
-      )}
+      {/* The status, and the way to change it. This list spans projects, so the control is told
+          which one the task belongs to rather than reading it off the route. */}
+      <TaskStatusControl
+        task={task}
+        projectId={task.projectId}
+        size={16}
+        className="-ml-0.5"
+      />
 
       <button
         type="button"
@@ -119,13 +121,6 @@ function Row({
         className="min-w-0 flex-1 space-y-0.5 text-left"
       >
         <div className="flex items-center gap-2">
-          {unread && (
-            // The mail-list mark: something was said here and you have not looked.
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
-              aria-hidden
-            />
-          )}
           <span
             className={cn(
               'min-w-0 flex-1 truncate text-sm',
@@ -142,29 +137,21 @@ function Row({
           </span>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0">{task.projectName}</span>
-          {/* The dev server is the one mark the activity line does not already say: it is not
-              something the agent did, it is a port being held. */}
-          {task.has_running_dev_server && (
-            <>
-              <span className="shrink-0 opacity-50">·</span>
-              <span
-                className="flex shrink-0 items-center gap-1.5"
-                title="A dev server is running for this task"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-info" />
-                Server
-              </span>
-            </>
-          )}
-          {activity && (
-            <>
-              <span className="shrink-0 opacity-50">·</span>
-              {stateDot}
-              <span className="truncate">{activity}</span>
-            </>
-          )}
+        {/* Always a second line: which project, what last happened, and what is true now. */}
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-px leading-4">
+            <ProjectGlyph className="h-3 w-3" aria-hidden />
+            {task.projectName}
+          </span>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              !activity && 'italic opacity-75'
+            )}
+          >
+            {activity ?? "Agent hasn't started yet"}
+          </span>
+          <TaskStatePills task={task} />
         </div>
       </button>
 
@@ -732,7 +719,6 @@ export function AllTasks() {
                     onOpen={openTask}
                     onArchive={rowArchive}
                     onDelete={rowDelete}
-                    showStatus
                   />
                 ))}
               </ul>

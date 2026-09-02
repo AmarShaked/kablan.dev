@@ -23,7 +23,11 @@ import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { relativeDay } from '@/utils/relativeDay';
 import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { statusLabels } from '@/utils/statusLabels';
-import { StatusGlyph } from '@/components/tasks/TaskStatusControl';
+import {
+  StatusGlyph,
+  TaskStatusControl,
+} from '@/components/tasks/TaskStatusControl';
+import { TaskStatePills } from '@/components/tasks/TaskStatePills';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,40 +86,6 @@ function loadOverrides(): CollapseOverrides {
  */
 function defaultCollapsed(status: TaskStatus, count: number): boolean {
   return count === 0 || status === 'done';
-}
-
-function Indicator({
-  label,
-  short,
-  children,
-}: {
-  /** The long form, for the tooltip and for screen readers. */
-  label: string;
-  /** The word beside the mark. A mark alone has to be learned; a word does not. */
-  short: string;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* Dot and word travel together as one unit, with the gap between chips wider than the
-            gap inside one — that spacing is what separates them now the border is gone. */}
-        <span
-          className="inline-flex shrink-0 items-center gap-1.5"
-          aria-label={label}
-          role="img"
-        >
-          {children}
-          {/* The dot carries the colour. Repeating it in the word makes three coloured labels
-              competing with the title, which is the thing being read. */}
-          <span className="text-xs text-muted-foreground">{short}</span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="right" className="px-2 py-1 text-xs">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 /**
@@ -214,21 +184,6 @@ function TaskRow({
     data: { index, parent: status },
   });
 
-  // The dev server is the one mark the activity line does not already say: it is not something
-  // the agent did, it is a port being held.
-  const server = task.has_running_dev_server && (
-    <Indicator label="A dev server is running for this task" short="Server">
-      <Dot className="bg-info" />
-    </Indicator>
-  );
-
-  // The line's own dot, for the two states worth a colour: work in flight, and work that broke.
-  const stateDot = task.has_in_progress_attempt ? (
-    <Dot className="bg-success" pulse />
-  ) : task.last_attempt_failed ? (
-    <Dot className="bg-destructive" />
-  ) : null;
-
   const activity = taskActivity(task);
   const unread = taskIsUnread(task);
 
@@ -258,18 +213,12 @@ function TaskRow({
           isDragging && 'opacity-40'
         )}
       >
-        {showStatus && (
-          <StatusGlyph status={task.status} size={14} className="shrink-0" />
-        )}
+        {/* The status, and the way to change it — a control, not a picture, in both layouts.
+            It stops the pointer itself, so pressing it opens the menu rather than starting a
+            drag or opening the task. */}
+        <TaskStatusControl task={task} size={16} className="-ml-1 mt-px" />
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-2">
-            {unread && (
-              // The mail-list mark: something was said here and you have not looked.
-              <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
-                aria-hidden
-              />
-            )}
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-sm',
@@ -313,19 +262,19 @@ function TaskRow({
               )}
             </div>
           </div>
-          {(server || activity) && (
-            <div className="flex min-w-0 items-center gap-2">
-              {server}
-              {activity && (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {stateDot}
-                  <span className="truncate text-xs text-muted-foreground">
-                    {activity}
-                  </span>
-                </span>
+          {/* Always a second line, so the list keeps one rhythm and nothing jumps when a task
+              wakes up. The sentence takes the room it can; the pills keep the right. */}
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-xs text-muted-foreground',
+                !activity && 'italic opacity-75'
               )}
-            </div>
-          )}
+            >
+              {activity ?? "Agent hasn't started yet"}
+            </span>
+            <TaskStatePills task={task} />
+          </div>
         </div>
       </div>
     </li>

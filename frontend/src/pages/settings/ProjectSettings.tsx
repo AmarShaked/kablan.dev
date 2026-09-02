@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { isEqual } from 'lodash';
 import { ConfirmDialog } from '@/components/dialogs';
+import { IconPicker } from '@/components/projects/IconPicker';
 import { TagManager } from '@/components/TagManager';
 import {
   Card,
@@ -33,11 +34,14 @@ import type { Project, Repo, UpdateProject } from 'shared/types';
 
 interface ProjectFormState {
   name: string;
+  /** A Lucide key from the picker, or null for the default glyph. */
+  icon: string | null;
 }
 
 function projectToFormState(project: Project): ProjectFormState {
   return {
     name: project.name,
+    icon: project.icon,
   };
 }
 
@@ -307,8 +311,7 @@ export function ProjectSettings() {
     try {
       const updateData: UpdateProject = {
         name: draft.name.trim(),
-        // null means "unchanged" server-side, so renaming here can't wipe the project's icon.
-        icon: null,
+        icon: draft.icon,
       };
 
       updateProject.mutate({
@@ -429,14 +432,26 @@ export function ProjectSettings() {
                 <Label htmlFor="project-name">
                   {t('settings.projects.general.name.label')}
                 </Label>
-                <Input
-                  id="project-name"
-                  type="text"
-                  value={draft.name}
-                  onChange={(e) => updateDraft({ name: e.target.value })}
-                  placeholder={t('settings.projects.general.name.placeholder')}
-                  required
-                />
+                {/* The icon sits with the name because the two are one thing: how the project is
+                    recognised in the sidebar, the breadcrumb and every task row. */}
+                <div className="flex items-center gap-2">
+                  <IconPicker
+                    size="sm"
+                    value={draft.icon}
+                    onChange={(icon) => updateDraft({ icon })}
+                    className="border-border"
+                  />
+                  <Input
+                    id="project-name"
+                    type="text"
+                    value={draft.name}
+                    onChange={(e) => updateDraft({ name: e.target.value })}
+                    placeholder={t(
+                      'settings.projects.general.name.placeholder'
+                    )}
+                    required
+                  />
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {t('settings.projects.general.name.helper')}
                 </p>

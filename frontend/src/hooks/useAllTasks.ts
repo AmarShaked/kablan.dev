@@ -7,6 +7,8 @@ import type { ArchiveFilter, TaskWithAttemptStatus } from 'shared/types';
 export type TaskAcrossProjects = TaskWithAttemptStatus & {
   projectId: string;
   projectName: string;
+  /** The project's Lucide icon key, so a row can wear the same mark as the sidebar. */
+  projectIcon: string | null;
 };
 
 /**
@@ -43,6 +45,7 @@ export function useAllTasks(archived: ArchiveFilter = 'active') {
           ...task,
           projectId: project.id,
           projectName: project.name,
+          projectIcon: project.icon,
         }))
       ),
     [projects, results]
