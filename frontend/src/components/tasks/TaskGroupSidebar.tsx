@@ -569,23 +569,23 @@ export function TaskGroupSidebar({
 
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
             {grouping === 'none' ? (
-              <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm dark:bg-muted">
-                <ul className="space-y-1 p-2">
-                  {flat.map((task, index) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      status={task.status}
-                      index={index}
-                      selected={selectedTaskId === task.id}
-                      onSelect={onSelect}
-                      onArchive={onArchiveTask}
-                      onDelete={onDeleteTask}
-                      showStatus
-                    />
-                  ))}
-                </ul>
-              </section>
+              // No card here: the border of a card is what separates one group from the next,
+              // and ungrouped there is nothing to separate — just the rows on the page.
+              <ul className="space-y-1">
+                {flat.map((task, index) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    status={task.status}
+                    index={index}
+                    selected={selectedTaskId === task.id}
+                    onSelect={onSelect}
+                    onArchive={onArchiveTask}
+                    onDelete={onDeleteTask}
+                    showStatus
+                  />
+                ))}
+              </ul>
             ) : (
               order.map((status) => {
                 const tasks = columns[status] ?? [];
