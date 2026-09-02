@@ -49,3 +49,19 @@ export function taskActivity(task: TaskWithAttemptStatus): string | undefined {
 export function taskIsUnread(task: TaskWithAttemptStatus): boolean {
   return task.has_unseen_turns && !task.has_in_progress_attempt;
 }
+
+/**
+ * The task is waiting on you — the question a list of running agents exists to answer.
+ *
+ * Two things count as waiting. A finished run nobody has read: the agent said its piece and
+ * stopped, and until you look the row is the only trace of it — the same condition the unread dot
+ * marks. And a failed attempt: it is not going to un-fail on its own, so it sits there needing a
+ * decision to retry or drop it.
+ *
+ * A run still in flight is deliberately not here. It is working, not waiting; sweeping it in would
+ * make "needs me" mean "exists", and the filter would answer nothing.
+ */
+export function taskNeedsAttention(task: TaskWithAttemptStatus): boolean {
+  if (task.has_in_progress_attempt) return false;
+  return task.last_attempt_failed || task.has_unseen_turns;
+}

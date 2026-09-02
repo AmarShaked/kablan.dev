@@ -33,6 +33,8 @@ export type TaskFilters = {
   /** A status, `active` for the two in-flight ones, or `all`. */
   status: StatusFilter;
   archive: ArchiveFilter;
+  /** Only tasks waiting on the reader: a failed attempt, or a finished run not yet looked at. */
+  needsMe: boolean;
 };
 
 export function matchesStatusFilter(
@@ -74,10 +76,11 @@ export function compareTasks<
 export const NO_FILTERS: TaskFilters = {
   status: ALL_STATUSES,
   archive: 'active',
+  needsMe: false,
 };
 
 export function filtersActive(f: TaskFilters): boolean {
-  return f.status !== ALL_STATUSES || f.archive !== 'active';
+  return f.status !== ALL_STATUSES || f.archive !== 'active' || f.needsMe;
 }
 
 const ARCHIVE_LABELS: Record<ArchiveFilter, string> = {
@@ -98,11 +101,14 @@ export function TaskFilterMenu({
   value,
   onChange,
   counts,
+  needsMeCount,
 }: {
   value: TaskFilters;
   onChange: (next: TaskFilters) => void;
   /** How many tasks each status holds right now, for the submenu. */
   counts: Record<TaskStatus, number>;
+  /** How many tasks are waiting on the reader, shown against the toggle. */
+  needsMeCount?: number;
 }) {
   const statusValue =
     value.status === ALL_STATUSES
@@ -147,6 +153,18 @@ export function TaskFilterMenu({
           <span className="text-xs tabular-nums text-muted-foreground">
             {activeCount}
           </span>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          onClick={() => onChange({ ...value, needsMe: !value.needsMe })}
+        >
+          <span className="min-w-0 flex-1 truncate">Needs me</span>
+          {value.needsMe && <Check className="h-3.5 w-3.5 shrink-0" />}
+          {needsMeCount !== undefined && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {needsMeCount}
+            </span>
+          )}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -265,6 +283,12 @@ export function TaskFilterChips({
         <FilterChip
           label={ARCHIVE_LABELS[value.archive]}
           onClear={() => onChange({ ...value, archive: 'active' })}
+        />
+      )}
+      {value.needsMe && (
+        <FilterChip
+          label="Needs me"
+          onClear={() => onChange({ ...value, needsMe: false })}
         />
       )}
     </div>

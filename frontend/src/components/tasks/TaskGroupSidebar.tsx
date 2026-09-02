@@ -378,6 +378,7 @@ export function TaskGroupSidebar({
   sort,
   onSortChange,
   statusCounts,
+  needsMeCount,
 }: {
   columns: Record<TaskStatus, TaskWithAttemptStatus[]>;
   /** Readonly so the caller can pass its `as const` status tuple directly. */
@@ -398,6 +399,8 @@ export function TaskGroupSidebar({
   /** How many tasks each status holds before the status filter narrows the list — otherwise the
    *  menu would show 0 beside every status you are not currently looking at. */
   statusCounts: Record<TaskStatus, number>;
+  /** How many tasks are waiting on the reader, shown against the "Needs me" toggle. */
+  needsMeCount?: number;
 }) {
   const [overrides, setOverrides] = useState<CollapseOverrides>(loadOverrides);
   const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
@@ -478,6 +481,7 @@ export function TaskGroupSidebar({
                 value={filters}
                 onChange={onFiltersChange}
                 counts={statusCounts}
+                needsMeCount={needsMeCount}
               />
               <TaskSortMenu value={sort} onChange={onSortChange} />
 

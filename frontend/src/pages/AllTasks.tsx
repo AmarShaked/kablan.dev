@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveRestore,
   ChevronRight,
+  Check,
   ListFilter,
   Loader2,
   SlidersHorizontal,
@@ -42,7 +43,11 @@ import { paths } from '@/lib/paths';
 import { invalidateTaskViews } from '@/lib/taskCache';
 import { cn } from '@/lib/utils';
 import { relativeDay } from '@/utils/relativeDay';
-import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
+import {
+  taskActivity,
+  taskIsUnread,
+  taskNeedsAttention,
+} from '@/utils/taskActivity';
 import { STATUS_ORDER, statusLabels } from '@/utils/statusLabels';
 import type { ArchiveFilter, TaskStatus } from 'shared/types';
 import { projectKeys } from '@/lib/queryKeys';
@@ -306,6 +311,7 @@ export function AllTasks() {
   const query = params.get('q') ?? '';
   const projectFilter = params.get('project') ?? ALL;
   const statusFilter = params.get('status') ?? ALL;
+  const needsMe = params.get('needsMe') === '1';
   // 'active' is the resting state, so it is the one the URL leaves out.
   const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
   const archiveFilter = (params.get('archive') ?? 'active') as ArchiveFilter;
@@ -314,6 +320,7 @@ export function AllTasks() {
     !!query ||
     projectFilter !== ALL ||
     statusFilter !== ALL ||
+    needsMe ||
     archiveFilter !== 'active';
 
   const chooseGrouping = (next: Grouping) => {
@@ -352,6 +359,11 @@ export function AllTasks() {
     return counts;
   }, [tasks]);
 
+  const needsMeCount = useMemo(
+    () => tasks.filter(taskNeedsAttention).length,
+    [tasks]
+  );
+
   const activeProjectName = projectOptions.find(
     (p) => p.id === projectFilter
   )?.name;
@@ -362,9 +374,10 @@ export function AllTasks() {
       (task) =>
         (projectFilter === ALL || task.projectId === projectFilter) &&
         (statusFilter === ALL || task.status === statusFilter) &&
+        (!needsMe || taskNeedsAttention(task)) &&
         (!needle || task.title.toLowerCase().includes(needle))
     );
-  }, [tasks, query, projectFilter, statusFilter]);
+  }, [tasks, query, projectFilter, statusFilter, needsMe]);
 
   // Ungrouped, the order has to come from somewhere: most recently touched first, the same
   // order each group uses inside itself.
@@ -525,6 +538,12 @@ export function AllTasks() {
             onClear={() => setParam('archive', 'active')}
           />
         )}
+        {needsMe && (
+          <FilterChip
+            label="Needs me"
+            onClear={() => setParam('needsMe', '')}
+          />
+        )}
 
         <span className="ml-auto text-xs text-muted-foreground">
           {projectCount} {projectCount === 1 ? 'project' : 'projects'}
@@ -590,6 +609,18 @@ export function AllTasks() {
                 onKeyDown={(e) => e.stopPropagation()}
               />
             </div>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onClick={() => setParam('needsMe', needsMe ? '' : '1')}
+            >
+              <span className="min-w-0 flex-1 truncate">Needs me</span>
+              {needsMe && <Check className="h-3.5 w-3.5 shrink-0" />}
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {needsMeCount}
+              </span>
+            </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 

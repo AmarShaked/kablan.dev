@@ -55,6 +55,7 @@ import {
 import { TaskGroupSidebarSkeleton } from '@/components/tasks/TaskGroupSidebarSkeleton';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
+import { taskNeedsAttention } from '@/utils/taskActivity';
 import { invalidateTaskViews } from '@/lib/taskCache';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useHotkeysContext } from 'react-hotkeys-hook';
@@ -306,6 +307,7 @@ export function ProjectTasks() {
     () => ({
       status: (searchParams.get('status') ?? ALL_STATUSES) as StatusFilter,
       archive: (searchParams.get('archive') ?? 'active') as ArchiveFilter,
+      needsMe: searchParams.get('needsMe') === '1',
     }),
     [searchParams]
   );
@@ -328,6 +330,8 @@ export function ProjectTasks() {
       else params.set('status', next.status);
       if (next.archive === 'active') params.delete('archive');
       else params.set('archive', next.archive);
+      if (next.needsMe) params.set('needsMe', '1');
+      else params.delete('needsMe');
       setSearchParams(params, { replace: true });
     },
     [searchParams, setSearchParams]
@@ -380,6 +384,7 @@ export function ProjectTasks() {
 
       if (!matchesSearch(task.title, task.description)) return;
       if (!matchesStatusFilter(statusKey, filters.status)) return;
+      if (filters.needsMe && !taskNeedsAttention(task)) return;
 
       columns[statusKey].push(task);
     });
@@ -395,6 +400,7 @@ export function ProjectTasks() {
     archivedTasks,
     filters.archive,
     filters.status,
+    filters.needsMe,
     sort,
   ]);
 
@@ -414,6 +420,11 @@ export function ProjectTasks() {
     });
     return counts;
   }, [tasks, archivedTasks, filters.archive]);
+
+  const needsMeCount = useMemo(
+    () => tasks.filter(taskNeedsAttention).length,
+    [tasks]
+  );
 
   const visibleTasksByStatus = useMemo(() => {
     const map: Record<TaskStatus, Task[]> = {
@@ -807,6 +818,7 @@ export function ProjectTasks() {
       sort={sort}
       onSortChange={handleSortChange}
       statusCounts={statusCounts}
+      needsMeCount={needsMeCount}
     />
   );
 

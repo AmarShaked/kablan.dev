@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { taskActivity, taskIsUnread } from './taskActivity';
+import { taskActivity, taskIsUnread, taskNeedsAttention } from './taskActivity';
 import type { TaskWithAttemptStatus } from 'shared/types';
 
 /** A task with nothing going on; each test turns on the one thing it is about. */
@@ -96,5 +96,33 @@ describe('taskIsUnread', () => {
 
   it('does not mark a task whose turns are seen', () => {
     expect(taskIsUnread(task())).toBe(false);
+  });
+});
+
+describe('taskNeedsAttention', () => {
+  it('flags a failed attempt: it needs a decision to retry or drop', () => {
+    expect(taskNeedsAttention(task({ last_attempt_failed: true }))).toBe(true);
+  });
+
+  it('flags a finished run nobody has read', () => {
+    expect(taskNeedsAttention(task({ has_unseen_turns: true }))).toBe(true);
+  });
+
+  it('does not flag a run still in flight', () => {
+    // "Needs me" would mean "exists" if working tasks counted; a working task is not waiting.
+    expect(
+      taskNeedsAttention(
+        task({ has_unseen_turns: true, has_in_progress_attempt: true })
+      )
+    ).toBe(false);
+    expect(
+      taskNeedsAttention(
+        task({ last_attempt_failed: true, has_in_progress_attempt: true })
+      )
+    ).toBe(false);
+  });
+
+  it('does not flag a quiet task with nothing waiting', () => {
+    expect(taskNeedsAttention(task())).toBe(false);
   });
 });
