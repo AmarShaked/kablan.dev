@@ -3,6 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use db::{
     DBService,
     models::{
+        coding_agent_turn::CodingAgentTurn,
         execution_process::ExecutionProcess,
         project::Project,
         scratch::Scratch,
@@ -254,6 +255,20 @@ impl EventService {
                                         }
                                     }
                                 }
+                                (HookTables::CodingAgentTurns, _) => {
+                                    match CodingAgentTurn::find_by_rowid(&db.pool, rowid).await {
+                                        Ok(Some(turn)) => RecordTypes::CodingAgentTurn(turn),
+                                        // Deleted with its process, which pushes its own update.
+                                        Ok(None) => return,
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "Failed to fetch coding agent turn: {:?}",
+                                                e
+                                            );
+                                            return;
+                                        }
+                                    }
+                                }
                                 (HookTables::Scratch, _) => {
                                     match Scratch::find_by_rowid(&db.pool, rowid).await {
                                         Ok(Some(scratch)) => RecordTypes::Scratch(scratch),
@@ -318,6 +333,29 @@ impl EventService {
                                 } => {
                                     let patch = task_patch::remove(*task_id);
                                     msg_store_for_hook.push_patch(patch);
+                                    return;
+                                }
+                                // A turn carries what the row shows — the agent's last words, and
+                                // whether anyone has read them — so a task update is the whole
+                                // effect of one changing.
+                                RecordTypes::CodingAgentTurn(turn) => {
+                                    if let Ok(Some(process)) = ExecutionProcess::find_by_id(
+                                        &db.pool,
+                                        turn.execution_process_id,
+                                    )
+                                    .await
+                                        && let Err(err) = EventService::push_task_update_for_session(
+                                            &db.pool,
+                                            msg_store_for_hook.clone(),
+                                            process.session_id,
+                                        )
+                                        .await
+                                    {
+                                        tracing::error!(
+                                            "Failed to push task update after turn change: {:?}",
+                                            err
+                                        );
+                                    }
                                     return;
                                 }
                                 RecordTypes::Project(project) => {

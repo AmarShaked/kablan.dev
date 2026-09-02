@@ -21,6 +21,7 @@ import {
 
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { relativeDay } from '@/utils/relativeDay';
+import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { statusLabels } from '@/utils/statusLabels';
 import { StatusGlyph } from '@/components/tasks/TaskStatusControl';
 import {
@@ -213,39 +214,24 @@ function TaskRow({
     data: { index, parent: status },
   });
 
-  const marks = [
-    task.has_running_dev_server && (
-      <Indicator
-        key="server"
-        label="A dev server is running for this task"
-        short="Server"
-      >
-        <Dot className="bg-info" />
-      </Indicator>
-    ),
-    task.last_attempt_failed && !task.has_in_progress_attempt && (
-      <Indicator
-        key="failed"
-        label="The last attempt for this task failed"
-        short="Failed"
-      >
-        <Dot className="bg-destructive" />
-      </Indicator>
-    ),
-    task.has_in_progress_attempt && (
-      <Indicator
-        key="running"
-        label="An agent is working on this task"
-        short="Running"
-      >
-        <Dot className="bg-success" pulse />
-      </Indicator>
-    ),
-  ].filter(Boolean);
+  // The dev server is the one mark the activity line does not already say: it is not something
+  // the agent did, it is a port being held.
+  const server = task.has_running_dev_server && (
+    <Indicator label="A dev server is running for this task" short="Server">
+      <Dot className="bg-info" />
+    </Indicator>
+  );
 
-  // What a row says on its second line, in the order it is worth knowing: what the task is doing
-  // now, and failing that, what it is about.
-  const subtitle = task.description?.split('\n').find((line) => line.trim());
+  // The line's own dot, for the two states worth a colour: work in flight, and work that broke.
+  const stateDot = task.has_in_progress_attempt ? (
+    <Dot className="bg-success" pulse />
+  ) : task.last_attempt_failed ? (
+    <Dot className="bg-destructive" />
+  ) : null;
+
+  const activity = taskActivity(task);
+  const unread = taskIsUnread(task);
+
   // Ungrouped there is nothing to drop into, so the row is not a drag handle either.
   const dragHandle = showStatus ? {} : listeners;
   const hasActions = !!onArchive || !!onDelete;
@@ -277,8 +263,21 @@ function TaskRow({
         )}
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {unread && (
+              // The mail-list mark: something was said here and you have not looked.
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
+                aria-hidden
+              />
+            )}
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-sm',
+                unread ? 'font-semibold' : 'font-medium'
+              )}
+            >
               {task.title}
+              {unread && <span className="sr-only"> (unread)</span>}
             </span>
             <div className="relative flex shrink-0 items-center">
               <span
@@ -314,14 +313,18 @@ function TaskRow({
               )}
             </div>
           </div>
-          {marks.length > 0 ? (
-            <div className="flex items-center gap-3">{marks}</div>
-          ) : (
-            subtitle && (
-              <p className="truncate text-xs text-muted-foreground">
-                {subtitle}
-              </p>
-            )
+          {(server || activity) && (
+            <div className="flex min-w-0 items-center gap-2">
+              {server}
+              {activity && (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {stateDot}
+                  <span className="truncate text-xs text-muted-foreground">
+                    {activity}
+                  </span>
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>

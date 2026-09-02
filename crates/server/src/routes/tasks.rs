@@ -13,6 +13,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use db::models::{
+    coding_agent_turn::CodingAgentTurn,
     image::TaskImage,
     repo::{Repo, RepoError},
     task::{ArchiveFilter, CreateTask, Task, TaskWithAttemptStatus, UpdateTask},
@@ -238,9 +239,12 @@ pub async fn create_task_and_start(
         task,
         has_in_progress_attempt: is_attempt_running,
         last_attempt_failed: false,
-        // An attempt that has only just started has no dev server yet; the list query computes
-        // the real value on the next fetch.
+        // An attempt that has only just started has no dev server yet and has said nothing; the
+        // list query computes the real values on the next fetch.
         has_running_dev_server: false,
+        has_unseen_turns: false,
+        last_turn_summary: None,
+        last_turn_prompt: None,
         executor: payload.executor_profile_id.executor.to_string(),
     })))
 }
@@ -378,10 +382,23 @@ pub async fn delete_task(
     Ok((StatusCode::ACCEPTED, ResponseJson(ApiResponse::success(()))))
 }
 
+/// Mark everything the agent has said on this task as seen.
+///
+/// Opening a task is what "you have read it" means: the conversation is right there. The list
+/// learns about it through the task stream, which the turn's own change hook re-emits.
+pub async fn mark_task_seen(
+    Extension(task): Extension<Task>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+    CodingAgentTurn::mark_seen_by_task_id(&deployment.db().pool, task.id).await?;
+    Ok(ResponseJson(ApiResponse::success(())))
+}
+
 pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let task_actions_router = Router::new()
         .route("/", put(update_task))
-        .route("/", delete(delete_task));
+        .route("/", delete(delete_task))
+        .route("/mark-seen", post(mark_task_seen));
 
     let task_id_router = Router::new()
         .route("/", get(get_task))

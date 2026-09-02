@@ -351,6 +351,14 @@ export const tasksApi = {
     return handleApiResponse<TaskWithAttemptStatus[]>(response);
   },
 
+  /** Everything the agent has said on this task counts as read once you open it. */
+  markSeen: async (taskId: string): Promise<void> => {
+    const response = await makeRequest(`/api/tasks/${taskId}/mark-seen`, {
+      method: 'POST',
+    });
+    return handleApiResponse<void>(response);
+  },
+
   setArchived: async (
     taskIds: string[],
     archived: boolean

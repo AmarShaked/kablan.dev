@@ -36,6 +36,7 @@ import { tasksApi } from '@/lib/api';
 import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
 import { relativeDay } from '@/utils/relativeDay';
+import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { STATUS_ORDER, statusLabels } from '@/utils/statusLabels';
 import type { ArchiveFilter, TaskStatus } from 'shared/types';
 
@@ -80,6 +81,15 @@ function Row({
   /** Ungrouped, the row carries its own status — there is no header saying it. */
   showStatus?: boolean;
 }) {
+  const activity = taskActivity(task);
+  const unread = taskIsUnread(task);
+  // The line's own dot, for the two states worth a colour: work in flight, and work that broke.
+  const stateDot = task.has_in_progress_attempt ? (
+    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+  ) : task.last_attempt_failed ? (
+    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" />
+  ) : null;
+
   return (
     <li
       className={cn(
@@ -109,23 +119,22 @@ function Row({
         className="min-w-0 flex-1 space-y-0.5 text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {task.title}
-          </span>
-
-          {/* What is live on the task, in the same two dots the rest of the app uses. */}
-          {task.has_running_dev_server && (
+          {unread && (
+            // The mail-list mark: something was said here and you have not looked.
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
-              title="Dev server running"
+              aria-hidden
             />
           )}
-          {task.has_in_progress_attempt && (
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
-              title="Attempt running"
-            />
-          )}
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-sm',
+              unread ? 'font-semibold' : 'font-medium'
+            )}
+          >
+            {task.title}
+            {unread && <span className="sr-only"> (unread)</span>}
+          </span>
 
           {/* Hidden under the hover actions, which take this corner of the row. */}
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
@@ -133,8 +142,29 @@ function Row({
           </span>
         </div>
 
-        <div className="truncate text-xs text-muted-foreground">
-          {task.projectName}
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="shrink-0">{task.projectName}</span>
+          {/* The dev server is the one mark the activity line does not already say: it is not
+              something the agent did, it is a port being held. */}
+          {task.has_running_dev_server && (
+            <>
+              <span className="shrink-0 opacity-50">·</span>
+              <span
+                className="flex shrink-0 items-center gap-1.5"
+                title="A dev server is running for this task"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-info" />
+                Server
+              </span>
+            </>
+          )}
+          {activity && (
+            <>
+              <span className="shrink-0 opacity-50">·</span>
+              {stateDot}
+              <span className="truncate">{activity}</span>
+            </>
+          )}
         </div>
       </button>
 
@@ -421,6 +451,14 @@ export function AllTasks() {
     }
   };
 
+  const openTask = (task: TaskAcrossProjects) => {
+    // Opening the task is reading it; the project's own list picks the change up from the stream.
+    if (task.has_unseen_turns) {
+      tasksApi.markSeen(task.id).catch(() => {});
+    }
+    navigate(paths.task(task.projectId, task.id));
+  };
+
   // The same two operations the bulk bar runs, aimed at one row.
   const rowArchive = async (task: TaskAcrossProjects, archived: boolean) => {
     await tasksApi.setArchived([task.id], archived);
@@ -691,7 +729,7 @@ export function AllTasks() {
                     task={task}
                     selected={selected.has(task.id)}
                     onToggle={toggle}
-                    onOpen={(t) => navigate(paths.task(t.projectId, t.id))}
+                    onOpen={openTask}
                     onArchive={rowArchive}
                     onDelete={rowDelete}
                     showStatus
@@ -704,9 +742,7 @@ export function AllTasks() {
                   key={status}
                   status={status}
                   tasks={grouped.get(status) ?? []}
-                  onOpen={(task) =>
-                    navigate(paths.task(task.projectId, task.id))
-                  }
+                  onOpen={openTask}
                   selected={selected}
                   onToggle={toggle}
                   onArchive={rowArchive}

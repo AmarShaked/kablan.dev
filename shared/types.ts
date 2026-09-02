@@ -92,7 +92,17 @@ export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_att
  * answers "which task is using it" — the reason it's worth surfacing per task rather than
  * only inside the preview panel.
  */
-has_running_dev_server: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, 
+has_running_dev_server: boolean, 
+/**
+ * The agent has said something the reader has not looked at yet. What makes a finished run
+ * visible in a list: the work stops, and until someone opens the task nothing else says so.
+ */
+has_unseen_turns: boolean, 
+/**
+ * The agent's own last words, and the last thing the reader asked it — enough for a row to
+ * say what happened here last without opening the task.
+ */
+last_turn_summary: string | null, last_turn_prompt: string | null, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, 
 /**
  * When this task was archived, or None while it is still in the views.
  */

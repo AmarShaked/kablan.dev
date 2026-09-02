@@ -492,6 +492,12 @@ export function ProjectTasks() {
     (task: Task, attemptIdToShow?: string) => {
       if (!projectId) return;
 
+      // Opening the task is reading it. Fire and forget: the stream brings the row back without
+      // its unread mark, and a failure here is not worth interrupting navigation for.
+      if (task.has_unseen_turns) {
+        tasksApi.markSeen(task.id).catch(() => {});
+      }
+
       if (attemptIdToShow) {
         navigateWithSearch(paths.attempt(projectId, task.id, attemptIdToShow));
       } else {

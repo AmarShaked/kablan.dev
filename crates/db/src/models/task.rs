@@ -74,6 +74,13 @@ pub struct TaskWithAttemptStatus {
     /// answers "which task is using it" — the reason it's worth surfacing per task rather than
     /// only inside the preview panel.
     pub has_running_dev_server: bool,
+    /// The agent has said something the reader has not looked at yet. What makes a finished run
+    /// visible in a list: the work stops, and until someone opens the task nothing else says so.
+    pub has_unseen_turns: bool,
+    /// The agent's own last words, and the last thing the reader asked it — enough for a row to
+    /// say what happened here last without opening the task.
+    pub last_turn_summary: Option<String>,
+    pub last_turn_prompt: Option<String>,
     pub executor: String,
 }
 
@@ -198,6 +205,37 @@ impl Task {
   ) IN ('failed','killed') THEN 1 ELSE 0 END
                                  AS "last_attempt_failed!: i64",
 
+  CASE WHEN EXISTS (
+    SELECT 1
+      FROM workspaces w
+      JOIN sessions s ON s.workspace_id = w.id
+      JOIN execution_processes ep ON ep.session_id = s.id
+      JOIN coding_agent_turns cat ON cat.execution_process_id = ep.id
+     WHERE w.task_id       = t.id
+       AND cat.seen        = 0
+     LIMIT 1
+  ) THEN 1 ELSE 0 END            AS "has_unseen_turns!: i64",
+
+  ( SELECT cat.summary
+      FROM workspaces w
+      JOIN sessions s ON s.workspace_id = w.id
+      JOIN execution_processes ep ON ep.session_id = s.id
+      JOIN coding_agent_turns cat ON cat.execution_process_id = ep.id
+     WHERE w.task_id = t.id
+     ORDER BY cat.created_at DESC
+     LIMIT 1
+  )                              AS "last_turn_summary: String",
+
+  ( SELECT cat.prompt
+      FROM workspaces w
+      JOIN sessions s ON s.workspace_id = w.id
+      JOIN execution_processes ep ON ep.session_id = s.id
+      JOIN coding_agent_turns cat ON cat.execution_process_id = ep.id
+     WHERE w.task_id = t.id
+     ORDER BY cat.created_at DESC
+     LIMIT 1
+  )                              AS "last_turn_prompt: String",
+
   ( SELECT s.executor
       FROM workspaces w
       JOIN sessions s ON s.workspace_id = w.id
@@ -238,6 +276,9 @@ ORDER BY t.created_at DESC"#,
                 has_in_progress_attempt: rec.has_in_progress_attempt != 0,
                 last_attempt_failed: rec.last_attempt_failed != 0,
                 has_running_dev_server: rec.has_running_dev_server != 0,
+                has_unseen_turns: rec.has_unseen_turns != 0,
+                last_turn_summary: rec.last_turn_summary,
+                last_turn_prompt: rec.last_turn_prompt,
                 executor: rec.executor,
             })
             .collect();

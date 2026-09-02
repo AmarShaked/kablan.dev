@@ -215,6 +215,27 @@ impl CodingAgentTurn {
         Ok(())
     }
 
+    /// The turn at a SQLite rowid, for the change hook — the only thing an update hook is given.
+    pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            CodingAgentTurn,
+            r#"SELECT
+                id as "id!: Uuid",
+                execution_process_id as "execution_process_id!: Uuid",
+                agent_session_id,
+                agent_message_id,
+                prompt,
+                summary,
+                seen as "seen!: bool",
+                created_at as "created_at!: DateTime<Utc>",
+                updated_at as "updated_at!: DateTime<Utc>"
+               FROM coding_agent_turns WHERE rowid = $1"#,
+            rowid
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
     /// Mark all coding agent turns for a workspace as seen
     pub async fn mark_seen_by_workspace_id(
         pool: &SqlitePool,
@@ -236,6 +257,33 @@ impl CodingAgentTurn {
         .await?;
 
         Ok(())
+    }
+
+    /// Mark every coding agent turn for a task as seen.
+    ///
+    /// A task can have several workspaces and each of those several sessions; opening the task
+    /// shows you the lot, so this is what "you have seen it" means at the level a list shows.
+    pub async fn mark_seen_by_task_id(
+        pool: &SqlitePool,
+        task_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        let now = Utc::now();
+        let result = sqlx::query!(
+            r#"UPDATE coding_agent_turns
+               SET seen = 1, updated_at = $1
+               WHERE execution_process_id IN (
+                   SELECT ep.id FROM execution_processes ep
+                   JOIN sessions s ON ep.session_id = s.id
+                   JOIN workspaces w ON s.workspace_id = w.id
+                   WHERE w.task_id = $2
+               ) AND seen = 0"#,
+            now,
+            task_id
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     /// Check if a workspace has any unseen coding agent turns
