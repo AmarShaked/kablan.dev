@@ -1,11 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
+import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
 
 import { ThemeMode } from 'shared/types';
 import { projectStatsApi } from '@/lib/api';
 import { projectIcon } from '@/components/projects/projectIcons';
 import { ProjectFormDialog } from '@/components/dialogs/projects/ProjectFormDialog';
+import { openTaskForm } from '@/lib/openTaskForm';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { BuildBadges } from '@/components/layout/BuildBadges';
 import { useTheme } from '@/components/ThemeProvider';
@@ -55,6 +58,9 @@ export function ProjectsSidebar() {
   });
 
   const activeId = location.pathname.match(/^\/local-projects\/([^/]+)/)?.[1];
+  const isArchiveView =
+    location.pathname === '/tasks' &&
+    new URLSearchParams(location.search).get('archive') === 'archived';
 
   const isDark = getActualTheme(theme) === 'dark';
   const nextTheme = isDark ? ThemeMode.LIGHT : ThemeMode.DARK;
@@ -101,20 +107,58 @@ export function ProjectsSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Above the projects, because it is the view you take when you do not yet know which
-            project the work is in. */}
+        {/* The one thing you do more than read: start work. It sits above everything, and it is
+            the only place a task can be created without first choosing where you are — so the
+            form asks which project. */}
+        <SidebarGroup className="pb-0">
+          <SidebarGroupContent>
+            <Button
+              size="sm"
+              title="New task"
+              // Collapsed, the sidebar is a column of 32px glyphs; the button becomes one of
+              // them rather than a stretched pill with a clipped label.
+              className={cn(
+                'w-full justify-start gap-2',
+                'group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!px-0'
+              )}
+              onClick={() => openTaskForm({ mode: 'create' }).catch(() => {})}
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="group-data-[collapsible=icon]:hidden">
+                New task
+              </span>
+            </Button>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Above the projects, because these are the views you take when you do not yet know
+            which project the work is in. */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={location.pathname === '/tasks'}
+                  isActive={location.pathname === '/tasks' && !isArchiveView}
                   tooltip="Tasks"
                 >
                   <Link to="/tasks">
                     <ListChecks />
                     <span>Tasks</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isArchiveView}
+                  tooltip="Archive"
+                >
+                  {/* The same cross-project list, asked a different question. */}
+                  <Link to="/tasks?archive=archived">
+                    <Archive />
+                    <span>Archive</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

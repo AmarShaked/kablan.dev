@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
@@ -44,6 +44,14 @@ import {
 } from '@/components/tasks/TasksEmptyState';
 import { DeleteTaskConfirmationDialog } from '@/components/dialogs';
 import { TaskGroupSidebar } from '@/components/tasks/TaskGroupSidebar';
+import {
+  ALL_STATUSES,
+  compareTasks,
+  matchesStatusFilter,
+  type StatusFilter,
+  type TaskFilters,
+  type TaskSort,
+} from '@/components/tasks/TaskFilterMenu';
 import { TaskGroupSidebarSkeleton } from '@/components/tasks/TaskGroupSidebarSkeleton';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
@@ -68,7 +76,11 @@ import {
 import { AttemptHeaderActions } from '@/components/panels/AttemptHeaderActions';
 import { TaskPanelHeaderActions } from '@/components/panels/TaskPanelHeaderActions';
 
-import type { TaskWithAttemptStatus, TaskStatus } from 'shared/types';
+import type {
+  ArchiveFilter,
+  TaskWithAttemptStatus,
+  TaskStatus,
+} from 'shared/types';
 
 type Task = TaskWithAttemptStatus;
 
@@ -287,6 +299,52 @@ export function ProjectTasks() {
     { scope: Scope.KANBAN }
   );
 
+  // In the URL, like the cross-project list: a filtered view is a place, not a mood.
+  const filters: TaskFilters = useMemo(
+    () => ({
+      status: (searchParams.get('status') ?? ALL_STATUSES) as StatusFilter,
+      archive: (searchParams.get('archive') ?? 'active') as ArchiveFilter,
+    }),
+    [searchParams]
+  );
+  const sort = (searchParams.get('sort') ?? 'updated') as TaskSort;
+
+  const setSearchParam = useCallback(
+    (key: string, value: string, fallback: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (!value || value === fallback) next.delete(key);
+      else next.set(key, value);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const handleFiltersChange = useCallback(
+    (next: TaskFilters) => {
+      const params = new URLSearchParams(searchParams);
+      if (next.status === ALL_STATUSES) params.delete('status');
+      else params.set('status', next.status);
+      if (next.archive === 'active') params.delete('archive');
+      else params.set('archive', next.archive);
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const handleSortChange = useCallback(
+    (next: TaskSort) => setSearchParam('sort', next, 'updated'),
+    [setSearchParam]
+  );
+
+  // The stream only carries active tasks. Asking for archived ones is a different question, so
+  // it is a different request — and archived work does not change under you, so a snapshot is
+  // the honest thing to show.
+  const { data: archivedTasks } = useQuery({
+    queryKey: ['tasks', 'byProject', projectId, filters.archive],
+    queryFn: () => tasksApi.listByProject(projectId!, filters.archive),
+    enabled: !!projectId && filters.archive !== 'active',
+  });
+
   const hasSearch = Boolean(searchQuery.trim());
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -312,25 +370,48 @@ export function ProjectTasks() {
       );
     };
 
-    tasks.forEach((task) => {
+    const source =
+      filters.archive === 'active' ? tasks : (archivedTasks ?? tasks);
+
+    source.forEach((task: Task) => {
       const statusKey = normalizeStatus(task.status);
 
-      if (!matchesSearch(task.title, task.description)) {
-        return;
-      }
+      if (!matchesSearch(task.title, task.description)) return;
+      if (!matchesStatusFilter(statusKey, filters.status)) return;
 
       columns[statusKey].push(task);
     });
 
-    TASK_STATUSES.forEach((status) => {
-      columns[status].sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    });
+    const byChoice = compareTasks<Task>(sort);
+    TASK_STATUSES.forEach((status) => columns[status].sort(byChoice));
 
     return columns;
-  }, [hasSearch, normalizedSearch, tasks]);
+  }, [
+    hasSearch,
+    normalizedSearch,
+    tasks,
+    archivedTasks,
+    filters.archive,
+    filters.status,
+    sort,
+  ]);
+
+  // Counted before the status filter, so the filter menu can say what each status would show.
+  const statusCounts = useMemo(() => {
+    const counts: Record<TaskStatus, number> = {
+      todo: 0,
+      inprogress: 0,
+      inreview: 0,
+      done: 0,
+      cancelled: 0,
+    };
+    const source =
+      filters.archive === 'active' ? tasks : (archivedTasks ?? tasks);
+    source.forEach((task: Task) => {
+      counts[normalizeStatus(task.status)] += 1;
+    });
+    return counts;
+  }, [tasks, archivedTasks, filters.archive]);
 
   const visibleTasksByStatus = useMemo(() => {
     const map: Record<TaskStatus, Task[]> = {
@@ -515,7 +596,7 @@ export function ProjectTasks() {
         navigateWithSearch(`${paths.task(projectId, task.id)}/attempts/latest`);
       }
     },
-    [projectId, navigateWithSearch]
+    [projectId, navigateWithSearch, queryClient]
   );
 
   const selectNextTask = useCallback(() => {
@@ -712,6 +793,11 @@ export function ProjectTasks() {
       onDragEnd={handleDragEnd}
       onArchiveTask={handleArchiveTask}
       onDeleteTask={handleDeleteTask}
+      filters={filters}
+      onFiltersChange={handleFiltersChange}
+      sort={sort}
+      onSortChange={handleSortChange}
+      statusCounts={statusCounts}
     />
   );
 

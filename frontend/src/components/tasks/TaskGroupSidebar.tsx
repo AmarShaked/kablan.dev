@@ -20,6 +20,15 @@ import {
 } from '@dnd-kit/core';
 
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
+import {
+  compareTasks,
+  filtersActive,
+  TaskFilterChips,
+  TaskFilterMenu,
+  TaskSortMenu,
+  type TaskFilters,
+  type TaskSort,
+} from '@/components/tasks/TaskFilterMenu';
 import { relativeDay } from '@/utils/relativeDay';
 import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { statusLabels } from '@/utils/statusLabels';
@@ -364,6 +373,11 @@ export function TaskGroupSidebar({
   onDragEnd,
   onArchiveTask,
   onDeleteTask,
+  filters,
+  onFiltersChange,
+  sort,
+  onSortChange,
+  statusCounts,
 }: {
   columns: Record<TaskStatus, TaskWithAttemptStatus[]>;
   /** Readonly so the caller can pass its `as const` status tuple directly. */
@@ -376,6 +390,14 @@ export function TaskGroupSidebar({
   /** Row hover actions. Omit one and its button is not drawn. */
   onArchiveTask?: (task: TaskWithAttemptStatus) => void;
   onDeleteTask?: (task: TaskWithAttemptStatus) => void;
+  /** Which tasks the page is showing, and in what order. The page owns both. */
+  filters: TaskFilters;
+  onFiltersChange: (next: TaskFilters) => void;
+  sort: TaskSort;
+  onSortChange: (next: TaskSort) => void;
+  /** How many tasks each status holds before the status filter narrows the list — otherwise the
+   *  menu would show 0 beside every status you are not currently looking at. */
+  statusCounts: Record<TaskStatus, number>;
 }) {
   const [overrides, setOverrides] = useState<CollapseOverrides>(loadOverrides);
   const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
@@ -389,14 +411,11 @@ export function TaskGroupSidebar({
 
   const total = order.reduce((n, s) => n + (columns[s]?.length ?? 0), 0);
 
-  // Ungrouped, the order has to come from somewhere: most recently touched first, which is the
-  // order the same list uses on the cross-project page.
+  // Ungrouped, the groups' own ordering has to become one list — the same comparator, applied
+  // across statuses instead of inside each.
   const flat = order
     .flatMap((status) => columns[status] ?? [])
-    .sort(
-      (a, b) =>
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    .sort(compareTasks(sort));
 
   const chooseGrouping = (next: Grouping) => {
     setGrouping(next);
@@ -443,16 +462,23 @@ export function TaskGroupSidebar({
         <div className="flex h-full min-h-0 flex-col bg-background">
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
             <span className="text-sm font-medium">Tasks</span>
-            <span className="font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="mr-auto font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
               {total}
             </span>
+            <TaskFilterMenu
+              value={filters}
+              onChange={onFiltersChange}
+              counts={statusCounts}
+            />
+            <TaskSortMenu value={sort} onChange={onSortChange} />
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-label="Display options"
                   title="Display options"
-                  className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <SlidersHorizontal className="h-3.5 w-3.5" />
                 </button>
@@ -486,6 +512,8 @@ export function TaskGroupSidebar({
             </button>
           </div>
 
+          <TaskFilterChips value={filters} onChange={onFiltersChange} />
+
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
             {grouping === 'none' ? (
               // No card here: the border of a card is what separates one group from the next,
@@ -508,6 +536,9 @@ export function TaskGroupSidebar({
             ) : (
               order.map((status) => {
                 const tasks = columns[status] ?? [];
+                // An empty group is a drop target — worth keeping, until a filter is on: then it
+                // is a status you asked not to see, and it should not take up a card.
+                if (tasks.length === 0 && filtersActive(filters)) return null;
                 const isCollapsed =
                   overrides[status] ?? defaultCollapsed(status, tasks.length);
                 return (

@@ -23,6 +23,7 @@ import BranchSelector from '@/components/tasks/BranchSelector';
 import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
 import { ExecutorProfileSelector } from '@/components/settings';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { useProjects } from '@/hooks/useProjects';
 import {
   useTaskImages,
   useImageUpload,
@@ -55,7 +56,9 @@ interface Task {
 }
 
 export type TaskFormDialogProps =
-  | { mode: 'create'; projectId: string }
+  /** `projectId` is optional here alone: opened from the sidebar there is no project yet, and
+   *  the form asks for one. Everywhere else the project is where you already are. */
+  | { mode: 'create'; projectId?: string }
   | { mode: 'edit'; projectId: string; task: Task }
   | { mode: 'duplicate'; projectId: string; initialTask: Task }
   | {
@@ -77,13 +80,18 @@ type TaskFormValues = {
 };
 
 const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
-  const { mode, projectId } = props;
+  const { mode } = props;
+  // A create opened without a project picks one here; every other mode is bound to the project
+  // it was opened from, so the state simply never changes.
+  const [projectId, setProjectId] = useState(props.projectId ?? '');
+  const choosingProject = mode === 'create' && !props.projectId;
   const editMode = mode === 'edit';
   const modal = useModal();
   const { t } = useTranslation(['tasks', 'common']);
   const { createTask, createAndStart, updateTask } =
     useTaskMutations(projectId);
   const { system, profiles, loading: userSystemLoading } = useUserSystem();
+  const { projects } = useProjects();
   const { upload, uploadForTask } = useImageUpload();
   const { enableScope, disableScope } = useHotkeysContext();
 
@@ -315,12 +323,16 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
 
   // Keyboard shortcuts
   const primaryAction = useCallback(() => {
-    if (isSubmitting || !canSubmit) return;
+    if (isSubmitting || !canSubmit || !projectId) return;
     void form.handleSubmit();
-  }, [form, isSubmitting, canSubmit]);
+  }, [form, isSubmitting, canSubmit, projectId]);
 
   const shortcutsEnabled =
-    modal.visible && !isSubmitting && canSubmit && !showDiscardWarning;
+    modal.visible &&
+    !isSubmitting &&
+    canSubmit &&
+    !!projectId &&
+    !showDiscardWarning;
 
   useKeySubmitTask(primaryAction, {
     enabled: shortcutsEnabled,
@@ -421,6 +433,26 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                       {t('taskFormDialog.dropImagesHere')}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {choosingProject && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="task-project" className="text-sm font-medium">
+                    Project
+                  </Label>
+                  <Select value={projectId} onValueChange={setProjectId}>
+                    <SelectTrigger id="task-project">
+                      <SelectValue placeholder="Choose a project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -686,7 +718,9 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                       return (
                         <Button
                           onClick={form.handleSubmit}
-                          disabled={!canSubmit}
+                          // A task has to land somewhere: without a project there is nothing
+                          // to create it in.
+                          disabled={!canSubmit || !projectId}
                         >
                           {buttonText}
                         </Button>
