@@ -41,6 +41,7 @@ import {
   NoTasksEmptyState,
   NoSearchResultsEmptyState,
 } from '@/components/tasks/TasksEmptyState';
+import { DeleteTaskConfirmationDialog } from '@/components/dialogs';
 import { TaskGroupSidebar } from '@/components/tasks/TaskGroupSidebar';
 import { TaskGroupSidebarSkeleton } from '@/components/tasks/TaskGroupSidebarSkeleton';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
@@ -615,6 +616,26 @@ export function ProjectTasks() {
     [tasksById]
   );
 
+  // Row hover actions. Both go through the same paths as their menu equivalents — archiving is
+  // a flag on the task, deleting asks first — and the stream brings the list back without a
+  // refetch here.
+  const handleArchiveTask = useCallback(async (task: TaskWithAttemptStatus) => {
+    try {
+      await tasksApi.setArchived([task.id], true);
+    } catch (err) {
+      console.error('Failed to archive task:', err);
+    }
+  }, []);
+
+  const handleDeleteTask = useCallback(
+    (task: TaskWithAttemptStatus) => {
+      if (!projectId) return;
+      // A dismissed dialog rejects; that is a decision, not a failure.
+      DeleteTaskConfirmationDialog.show({ task, projectId }).catch(() => {});
+    },
+    [projectId]
+  );
+
   const isInitialTasksLoad = isLoading && tasks.length === 0;
 
   if (projectError) {
@@ -672,6 +693,8 @@ export function ProjectTasks() {
       onSelect={handleViewTaskDetails}
       onCreateTask={handleCreateNewTask}
       onDragEnd={handleDragEnd}
+      onArchiveTask={handleArchiveTask}
+      onDeleteTask={handleDeleteTask}
     />
   );
 

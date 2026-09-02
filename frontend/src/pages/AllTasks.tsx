@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 
 import { StatusGlyph } from '@/components/tasks/TaskStatusControl';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog } from '@/components/dialogs';
@@ -32,6 +31,7 @@ import { useAllTasks, type TaskAcrossProjects } from '@/hooks/useAllTasks';
 import { tasksApi } from '@/lib/api';
 import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
+import { relativeDay } from '@/utils/relativeDay';
 import { STATUS_ORDER, statusLabels } from '@/utils/statusLabels';
 import type { ArchiveFilter, TaskStatus } from 'shared/types';
 
@@ -53,40 +53,50 @@ function byRecency(a: TaskAcrossProjects, b: TaskAcrossProjects) {
   return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
 }
 
+/**
+ * One status, as a card with its rows inside.
+ *
+ * Cards rather than a continuous list with rules through it: each status is a self-contained
+ * group you scan or collapse on its own, and a bordered card says that without a separator
+ * having to double as both a divider and a heading underline.
+ */
 function Group({
   status,
   tasks,
   onOpen,
   selected,
   onToggle,
+  onArchive,
+  onDelete,
 }: {
   status: TaskStatus;
   tasks: TaskAcrossProjects[];
   onOpen: (task: TaskAcrossProjects) => void;
   selected: Set<string>;
   onToggle: (id: string) => void;
+  /** Archiving flips: an archived row is restored, not archived again. */
+  onArchive: (task: TaskAcrossProjects, archived: boolean) => void;
+  onDelete: (task: TaskAcrossProjects) => void;
 }) {
-  // Empty groups collapse: on a cross-project list most statuses are populated, and the ones
-  // that are not are noise rather than a place to drop something.
   const [open, setOpen] = useState(true);
   if (tasks.length === 0) return null;
 
   return (
-    <section className="border-b border-border/60 last:border-b-0">
+    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm dark:bg-muted">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-accent/50"
+        className="flex min-h-14 w-full items-center gap-2.5 border-b border-border px-5 text-left transition-colors hover:bg-muted/50"
       >
-        <StatusGlyph status={status} size={14} className="shrink-0" />
-        <span className="text-sm font-medium">{statusLabels[status]}</span>
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {tasks.length}
-        </span>
+        <StatusGlyph status={status} size={16} className="shrink-0" />
+        <h3 className="text-base font-semibold leading-none tracking-tight">
+          {statusLabels[status]}
+        </h3>
+        <span className="text-xs text-muted-foreground">({tasks.length})</span>
         <ChevronRight
           className={cn(
-            'ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+            'ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform',
             open && 'rotate-90'
           )}
           aria-hidden
@@ -94,55 +104,90 @@ function Group({
       </button>
 
       {open && (
-        <ul>
+        <ul className="space-y-1 p-2">
           {tasks.map((task) => (
             <li
               key={task.id}
-              className="group/row flex items-center gap-3 pl-4 pr-4 transition-colors hover:bg-accent/50"
+              className={cn(
+                // The row is the whole card-width target, and the hover tint is the only thing
+                // separating one from the next — no rules between rows.
+                'group/row relative flex items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
+                selected.has(task.id) && 'bg-muted'
+              )}
             >
-              {/* Shown on hover, and kept visible once anything is selected — a column of empty
-                  boxes down a list you are only reading is noise. */}
               <Checkbox
                 checked={selected.has(task.id)}
                 onCheckedChange={() => onToggle(task.id)}
                 aria-label={`Select ${task.title}`}
                 className={cn(
                   'shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100',
-                  // A ticked box stays visible whatever the pointer is doing — it is the record
-                  // of what you picked, not an affordance.
                   selected.has(task.id) && 'opacity-100'
                 )}
               />
+
               <button
                 type="button"
                 onClick={() => onOpen(task)}
-                className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left"
+                className="min-w-0 flex-1 space-y-0.5 text-left"
               >
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {task.title}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {task.title}
+                  </span>
 
-                {/* What is live on the task, in the same two dots the project list uses. */}
-                {task.has_running_dev_server && (
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
-                    title="Dev server running"
-                  />
-                )}
-                {task.has_in_progress_attempt && (
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
-                    title="Attempt running"
-                  />
-                )}
+                  {/* What is live on the task, in the same two dots the rest of the app uses. */}
+                  {task.has_running_dev_server && (
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
+                      title="Dev server running"
+                    />
+                  )}
+                  {task.has_in_progress_attempt && (
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
+                      title="Attempt running"
+                    />
+                  )}
 
-                <Badge
-                  variant="secondary"
-                  className="max-w-[10rem] shrink-0 truncate font-normal"
-                >
+                  {/* Hidden under the hover actions, which take this corner of the row. */}
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0">
+                    {relativeDay(task.updated_at)}
+                  </span>
+                </div>
+
+                <div className="truncate text-xs text-muted-foreground">
                   {task.projectName}
-                </Badge>
+                </div>
               </button>
+
+              {/* Outside the row button — a button cannot hold buttons — and opacity rather than
+                  display, so the keyboard can still reach them. */}
+              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100">
+                <button
+                  type="button"
+                  aria-label={
+                    task.archived_at ? 'Restore task' : 'Archive task'
+                  }
+                  title={task.archived_at ? 'Restore task' : 'Archive task'}
+                  onClick={() => onArchive(task, !task.archived_at)}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {task.archived_at ? (
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                  ) : (
+                    <Archive className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete task"
+                  title="Delete task"
+                  onClick={() => onDelete(task)}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -302,6 +347,31 @@ export function AllTasks() {
     } finally {
       setWorking(false);
     }
+  };
+
+  // The same two operations the bulk bar runs, aimed at one row.
+  const rowArchive = async (task: TaskAcrossProjects, archived: boolean) => {
+    await tasksApi.setArchived([task.id], archived);
+    await refresh([task.projectId]);
+  };
+
+  const rowDelete = async (task: TaskAcrossProjects) => {
+    const result = await ConfirmDialog.show({
+      title: `Delete "${task.title}"?`,
+      message:
+        'Its attempts, worktrees and conversation go with it. This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    }).catch(() => 'canceled');
+    if (result !== 'confirmed') return;
+
+    await tasksApi.delete(task.id);
+    await refresh([task.projectId]);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(task.id);
+      return next;
+    });
   };
 
   const bulkDelete = async () => {
@@ -480,9 +550,13 @@ export function AllTasks() {
         </DropdownMenu>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* A ground behind the cards: on a page the same colour as they are, a card is just a
+          border. The two tokens swap by theme — a card should read as a step towards the light
+          in both, and this palette's background is its lightest surface in light mode and its
+          darkest in dark. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background p-3">
         {isLoading ? (
-          <div className="space-y-2 p-4">
+          <div className="space-y-2 p-1">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton
                 key={i}
@@ -511,6 +585,8 @@ export function AllTasks() {
               onOpen={(task) => navigate(paths.task(task.projectId, task.id))}
               selected={selected}
               onToggle={toggle}
+              onArchive={rowArchive}
+              onDelete={rowDelete}
             />
           ))
         )}

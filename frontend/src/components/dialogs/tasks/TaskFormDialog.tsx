@@ -399,10 +399,14 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
       >
         {/* The form is the dialog's content, not a child of its root: Radix renders anything
             else in place, which puts the whole form inline in the page. */}
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto p-0">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto overflow-x-hidden p-0">
           {/* The positioning context for the discard warning below — on DialogContent itself a
-              `relative` would collide with the `fixed` that centres it. */}
-          <div className="relative">
+              `relative` would collide with the `fixed` that centres it.
+
+              min-w-0 because this is a grid item, and a grid item's default `min-width: auto`
+              refuses to shrink below its content: one long branch name in the row below and the
+              whole form grew past the dialog, clipping the Create button. */}
+          <div className="relative min-w-0">
             <div
               {...getRootProps()}
               className="h-full flex flex-col gap-4 p-4 min-h-0"
@@ -514,7 +518,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                             : 'opacity-0 pointer-events-none'
                         )}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <form.Field name="executorProfileId">
                             {(field) => (
                               <ExecutorProfileSelector

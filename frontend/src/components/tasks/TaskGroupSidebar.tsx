@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronRight, Plus } from 'lucide-react';
+import {
+  Archive,
+  ChevronRight,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -14,16 +20,17 @@ import {
 } from '@dnd-kit/core';
 
 import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
+import { relativeDay } from '@/utils/relativeDay';
 import { statusLabels } from '@/utils/statusLabels';
 import { StatusGlyph } from '@/components/tasks/TaskStatusControl';
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '@/components/ui/sidebar';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +40,23 @@ import {
 import { cn } from '@/lib/utils';
 
 const COLLAPSE_KEY = 'kablan.taskSidebar.groupCollapse';
+const GROUPING_KEY = 'kablan.taskSidebar.grouping';
+
+/**
+ * How the column is laid out: by status, or as one list newest first.
+ *
+ * Grouping answers "what is in review"; the flat list answers "what did I touch last", which is
+ * the question when the statuses are not what you are navigating by.
+ */
+type Grouping = 'status' | 'none';
+
+function loadGrouping(): Grouping {
+  try {
+    return localStorage.getItem(GROUPING_KEY) === 'none' ? 'none' : 'status';
+  } catch {
+    return 'status';
+  }
+}
 
 /**
  * The groups the reader has explicitly opened or closed. Absent means "whatever the default is
@@ -76,7 +100,7 @@ function Indicator({
         {/* Dot and word travel together as one unit, with the gap between chips wider than the
             gap inside one — that spacing is what separates them now the border is gone. */}
         <span
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-1.5 py-0.5"
+          className="inline-flex shrink-0 items-center gap-1.5"
           aria-label={label}
           role="img"
         >
@@ -118,75 +142,191 @@ function Dot({ className, pulse }: { className: string; pulse?: boolean }) {
   );
 }
 
+/**
+ * The two things you do to a row without opening it, on the hover the mail clients taught
+ * everyone to expect: they take the place of the date, so the row keeps its shape and nothing
+ * shifts under the pointer.
+ *
+ * Each button stops the pointer event as well as the click — the row is a drag handle, and a
+ * press that reaches it starts a drag instead of pressing the button.
+ */
+function RowAction({
+  label,
+  onClick,
+  danger,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className={cn(
+            'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+            danger && 'hover:bg-destructive/10 hover:text-destructive'
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="px-2 py-1 text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function TaskRow({
   task,
   status,
   index,
   selected,
   onSelect,
+  onArchive,
+  onDelete,
+  showStatus,
 }: {
   task: TaskWithAttemptStatus;
   status: TaskStatus;
   index: number;
   selected: boolean;
   onSelect: (task: TaskWithAttemptStatus) => void;
+  onArchive?: (task: TaskWithAttemptStatus) => void;
+  onDelete?: (task: TaskWithAttemptStatus) => void;
+  /** Ungrouped, the row carries its own status — there is no header saying it. */
+  showStatus?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.id,
     data: { index, parent: status },
   });
 
-  return (
-    <SidebarMenuItem>
-      {/* asChild so the row keeps shadcn's menu-button styling — the rounded hover, the active
-          fill, the truncation — while still being the drag handle and carrying its own
-          indicators. A nested button inside a button would be invalid markup. */}
-      <SidebarMenuButton
-        asChild
-        isActive={selected}
-        className={cn('h-auto py-1.5', isDragging && 'opacity-40')}
+  const marks = [
+    task.has_running_dev_server && (
+      <Indicator
+        key="server"
+        label="A dev server is running for this task"
+        short="Server"
       >
-        <div
-          ref={setNodeRef}
-          onClick={() => onSelect(task)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onSelect(task);
-            }
-          }}
-          {...listeners}
-          {...attributes}
-          className="cursor-pointer"
-        >
-          <span className="min-w-0 flex-1 truncate text-xs">{task.title}</span>
+        <Dot className="bg-info" />
+      </Indicator>
+    ),
+    task.last_attempt_failed && !task.has_in_progress_attempt && (
+      <Indicator
+        key="failed"
+        label="The last attempt for this task failed"
+        short="Failed"
+      >
+        <Dot className="bg-destructive" />
+      </Indicator>
+    ),
+    task.has_in_progress_attempt && (
+      <Indicator
+        key="running"
+        label="An agent is working on this task"
+        short="Running"
+      >
+        <Dot className="bg-success" pulse />
+      </Indicator>
+    ),
+  ].filter(Boolean);
 
-          {/* Three states, three marks. In a column this narrow a sentence costs more width
-              than the title it sits under, and these are read by shape anyway. */}
-          {task.has_running_dev_server && (
-            <Indicator
-              label="A dev server is running for this task"
-              short="Server"
-            >
-              <Dot className="bg-info" />
-            </Indicator>
-          )}
-          {task.last_attempt_failed && !task.has_in_progress_attempt && (
-            <Indicator
-              label="The last attempt for this task failed"
-              short="Failed"
-            >
-              <Dot className="bg-destructive" />
-            </Indicator>
-          )}
-          {task.has_in_progress_attempt && (
-            <Indicator label="An agent is working on this task" short="Running">
-              <Dot className="bg-success" pulse />
-            </Indicator>
+  // What a row says on its second line, in the order it is worth knowing: what the task is doing
+  // now, and failing that, what it is about.
+  const subtitle = task.description?.split('\n').find((line) => line.trim());
+  // Ungrouped there is nothing to drop into, so the row is not a drag handle either.
+  const dragHandle = showStatus ? {} : listeners;
+  const hasActions = !!onArchive || !!onDelete;
+
+  return (
+    <li>
+      <div
+        ref={setNodeRef}
+        // `attributes` already carries role and tabIndex — dnd-kit makes the handle focusable
+        // and announceable, so the row is keyboard-reachable without a second set here.
+        aria-current={selected ? 'true' : undefined}
+        onClick={() => onSelect(task)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(task);
+          }
+        }}
+        {...dragHandle}
+        {...attributes}
+        className={cn(
+          'group/row flex cursor-pointer items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted',
+          selected && 'bg-muted',
+          isDragging && 'opacity-40'
+        )}
+      >
+        {showStatus && (
+          <StatusGlyph status={task.status} size={14} className="shrink-0" />
+        )}
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {task.title}
+            </span>
+            <div className="relative flex shrink-0 items-center">
+              <span
+                className={cn(
+                  'text-xs tabular-nums text-muted-foreground transition-opacity',
+                  hasActions &&
+                    'group-hover/row:opacity-0 group-focus-within/row:opacity-0'
+                )}
+              >
+                {relativeDay(task.updated_at)}
+              </span>
+              {hasActions && (
+                // Opacity rather than display, so the buttons stay in the tab order and a
+                // keyboard reader can reach them without a pointer.
+                <div className="pointer-events-none absolute right-0 flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100">
+                  {onArchive && (
+                    <RowAction
+                      label="Archive task"
+                      onClick={() => onArchive(task)}
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                    </RowAction>
+                  )}
+                  {onDelete && (
+                    <RowAction
+                      label="Delete task"
+                      danger
+                      onClick={() => onDelete(task)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </RowAction>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {marks.length > 0 ? (
+            <div className="flex items-center gap-3">{marks}</div>
+          ) : (
+            subtitle && (
+              <p className="truncate text-xs text-muted-foreground">
+                {subtitle}
+              </p>
+            )
           )}
         </div>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+      </div>
+    </li>
   );
 }
 
@@ -197,6 +337,8 @@ function TaskGroup({
   onToggle,
   selectedTaskId,
   onSelect,
+  onArchive,
+  onDelete,
 }: {
   status: TaskStatus;
   tasks: TaskWithAttemptStatus[];
@@ -204,6 +346,8 @@ function TaskGroup({
   onToggle: () => void;
   selectedTaskId?: string;
   onSelect: (task: TaskWithAttemptStatus) => void;
+  onArchive?: (task: TaskWithAttemptStatus) => void;
+  onDelete?: (task: TaskWithAttemptStatus) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: status });
   const running = tasks.filter((t) => t.has_in_progress_attempt).length;
@@ -212,71 +356,71 @@ function TaskGroup({
   const serving = tasks.some((t) => t.has_running_dev_server);
 
   return (
-    <SidebarGroup
+    // Each status is its own card, so the boundary between groups is the edge of a surface
+    // rather than a rule drawn across a flat list.
+    <section
       ref={setNodeRef}
       className={cn(
-        // The rule separates groups, not the tasks inside one — those are held apart by
-        // spacing. The last group has nothing below it to be separated from.
-        'border-b border-border/60 py-2.5 last:border-b-0',
-        'transition-colors',
-        // The whole group is the drop target, header included, so a collapsed group still
+        'overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-colors dark:bg-muted',
+        // The whole card is the drop target, header included, so a collapsed group still
         // takes a task — otherwise moving one to Done would mean expanding Done first.
-        isOver && 'rounded-lg bg-sidebar-accent/60'
+        isOver && 'border-primary/60 ring-2 ring-primary/20'
       )}
     >
-      <SidebarGroupLabel asChild>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={!isCollapsed}
-          aria-controls={`sidebar-tasks-${status}`}
-          className="w-full gap-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <StatusGlyph status={status} size={14} className="shrink-0" />
-          <span className="truncate text-sm font-medium">
-            {statusLabels[status]}
-          </span>
-          <span className="text-sm tabular-nums opacity-60">
-            {tasks.length}
-          </span>
-          {serving && <Dot className="ml-1 bg-info" />}
-          {running > 0 && <Dot className="bg-success" pulse />}
-          <ChevronRight
-            className={cn(
-              'ml-auto shrink-0 transition-transform',
-              !isCollapsed && 'rotate-90'
-            )}
-            aria-hidden
-          />
-        </button>
-      </SidebarGroupLabel>
-
-      {!isCollapsed && (
-        <SidebarGroupContent>
-          {tasks.length === 0 ? (
-            <p
-              id={`sidebar-tasks-${status}`}
-              className="mt-1.5 px-2 py-1.5 text-xs text-sidebar-foreground/50"
-            >
-              Drop a task here.
-            </p>
-          ) : (
-            <SidebarMenu id={`sidebar-tasks-${status}`} className="mt-1.5 pl-2">
-              {tasks.map((task, index) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  status={status}
-                  index={index}
-                  selected={selectedTaskId === task.id}
-                  onSelect={onSelect}
-                />
-              ))}
-            </SidebarMenu>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!isCollapsed}
+        aria-controls={`sidebar-tasks-${status}`}
+        className={cn(
+          'flex min-h-11 w-full items-center gap-2 px-3 text-left transition-colors hover:bg-muted/60',
+          // A rule under the header only separates it from something. Collapsed, it is the card.
+          !isCollapsed && 'border-b border-border'
+        )}
+      >
+        <StatusGlyph status={status} size={14} className="shrink-0" />
+        <h3 className="truncate text-sm font-semibold leading-none tracking-tight">
+          {statusLabels[status]}
+        </h3>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          ({tasks.length})
+        </span>
+        {serving && <Dot className="ml-1 bg-info" />}
+        {running > 0 && <Dot className="bg-success" pulse />}
+        <ChevronRight
+          className={cn(
+            'ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            !isCollapsed && 'rotate-90'
           )}
-        </SidebarGroupContent>
-      )}
-    </SidebarGroup>
+          aria-hidden
+        />
+      </button>
+
+      {!isCollapsed &&
+        (tasks.length === 0 ? (
+          <p
+            id={`sidebar-tasks-${status}`}
+            className="px-3 py-3 text-xs text-muted-foreground"
+          >
+            Drop a task here.
+          </p>
+        ) : (
+          <ul id={`sidebar-tasks-${status}`} className="space-y-1 p-2">
+            {tasks.map((task, index) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                status={status}
+                index={index}
+                selected={selectedTaskId === task.id}
+                onSelect={onSelect}
+                onArchive={onArchive}
+                onDelete={onDelete}
+              />
+            ))}
+          </ul>
+        ))}
+    </section>
   );
 }
 
@@ -299,6 +443,8 @@ export function TaskGroupSidebar({
   onSelect,
   onCreateTask,
   onDragEnd,
+  onArchiveTask,
+  onDeleteTask,
 }: {
   columns: Record<TaskStatus, TaskWithAttemptStatus[]>;
   /** Readonly so the caller can pass its `as const` status tuple directly. */
@@ -308,8 +454,12 @@ export function TaskGroupSidebar({
   onCreateTask: () => void;
   /** Same handler the board uses: `over.id` is the status to move the task to. */
   onDragEnd: (event: DragEndEvent) => void;
+  /** Row hover actions. Omit one and its button is not drawn. */
+  onArchiveTask?: (task: TaskWithAttemptStatus) => void;
+  onDeleteTask?: (task: TaskWithAttemptStatus) => void;
 }) {
   const [overrides, setOverrides] = useState<CollapseOverrides>(loadOverrides);
+  const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
   const [dragging, setDragging] = useState<TaskWithAttemptStatus | null>(null);
 
   // Same threshold the board uses: without it a click on a row registers as a tiny drag and the
@@ -319,6 +469,24 @@ export function TaskGroupSidebar({
   );
 
   const total = order.reduce((n, s) => n + (columns[s]?.length ?? 0), 0);
+
+  // Ungrouped, the order has to come from somewhere: most recently touched first, which is the
+  // order the same list uses on the cross-project page.
+  const flat = order
+    .flatMap((status) => columns[status] ?? [])
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+
+  const chooseGrouping = (next: Grouping) => {
+    setGrouping(next);
+    try {
+      localStorage.setItem(GROUPING_KEY, next);
+    } catch {
+      // Blocked storage: the choice just won't persist.
+    }
+  };
 
   const toggle = (status: TaskStatus, isCollapsed: boolean) => {
     setOverrides((prev) => {
@@ -359,34 +527,85 @@ export function TaskGroupSidebar({
             <span className="font-ibm-plex-mono text-[11px] tabular-nums text-muted-foreground">
               {total}
             </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Display options"
+                  title="Display options"
+                  className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  Grouping
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={grouping}
+                  onValueChange={(v) => chooseGrouping(v as Grouping)}
+                >
+                  <DropdownMenuRadioItem value="status" className="text-sm">
+                    Status
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="none" className="text-sm">
+                    No grouping
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button
               type="button"
               onClick={onCreateTask}
               aria-label="Create new task"
               title="Create new task"
-              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {order.map((status) => {
-              const tasks = columns[status] ?? [];
-              const isCollapsed =
-                overrides[status] ?? defaultCollapsed(status, tasks.length);
-              return (
-                <TaskGroup
-                  key={status}
-                  status={status}
-                  tasks={tasks}
-                  isCollapsed={isCollapsed}
-                  onToggle={() => toggle(status, isCollapsed)}
-                  selectedTaskId={selectedTaskId}
-                  onSelect={onSelect}
-                />
-              );
-            })}
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+            {grouping === 'none' ? (
+              <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm dark:bg-muted">
+                <ul className="space-y-1 p-2">
+                  {flat.map((task, index) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      status={task.status}
+                      index={index}
+                      selected={selectedTaskId === task.id}
+                      onSelect={onSelect}
+                      onArchive={onArchiveTask}
+                      onDelete={onDeleteTask}
+                      showStatus
+                    />
+                  ))}
+                </ul>
+              </section>
+            ) : (
+              order.map((status) => {
+                const tasks = columns[status] ?? [];
+                const isCollapsed =
+                  overrides[status] ?? defaultCollapsed(status, tasks.length);
+                return (
+                  <TaskGroup
+                    key={status}
+                    status={status}
+                    tasks={tasks}
+                    isCollapsed={isCollapsed}
+                    onToggle={() => toggle(status, isCollapsed)}
+                    selectedTaskId={selectedTaskId}
+                    onSelect={onSelect}
+                    onArchive={onArchiveTask}
+                    onDelete={onDeleteTask}
+                  />
+                );
+              })
+            )}
           </div>
         </div>
 

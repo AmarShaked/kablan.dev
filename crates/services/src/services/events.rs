@@ -288,17 +288,25 @@ impl EventService {
                                             ArchiveFilter::Active,
                                         )
                                         .await
-                                        && let Some(task_with_status) =
-                                            task_list.into_iter().find(|t| t.id == task.id)
                                     {
-                                        let patch = match hook.operation {
-                                            SqliteOperation::Insert => {
-                                                task_patch::add(&task_with_status)
-                                            }
-                                            SqliteOperation::Update => {
-                                                task_patch::replace(&task_with_status)
-                                            }
-                                            _ => task_patch::replace(&task_with_status), // fallback
+                                        let patch = match task_list
+                                            .into_iter()
+                                            .find(|t| t.id == task.id)
+                                        {
+                                            Some(task_with_status) => match hook.operation {
+                                                SqliteOperation::Insert => {
+                                                    task_patch::add(&task_with_status)
+                                                }
+                                                // A restore also arrives here: `add` on a key the
+                                                // client already holds is a replace, and on one it
+                                                // dropped when the task was archived it is the only
+                                                // operation that can put it back.
+                                                _ => task_patch::add(&task_with_status),
+                                            },
+                                            // Not in the active list any more: the task was
+                                            // archived. Every live view is showing active tasks, and
+                                            // a removal is the only thing that tells them it left.
+                                            None => task_patch::remove(task.id),
                                         };
                                         msg_store_for_hook.push_patch(patch);
                                         return;
