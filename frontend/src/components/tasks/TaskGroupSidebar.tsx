@@ -469,53 +469,57 @@ export function TaskGroupSidebar({
             <TaskFilterChips
               value={filters}
               onChange={onFiltersChange}
-              className="mr-auto overflow-hidden"
+              className="overflow-hidden"
             />
-            <TaskFilterMenu
-              value={filters}
-              onChange={onFiltersChange}
-              counts={statusCounts}
-            />
-            <TaskSortMenu value={sort} onChange={onSortChange} />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Display options"
-                  title="Display options"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                  Grouping
-                </DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={grouping}
-                  onValueChange={(v) => chooseGrouping(v as Grouping)}
-                >
-                  <DropdownMenuRadioItem value="status" className="text-sm">
-                    Status
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="none" className="text-sm">
-                    No grouping
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* The controls hold the right edge whether or not a chip is there to push them. */}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <TaskFilterMenu
+                value={filters}
+                onChange={onFiltersChange}
+                counts={statusCounts}
+              />
+              <TaskSortMenu value={sort} onChange={onSortChange} />
 
-            <button
-              type="button"
-              onClick={onCreateTask}
-              aria-label="Create new task"
-              title="Create new task"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Display options"
+                    title="Display options"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    Grouping
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={grouping}
+                    onValueChange={(v) => chooseGrouping(v as Grouping)}
+                  >
+                    <DropdownMenuRadioItem value="status" className="text-sm">
+                      Status
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="none" className="text-sm">
+                      No grouping
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
+                type="button"
+                onClick={onCreateTask}
+                aria-label="Create new task"
+                title="Create new task"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
