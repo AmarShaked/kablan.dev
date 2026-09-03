@@ -1,6 +1,7 @@
 import { Code2 } from 'lucide-react';
 import { EditorType, ThemeMode } from 'shared/types';
 import { useTheme } from '@/components/ThemeProvider';
+import { cn } from '@/lib/utils';
 
 type IdeIconProps = {
   editorType?: EditorType | null;
@@ -50,7 +51,7 @@ export function IdeIcon({ editorType, className = 'h-4 w-4' }: IdeIconProps) {
 
   if (!editorType || editorType === EditorType.CUSTOM) {
     // Generic fallback for other IDEs or no IDE configured
-    return <Code2 className={className} />;
+    return <Code2 className={cn('shrink-0', className)} />;
   }
 
   switch (editorType) {
@@ -84,5 +85,15 @@ export function IdeIcon({ editorType, className = 'h-4 w-4' }: IdeIconProps) {
       break;
   }
 
-  return <img src={ideIconPath} alt={ideName} className={className} />;
+  // `shrink-0` because this is the one icon in the app that is an <img>. Button's base classes
+  // carry `[&_svg]:shrink-0`, which protects every lucide glyph from being squeezed by a flex
+  // parent — an image is not an svg element and was never covered, so in an icon-only button it
+  // was being crushed to the width of a content box that padding had already eaten.
+  return (
+    <img
+      src={ideIconPath}
+      alt={ideName}
+      className={cn('shrink-0', className)}
+    />
+  );
 }

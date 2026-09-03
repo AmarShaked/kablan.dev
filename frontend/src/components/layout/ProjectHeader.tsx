@@ -24,10 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { OpenInIdeButton } from '@/components/ide/OpenInIdeButton';
 import { SearchBar } from '@/components/SearchBar';
-import { useProjectRepos } from '@/hooks';
-import { useOpenProjectInEditor } from '@/hooks/useOpenProjectInEditor';
 import { useTask } from '@/hooks/useTask';
 import { useProject } from '@/contexts/ProjectContext';
 import { useSearch } from '@/contexts/SearchContext';
@@ -54,8 +51,6 @@ export function ProjectHeader() {
   const { data: task } = useTask(taskId);
   const { query, setQuery, active, clear, registerInputRef } = useSearch();
   const { loginStatus } = useUserSystem();
-  const { data: repos } = useProjectRepos(projectId);
-  const handleOpenInEditor = useOpenProjectInEditor(project || null);
   const { t } = useTranslation(['tasks', 'common']);
   const { t: tSettings } = useTranslation('settings');
 
@@ -203,13 +198,6 @@ export function ProjectHeader() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        )}
-
-        {projectId && repos?.length === 1 && (
-          <OpenInIdeButton
-            onClick={() => handleOpenInEditor()}
-            className="h-8 w-8"
-          />
         )}
       </div>
     </header>
