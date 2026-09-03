@@ -50,7 +50,7 @@ use services::services::{
     queued_message::QueuedMessageService,
     remote_client::RemoteClient,
     remote_sync,
-    workspace_manager::{RepoWorkspaceInput, WorkspaceManager},
+    workspace_manager::{RepoWorkspaceInput, WorkspaceManager, adopted_branch},
 };
 use tokio::{sync::RwLock, task::JoinHandle};
 use tokio_util::io::ReaderStream;
@@ -956,6 +956,54 @@ impl LocalContainerService {
         )
         .await
     }
+
+    /// The branch this workspace's worktrees should be on, correcting the record when the branch
+    /// has been renamed underneath it.
+    ///
+    /// The recorded name wins whenever any repo still has it — a branch that exists is not a
+    /// mistake to correct. Only when it is gone everywhere does the worktree get a say, and then
+    /// the first one sitting on a real branch names it and the record is updated to match.
+    /// Failing to read either side leaves the record alone: this is a repair, and a repair that
+    /// guesses is worse than the breakage.
+    async fn branch_for_worktrees(
+        &self,
+        workspace: &Workspace,
+        repositories: &[Repo],
+        workspace_dir: &Path,
+    ) -> String {
+        let recorded_exists = repositories.iter().any(|repo| {
+            self.git()
+                .check_branch_exists(&repo.path, &workspace.branch)
+                .unwrap_or(true)
+        });
+
+        if recorded_exists {
+            return workspace.branch.clone();
+        }
+
+        let adopted = repositories.iter().find_map(|repo| {
+            let head = self
+                .git()
+                .get_head_info(&workspace_dir.join(&repo.name))
+                .ok()?;
+            adopted_branch(&workspace.branch, Some(head.branch.as_str()), false)
+        });
+
+        let Some(adopted) = adopted else {
+            return workspace.branch.clone();
+        };
+
+        tracing::info!(
+            workspace_id = %workspace.id,
+            recorded = %workspace.branch,
+            actual = %adopted,
+            "recorded branch is gone; adopting the one the worktree is on"
+        );
+        if let Err(e) = Workspace::update_branch_name(&self.db.pool, workspace.id, &adopted).await {
+            tracing::warn!("Failed to record the renamed branch: {e}");
+        }
+        adopted
+    }
 }
 
 fn failure_exit_status() -> std::process::ExitStatus {
@@ -1098,8 +1146,17 @@ impl ContainerService for LocalContainerService {
             WorkspaceManager::get_workspace_base_dir().join(&workspace_dir_name)
         };
 
-        WorkspaceManager::ensure_workspace_exists(&workspace_dir, &repositories, &workspace.branch)
-            .await?;
+        // Reconcile the branch before anything touches the worktrees. A branch renamed behind
+        // the app's back — an agent adopting a ticket number, someone at a terminal — leaves the
+        // record naming a branch git no longer has, and the recreate path below clears the
+        // worktree away *before* it discovers the name is unusable. That used to strand the
+        // workspace: no worktree left to read the real name from, and every request through here
+        // failing on `git worktree add <gone-branch>` from then on.
+        let branch = self
+            .branch_for_worktrees(workspace, &repositories, &workspace_dir)
+            .await;
+
+        WorkspaceManager::ensure_workspace_exists(&workspace_dir, &repositories, &branch).await?;
 
         if workspace.container_ref.is_none() {
             Workspace::update_container_ref(

@@ -47,8 +47,11 @@ use git::{ConflictOp, GitCliError, GitService, GitServiceError};
 use git2::BranchType;
 use serde::{Deserialize, Serialize};
 use services::services::{
-    container::ContainerService, diff_stream, remote_client::RemoteClientError, remote_sync,
-    workspace_manager::WorkspaceManager,
+    container::ContainerService,
+    diff_stream,
+    remote_client::RemoteClientError,
+    remote_sync,
+    workspace_manager::{WorkspaceManager, adopted_branch},
 };
 use sqlx::Error as SqlxError;
 use ts_rs::TS;
@@ -779,33 +782,6 @@ pub struct RepoBranchStatus {
     pub repo_name: String,
     #[serde(flatten)]
     pub status: BranchStatus,
-}
-
-/// Which branch name to believe, when the record and the worktree disagree.
-///
-/// The record is normally right, but anything working inside the worktree can rename the branch
-/// behind the app's back — an agent adopting a ticket number, someone at a terminal — and every
-/// comparison then runs against a branch that no longer exists. The worktree is the truth about
-/// what it is on, so a recorded branch that has gone missing gives way to the one actually
-/// checked out.
-///
-/// Returns the name to adopt, or None to keep the recorded one. It declines to adopt when:
-/// the recorded branch still exists (nothing is wrong); HEAD is detached, which reports as
-/// "HEAD" and is a rebase in progress rather than a rename; the worktree's branch is unreadable;
-/// or the two names already agree.
-fn adopted_branch(
-    recorded: &str,
-    worktree_head: Option<&str>,
-    recorded_exists: bool,
-) -> Option<String> {
-    if recorded_exists {
-        return None;
-    }
-    let actual = worktree_head?;
-    if actual == "HEAD" || actual == recorded || actual.is_empty() {
-        return None;
-    }
-    Some(actual.to_string())
 }
 
 pub async fn get_task_attempt_branch_status(
@@ -2016,57 +1992,4 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .nest("/{id}/images", images::router(deployment));
 
     Router::new().nest("/task-attempts", task_attempts_router)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::adopted_branch;
-
-    /// The case this comes from: an agent renamed the branch, so the record points at a branch
-    /// that is gone while the worktree sits on the new one.
-    #[test]
-    fn adopts_the_worktree_branch_when_the_recorded_one_is_gone() {
-        assert_eq!(
-            adopted_branch(
-                "kablan/dc1c-topology-1-5",
-                Some("kablan/fe-3366-topology-1-5"),
-                false
-            ),
-            Some("kablan/fe-3366-topology-1-5".to_string())
-        );
-    }
-
-    #[test]
-    fn leaves_a_recorded_branch_that_still_exists_alone() {
-        // Even if the worktree is on something else — a branch that exists is not a mistake to
-        // correct, and rewriting the record here would hijack the workspace.
-        assert_eq!(adopted_branch("main", Some("scratch"), true), None);
-    }
-
-    #[test]
-    fn does_not_mistake_a_detached_head_for_a_rename() {
-        // Mid-rebase the shorthand is literally "HEAD"; adopting it would record a branch that
-        // does not exist and make the next comparison fail for a different reason.
-        assert_eq!(adopted_branch("kablan/work", Some("HEAD"), false), None);
-    }
-
-    #[test]
-    fn declines_when_the_worktree_branch_cannot_be_read() {
-        assert_eq!(adopted_branch("kablan/work", None, false), None);
-    }
-
-    #[test]
-    fn declines_when_the_names_already_agree() {
-        // The branch is missing from the repo but the worktree names the same thing: there is no
-        // better answer available, so leave the record as it is.
-        assert_eq!(
-            adopted_branch("kablan/work", Some("kablan/work"), false),
-            None
-        );
-    }
-
-    #[test]
-    fn declines_an_empty_branch_name() {
-        assert_eq!(adopted_branch("kablan/work", Some(""), false), None);
-    }
 }

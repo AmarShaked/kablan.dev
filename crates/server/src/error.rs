@@ -23,6 +23,7 @@ use services::services::{
     project::ProjectServiceError,
     remote_client::RemoteClientError,
     repo::RepoError as RepoServiceError,
+    workspace_manager::WorkspaceError as WorkspaceManagerError,
     worktree_manager::WorktreeError,
 };
 use thiserror::Error;
@@ -124,6 +125,13 @@ impl ErrorInfo {
             error_type,
             message: Some(msg.into()),
         }
+    }
+
+    fn into_response_for(self, err: &ApiError) -> Response {
+        let message = self
+            .message
+            .unwrap_or_else(|| format!("{}: {}", self.error_type, err));
+        (self.status, Json(ApiResponse::<()>::error(&message))).into_response()
     }
 
     fn bad_request(error_type: &'static str, msg: impl Into<String>) -> Self {
@@ -241,8 +249,36 @@ fn remote_client_error(err: &RemoteClientError) -> ErrorInfo {
     }
 }
 
+/// A branch the app expected to find is gone — renamed, most often, by something working inside
+/// the worktree. Worth saying out loud instead of collapsing into the generic 500: the fix is a
+/// name only the person at the keyboard knows, and the message carries it.
+///
+/// Matched variant by variant rather than by walking `source()`: every layer between the handler
+/// and git is `#[error(transparent)]`, which forwards `source()` to the *inner* error's source
+/// and so skips straight past the `WorktreeError` a walk would be looking for.
+fn branch_gone(err: &ApiError) -> Option<&str> {
+    let worktree = match err {
+        ApiError::Worktree(e) => e,
+        ApiError::Container(ContainerError::Worktree(e)) => e,
+        ApiError::Container(ContainerError::WorkspaceManager(WorkspaceManagerError::Worktree(
+            e,
+        ))) => e,
+        _ => return None,
+    };
+
+    match worktree {
+        WorktreeError::BranchNotFound(what) => Some(what),
+        _ => None,
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        if let Some(branch) = branch_gone(&self) {
+            let message = format!("Branch not found: {branch}");
+            return ErrorInfo::conflict("BranchNotFound", message).into_response_for(&self);
+        }
+
         let info = match &self {
             ApiError::Project(ProjectError::Database(_)) => ErrorInfo::internal("ProjectError"),
             ApiError::Project(ProjectError::ProjectNotFound) => {
@@ -465,11 +501,7 @@ impl IntoResponse for ApiError {
             ),
         };
 
-        let message = info
-            .message
-            .unwrap_or_else(|| format!("{}: {}", info.error_type, self));
-        let response = ApiResponse::<()>::error(&message);
-        (info.status, Json(response)).into_response()
+        info.into_response_for(&self)
     }
 }
 
@@ -546,5 +578,35 @@ impl From<ProjectRepoError> for ApiError {
                 ApiError::Conflict("Repository already exists in project".to_string())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use services::services::workspace_manager::WorkspaceError as WorkspaceManagerError;
+
+    use super::*;
+
+    /// The wrapping this actually arrives in: `ensure_container_exists` refuses to recreate a
+    /// worktree onto a branch that no longer exists, three error types away from the handler.
+    #[test]
+    fn a_missing_branch_is_reported_through_the_layers_that_wrap_it() {
+        let err = ApiError::Container(ContainerError::WorkspaceManager(
+            WorkspaceManagerError::Worktree(WorktreeError::BranchNotFound(
+                "kablan/e1bb-terminate-proces".to_string(),
+            )),
+        ));
+
+        let branch = branch_gone(&err).expect("a missing branch should not become a bare 500");
+        assert_eq!(branch, "kablan/e1bb-terminate-proces");
+    }
+
+    #[test]
+    fn unrelated_errors_are_left_to_their_own_mapping() {
+        assert_eq!(branch_gone(&ApiError::Unauthorized), None);
+        assert_eq!(
+            branch_gone(&ApiError::BadRequest("nothing to do with git".to_string())),
+            None
+        );
     }
 }

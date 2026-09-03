@@ -137,6 +137,23 @@ impl WorktreeManager {
             branch_name_owned, path_str
         );
 
+        // Refuse to trade a worktree that is still there for one that cannot be created. Step 1
+        // deletes the directory and prunes the metadata, and step 3 then checks out `branch_name`
+        // — so a branch that no longer exists costs the worktree and everything uncommitted in
+        // it, and leaves nothing behind to recover the real branch name from. Guarded only when
+        // there is something to lose: with no worktree on disk, let git fail on its own terms
+        // and keep accepting the commit-ish names it has always accepted.
+        if worktree_path_owned.exists()
+            && !GitService::new()
+                .check_branch_exists(repo_path, &branch_name_owned)
+                .unwrap_or(true)
+        {
+            return Err(WorktreeError::BranchNotFound(format!(
+                "{branch_name_owned} (recorded for the worktree at {path_str}, which was left \
+                 untouched); it was most likely renamed — point the workspace at the new name"
+            )));
+        }
+
         // Step 1: Comprehensive cleanup of existing worktree and metadata (non-blocking)
         Self::comprehensive_worktree_cleanup_async(repo_path, &worktree_path_owned).await?;
 
@@ -605,4 +622,62 @@ async fn create_worktree_when_repo_path_is_a_worktree() {
     )
     .await
     .unwrap();
+}
+
+/// Regression: an agent renames the branch its worktree is on, then something prunes the
+/// worktree's git metadata. `ensure_worktree_exists` then decides the worktree needs recreating
+/// — and the recreate used to delete the worktree first and only afterwards fail on the branch
+/// that no longer exists, taking the work with it and leaving the workspace unrecoverable.
+#[tokio::test]
+async fn a_renamed_branch_does_not_cost_the_worktree() {
+    use tempfile::TempDir;
+    let td = TempDir::new().unwrap();
+
+    let repo_path = td.path().join("repo");
+    let git_service = GitService::new();
+    git_service
+        .initialize_repo_with_main_branch(&repo_path)
+        .unwrap();
+
+    let worktree_path = td.path().join("wt");
+    WorktreeManager::create_worktree(
+        &repo_path,
+        "kablan/e1bb-short-name",
+        &worktree_path,
+        "main",
+        true,
+    )
+    .await
+    .unwrap();
+
+    // The rename, and a file standing in for whatever is not committed yet.
+    git_service
+        .rename_local_branch(
+            &worktree_path,
+            "kablan/e1bb-short-name",
+            "kablan/fe-3365-real-ticket",
+        )
+        .unwrap();
+    let uncommitted = worktree_path.join("in-flight.txt");
+    std::fs::write(&uncommitted, "not committed anywhere").unwrap();
+
+    // Force the recreate path: the directory is still there, the registration is not.
+    WorktreeManager::force_cleanup_worktree_metadata(&repo_path, &worktree_path).unwrap();
+
+    let err = WorktreeManager::ensure_worktree_exists(
+        &repo_path,
+        "kablan/e1bb-short-name",
+        &worktree_path,
+    )
+    .await
+    .expect_err("recreating onto a branch that no longer exists cannot succeed");
+
+    assert!(
+        matches!(err, WorktreeError::BranchNotFound(_)),
+        "the error should name the missing branch, got: {err:?}"
+    );
+    assert!(
+        uncommitted.exists(),
+        "the worktree was destroyed for a recreate that could never have worked"
+    );
 }
