@@ -91,7 +91,7 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
         </div>
 
         {/* Graph bar */}
-        <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+        <div className="group-data-[collapsible=icon]:hidden">
           <div className="h-1.5 bg-sidebar-accent rounded-full overflow-hidden">
             <div
               className={cn('h-full rounded-full transition-all duration-300', getColor())}
@@ -101,7 +101,7 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
 
           {/* Details shown on hover */}
           {showDetails && (
-            <div className="text-xs text-sidebar-foreground/70 space-y-0.5 animate-in fade-in duration-150">
+            <div className="text-xs text-sidebar-foreground/70 space-y-0.5 mt-1 animate-in fade-in duration-150">
               <div className="flex justify-between">
                 <span>Percentage:</span>
                 <span className="font-medium">{percentage.toFixed(0)}%</span>
@@ -110,13 +110,6 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
                 <span>Next reset:</span>
                 <span className="font-medium">{formatDate(data.nextReset)}</span>
               </div>
-            </div>
-          )}
-
-          {/* Compact view when not hovering */}
-          {!showDetails && (
-            <div className="text-xs text-sidebar-foreground/70">
-              {data.current} / {data.limit}
             </div>
           )}
         </div>
