@@ -781,6 +781,33 @@ pub struct RepoBranchStatus {
     pub status: BranchStatus,
 }
 
+/// Which branch name to believe, when the record and the worktree disagree.
+///
+/// The record is normally right, but anything working inside the worktree can rename the branch
+/// behind the app's back — an agent adopting a ticket number, someone at a terminal — and every
+/// comparison then runs against a branch that no longer exists. The worktree is the truth about
+/// what it is on, so a recorded branch that has gone missing gives way to the one actually
+/// checked out.
+///
+/// Returns the name to adopt, or None to keep the recorded one. It declines to adopt when:
+/// the recorded branch still exists (nothing is wrong); HEAD is detached, which reports as
+/// "HEAD" and is a rebase in progress rather than a rename; the worktree's branch is unreadable;
+/// or the two names already agree.
+fn adopted_branch(
+    recorded: &str,
+    worktree_head: Option<&str>,
+    recorded_exists: bool,
+) -> Option<String> {
+    if recorded_exists {
+        return None;
+    }
+    let actual = worktree_head?;
+    if actual == "HEAD" || actual == recorded || actual.is_empty() {
+        return None;
+    }
+    Some(actual.to_string())
+}
+
 pub async fn get_task_attempt_branch_status(
     Extension(workspace): Extension<Workspace>,
     State(deployment): State<DeploymentImpl>,
@@ -825,11 +852,41 @@ pub async fn get_task_attempt_branch_status(
 
         let worktree_path = workspace_dir.join(&repo.name);
 
-        let head_oid = deployment
+        let head_info = deployment.git().get_head_info(&worktree_path).ok();
+        let head_oid = head_info.as_ref().map(|h| h.oid.clone());
+
+        // Whose branch name to believe. The record is normally right, but anything working in
+        // the worktree can rename the branch behind the app's back — an agent following a ticket
+        // number, someone at a terminal — and then every comparison below is against a branch
+        // that no longer exists, which used to fail the whole request and blank the panel.
+        //
+        // The worktree is the truth about what it is on, so when the recorded branch is gone and
+        // the worktree is on a real one, that name wins and the record is corrected. Guarded on
+        // both sides: a detached HEAD mid-rebase reports "HEAD" and is not a rename, and a
+        // recorded branch that still exists is never second-guessed.
+        let recorded_exists = deployment
             .git()
-            .get_head_info(&worktree_path)
-            .ok()
-            .map(|h| h.oid);
+            .check_branch_exists(&repo.path, &workspace.branch)
+            .unwrap_or(true);
+        let branch = match adopted_branch(
+            &workspace.branch,
+            head_info.as_ref().map(|h| h.branch.as_str()),
+            recorded_exists,
+        ) {
+            Some(actual) => {
+                tracing::info!(
+                    workspace_id = %workspace.id,
+                    recorded = %workspace.branch,
+                    actual = %actual,
+                    "recorded branch is gone; adopting the one the worktree is on"
+                );
+                if let Err(e) = Workspace::update_branch_name(pool, workspace.id, &actual).await {
+                    tracing::warn!("Failed to record the renamed branch: {e}");
+                }
+                actual
+            }
+            None => workspace.branch.clone(),
+        };
 
         let (is_rebase_in_progress, conflicted_files, conflict_op) = {
             let in_rebase = deployment
@@ -859,26 +916,38 @@ pub async fn get_task_attempt_branch_status(
 
         let has_uncommitted_changes = uncommitted_count.map(|c| c > 0);
 
+        // A target branch that cannot be resolved is reported as local and left to the
+        // comparison below to fail softly, rather than taking the response down with it.
         let target_branch_type = deployment
             .git()
-            .find_branch_type(&repo.path, &target_branch)?;
+            .find_branch_type(&repo.path, &target_branch)
+            .unwrap_or(BranchType::Local);
 
-        let (commits_ahead, commits_behind) = match target_branch_type {
+        // `commits_ahead`/`commits_behind` are already optional, and None means "not known" —
+        // which is the honest answer when a branch has gone missing. Everything else on this
+        // panel is read from the worktree and still true, so it is worth returning.
+        let comparison = match target_branch_type {
             BranchType::Local => {
-                let (a, b) = deployment.git().get_branch_status(
-                    &repo.path,
-                    &workspace.branch,
-                    &target_branch,
-                )?;
-                (Some(a), Some(b))
+                deployment
+                    .git()
+                    .get_branch_status(&repo.path, &branch, &target_branch)
             }
             BranchType::Remote => {
-                let (ahead, behind) = deployment.git().get_remote_branch_status(
-                    &repo.path,
-                    &workspace.branch,
-                    Some(&target_branch),
-                )?;
-                (Some(ahead), Some(behind))
+                deployment
+                    .git()
+                    .get_remote_branch_status(&repo.path, &branch, Some(&target_branch))
+            }
+        };
+        let (commits_ahead, commits_behind) = match comparison {
+            Ok((a, b)) => (Some(a), Some(b)),
+            Err(e) => {
+                tracing::debug!(
+                    repo = %repo.name,
+                    branch = %branch,
+                    target = %target_branch,
+                    "branch comparison unavailable: {e}"
+                );
+                (None, None)
             }
         };
 
@@ -888,7 +957,7 @@ pub async fn get_task_attempt_branch_status(
         // whose requests this app cannot create, and is what tells the pull button to appear.
         let (remote_ahead, remote_behind) = match deployment
             .git()
-            .get_upstream_divergence(&repo.path, &workspace.branch)
+            .get_upstream_divergence(&repo.path, &branch)
         {
             Ok((ahead, behind)) => (Some(ahead), Some(behind)),
             // No upstream yet: the branch has never been pushed.
@@ -1947,4 +2016,57 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .nest("/{id}/images", images::router(deployment));
 
     Router::new().nest("/task-attempts", task_attempts_router)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::adopted_branch;
+
+    /// The case this comes from: an agent renamed the branch, so the record points at a branch
+    /// that is gone while the worktree sits on the new one.
+    #[test]
+    fn adopts_the_worktree_branch_when_the_recorded_one_is_gone() {
+        assert_eq!(
+            adopted_branch(
+                "kablan/dc1c-topology-1-5",
+                Some("kablan/fe-3366-topology-1-5"),
+                false
+            ),
+            Some("kablan/fe-3366-topology-1-5".to_string())
+        );
+    }
+
+    #[test]
+    fn leaves_a_recorded_branch_that_still_exists_alone() {
+        // Even if the worktree is on something else — a branch that exists is not a mistake to
+        // correct, and rewriting the record here would hijack the workspace.
+        assert_eq!(adopted_branch("main", Some("scratch"), true), None);
+    }
+
+    #[test]
+    fn does_not_mistake_a_detached_head_for_a_rename() {
+        // Mid-rebase the shorthand is literally "HEAD"; adopting it would record a branch that
+        // does not exist and make the next comparison fail for a different reason.
+        assert_eq!(adopted_branch("kablan/work", Some("HEAD"), false), None);
+    }
+
+    #[test]
+    fn declines_when_the_worktree_branch_cannot_be_read() {
+        assert_eq!(adopted_branch("kablan/work", None, false), None);
+    }
+
+    #[test]
+    fn declines_when_the_names_already_agree() {
+        // The branch is missing from the repo but the worktree names the same thing: there is no
+        // better answer available, so leave the record as it is.
+        assert_eq!(
+            adopted_branch("kablan/work", Some("kablan/work"), false),
+            None
+        );
+    }
+
+    #[test]
+    fn declines_an_empty_branch_name() {
+        assert_eq!(adopted_branch("kablan/work", Some(""), false), None);
+    }
 }
