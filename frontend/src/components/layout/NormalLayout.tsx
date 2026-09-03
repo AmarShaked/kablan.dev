@@ -14,15 +14,13 @@ export function NormalLayout() {
       <ProjectsSidebar />
       <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         <ProjectHeader />
-        {/* The rail sits beside the page rather than inside it, so it stays put whatever the
-            middle of the screen is doing — and below the header, which spans the whole width. */}
-        <div className="flex min-h-0 flex-1">
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-            <Outlet />
-          </div>
-          <RightRail />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Outlet />
         </div>
       </SidebarInset>
+      {/* Outside the inset, so it runs the full height of the window like the sidebar opposite
+          it — the header belongs to the page between them, not to either edge. */}
+      <RightRail />
     </SidebarProvider>
   );
 }
