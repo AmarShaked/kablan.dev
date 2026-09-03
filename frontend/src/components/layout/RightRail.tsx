@@ -77,15 +77,8 @@ export function RightRail() {
     <TooltipProvider>
       <aside
         aria-label="Project actions"
-        className="flex w-14 shrink-0 flex-col items-center gap-2 bg-muted/30 py-3"
+        className="flex h-full w-14 shrink-0 flex-col items-center gap-2 bg-muted/30 py-3"
       >
-        <RailButton
-          label="New task"
-          onClick={() => openTaskForm({ mode: 'create', projectId })}
-        >
-          <Plus className="h-4 w-4" />
-        </RailButton>
-
         {canOpenInIde && (
           <RailButton
             label={`Open in ${getIdeName(config?.editor?.editor_type)}`}
@@ -97,6 +90,13 @@ export function RightRail() {
             />
           </RailButton>
         )}
+
+        <RailButton
+          label="New task"
+          onClick={() => openTaskForm({ mode: 'create', projectId })}
+        >
+          <Plus className="h-4 w-4" />
+        </RailButton>
       </aside>
     </TooltipProvider>
   );
