@@ -257,18 +257,14 @@ async fn get_usage_stats(
     State(_deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<UsageStatsResponse>>, ApiError> {
     // TODO: Replace with actual usage tracking from database
-    // For now, return mock data that resets daily
+    // For now, return mock data that resets daily at midnight UTC
     let now = Utc::now();
-    let next_reset = (now + chrono::Duration::days(1))
-        .with_hour(0)
-        .and_then(|dt| dt.with_minute(0))
-        .and_then(|dt| dt.with_second(0))
-        .unwrap_or_else(|| now + chrono::Duration::days(1));
+    let tomorrow_midnight = (now + chrono::Duration::days(1)).date_naive().and_hms_opt(0, 0, 0).map(|naive| naive.and_utc()).unwrap_or_else(|| now + chrono::Duration::days(1));
 
     Ok(ResponseJson(ApiResponse::success(UsageStatsResponse {
         current: 45,
         limit: 100,
-        next_reset,
+        next_reset: tomorrow_midnight,
     })))
 }
 
