@@ -336,6 +336,31 @@ export type TokenResponse = { access_token: string, expires_at: string | null, }
 
 export type CurrentUserResponse = { user_id: string, };
 
+export type UsageWindow = { 
+/**
+ * Short label, e.g. 'Session', 'Week', 'Week (Sonnet)'.
+ */
+label: string, 
+/**
+ * Percentage of the window consumed, 0–100.
+ */
+percent: number, 
+/**
+ * When the window rolls over. None when upstream omits it.
+ */
+resets_at: string | null, };
+
+export type UsageResponse = { 
+/**
+ * The rolling session window — the one bar the sidebar shows at rest.
+ * None when the account reports no session limit.
+ */
+session: UsageWindow | null, 
+/**
+ * Weekly windows, revealed on hover.
+ */
+weekly: Array<UsageWindow>, };
+
 export type UserSystemInfo = { config: Config, login_status: LoginStatus, environment: Environment, 
 /**
  * Capabilities supported per executor (e.g., { "CLAUDE_CODE": ["SESSION_FORK"] })

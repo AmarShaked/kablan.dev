@@ -6200,6 +6200,7 @@ dependencies = [
  "chrono",
  "db",
  "deployment",
+ "dirs 5.0.1",
  "dotenv",
  "executors",
  "futures-util",

@@ -39,3 +39,8 @@ export const repoKeys = {
   hasDevServerScript: (projectId: string | undefined) =>
     ['repos', 'hasDevServerScript', projectId] as const,
 };
+
+export const usageKeys = {
+  /** The one Claude subscription usage fetch, shared by whoever shows it. */
+  all: ['usage'] as const,
+};
