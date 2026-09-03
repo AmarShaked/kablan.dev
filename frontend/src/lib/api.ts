@@ -98,6 +98,7 @@ import {
   GitRemote,
   ListPrsError,
   CreateWorkspaceFromPrBody,
+  UsageResponse,
   CreateWorkspaceFromPrResponse,
   CreateFromPrError,
   MigrationRequest,
@@ -923,6 +924,14 @@ export const fileSystemApi = {
       `/api/filesystem/git-repos${queryParam}`
     );
     return handleApiResponse<DirectoryEntry[]>(response);
+  },
+};
+
+// Claude subscription usage, read via the local Claude Code CLI credentials.
+export const usageApi = {
+  get: async (): Promise<UsageResponse> => {
+    const response = await makeRequest('/api/usage');
+    return handleApiResponse<UsageResponse>(response);
   },
 };
 
