@@ -1,11 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import {
-  Archive,
-  ChevronRight,
-  Plus,
-  SlidersHorizontal,
-  Trash2,
-} from 'lucide-react';
+import { Archive, ChevronRight, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -65,10 +59,13 @@ const GROUPING_KEY = 'kablan.taskSidebar.grouping';
 type Grouping = 'status' | 'none';
 
 function loadGrouping(): Grouping {
+  // Ungrouped by default: a project's list is read top to bottom by what happened last, and the
+  // status headings mostly cost a row each. Grouping stays one menu click away, and anyone who
+  // has already chosen it keeps it — only the unset case changed.
   try {
-    return localStorage.getItem(GROUPING_KEY) === 'none' ? 'none' : 'status';
+    return localStorage.getItem(GROUPING_KEY) === 'status' ? 'status' : 'none';
   } catch {
-    return 'status';
+    return 'none';
   }
 }
 
@@ -369,7 +366,6 @@ export function TaskGroupSidebar({
   order,
   selectedTaskId,
   onSelect,
-  onCreateTask,
   onDragEnd,
   onArchiveTask,
   onDeleteTask,
@@ -385,7 +381,6 @@ export function TaskGroupSidebar({
   order: readonly TaskStatus[];
   selectedTaskId?: string;
   onSelect: (task: TaskWithAttemptStatus) => void;
-  onCreateTask: () => void;
   /** Same handler the board uses: `over.id` is the status to move the task to. */
   onDragEnd: (event: DragEndEvent) => void;
   /** Row hover actions. Omit one and its button is not drawn. */
@@ -513,16 +508,6 @@ export function TaskGroupSidebar({
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              <button
-                type="button"
-                onClick={onCreateTask}
-                aria-label="Create new task"
-                title="Create new task"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
             </div>
           </div>
 

@@ -45,7 +45,7 @@ import {
 import { DeleteTaskConfirmationDialog } from '@/components/dialogs';
 import { TaskGroupSidebar } from '@/components/tasks/TaskGroupSidebar';
 import {
-  ALL_STATUSES,
+  ACTIVE_STATUSES,
   compareTasks,
   matchesStatusFilter,
   type StatusFilter,
@@ -305,7 +305,10 @@ export function ProjectTasks() {
   // In the URL, like the cross-project list: a filtered view is a place, not a mood.
   const filters: TaskFilters = useMemo(
     () => ({
-      status: (searchParams.get('status') ?? ALL_STATUSES) as StatusFilter,
+      // Active by default: a project's list is opened to see what is in flight, and Done and
+      // Cancelled are history that pushes it off the screen. "Any status" is one click away, and
+      // the chip says the list is filtered rather than leaving it a silent omission.
+      status: (searchParams.get('status') ?? ACTIVE_STATUSES) as StatusFilter,
       archive: (searchParams.get('archive') ?? 'active') as ArchiveFilter,
       needsMe: searchParams.get('needsMe') === '1',
     }),
@@ -326,7 +329,7 @@ export function ProjectTasks() {
   const handleFiltersChange = useCallback(
     (next: TaskFilters) => {
       const params = new URLSearchParams(searchParams);
-      if (next.status === ALL_STATUSES) params.delete('status');
+      if (next.status === ACTIVE_STATUSES) params.delete('status');
       else params.set('status', next.status);
       if (next.archive === 'active') params.delete('archive');
       else params.set('archive', next.archive);
@@ -809,7 +812,6 @@ export function ProjectTasks() {
       order={TASK_STATUSES}
       selectedTaskId={selectedTask?.id}
       onSelect={handleViewTaskDetails}
-      onCreateTask={handleCreateNewTask}
       onDragEnd={handleDragEnd}
       onArchiveTask={handleArchiveTask}
       onDeleteTask={handleDeleteTask}
