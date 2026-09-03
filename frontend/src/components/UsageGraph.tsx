@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { userApi } from '@/lib/api';
+import type { UsageStatsResponse } from 'shared/types';
 
 /**
  * Usage data structure
@@ -26,7 +27,7 @@ export function UsageGraph({ usage }: UsageGraphProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [queryKey, setQueryKey] = useState(0);
 
-  const { data: apiData, isLoading } = useQuery({
+  const { data: apiData, isLoading } = useQuery<UsageStatsResponse>({
     queryKey: ['usageStats', queryKey],
     queryFn: () => userApi.getUsageStats(),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -41,9 +42,9 @@ export function UsageGraph({ usage }: UsageGraphProps) {
     ? usage
     : apiData
       ? {
-          current: (apiData as any).current || 0,
-          limit: (apiData as any).limit || 100,
-          nextReset: new Date((apiData as any).next_reset),
+          current: Number(apiData.current) || 0,
+          limit: Number(apiData.limit) || 100,
+          nextReset: new Date(apiData.next_reset),
         }
       : {
           current: 45,
