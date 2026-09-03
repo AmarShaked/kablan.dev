@@ -338,7 +338,7 @@ export type CurrentUserResponse = { user_id: string, };
 
 export type UsageWindow = { 
 /**
- * Short label, e.g. 'Session', 'Week', 'Week (Sonnet)'.
+ * Short label, e.g. 'Session', 'Week (all models)', 'Week (Opus)'.
  */
 label: string, 
 /**
@@ -346,20 +346,26 @@ label: string,
  */
 percent: number, 
 /**
- * When the window rolls over. None when upstream omits it.
+ * When the window rolls over, in the CLI's own words — 'Sep 7 at 8:59am
+ * (Asia/Jerusalem)'. Kept as text rather than a timestamp so we are never
+ * re-deriving a time from prose; None when the CLI omits it.
  */
-resets_at: string | null, };
+resets: string | null, };
 
 export type UsageResponse = { 
 /**
  * The rolling session window — the one bar the sidebar shows at rest.
- * None when the account reports no session limit.
+ * None when the CLI reports no session limit.
  */
 session: UsageWindow | null, 
 /**
  * Weekly windows, revealed on hover.
  */
-weekly: Array<UsageWindow>, };
+weekly: Array<UsageWindow>, 
+/**
+ * When this reading was taken, so the sidebar can say how old it is.
+ */
+fetched_at: string, };
 
 export type UserSystemInfo = { config: Config, login_status: LoginStatus, environment: Environment, 
 /**

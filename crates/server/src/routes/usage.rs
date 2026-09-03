@@ -1,56 +1,87 @@
-//! Claude subscription usage, read through the Claude Code CLI's own credentials.
+//! Claude subscription usage, read by asking the Claude Code CLI for it.
 //!
-//! The CLI's `/usage` panel fetches `GET /api/oauth/usage` on Anthropic's API with
-//! the user's subscription OAuth token. Kablan has no such token of its own — its
-//! OAuth is for kablan's remote service — so this route borrows the CLI's, which
-//! is why it is deliberately narrow:
+//! The obvious way to get these numbers is the endpoint the CLI's own `/usage`
+//! panel fetches, `GET /api/oauth/usage`. This route deliberately does not do
+//! that, for two reasons found by trying it:
 //!
-//! - The token is read on demand, used for one request, and dropped. It is never
-//!   logged, persisted, or included in a response. It grants full API access, so
-//!   treat any change here as touching a secret.
-//! - `/api/oauth/usage` is an internal endpoint of the CLI, not part of the
-//!   documented public API. It carries no compatibility promise and can change
-//!   shape without notice; `parse_usage` is written to degrade to "no windows"
-//!   rather than fail when fields go missing.
+//! - It needs the user's subscription OAuth token, which grants full API
+//!   access. Borrowing it means reading a secret out of the CLI's credential
+//!   store — or the macOS Keychain — holding it in this process, and owning its
+//!   expiry. A sidebar bar is not worth handling somebody's token.
+//! - The endpoint is internal and its shape has already moved. An earlier
+//!   version of this file read `rate_limits.five_hour`; the live payload has
+//!   `five_hour` at the top level and no `rate_limits` at all, so that parser
+//!   quietly returned "no windows" against the real API.
+//!
+//! So instead we shell out to `claude -p "/usage"`, which is the same panel the
+//! user sees, over a supported surface, with no credential in our hands. The
+//! costs of that choice, and how they are contained:
+//!
+//! - It takes ~4.5s: full Node startup on a 200MB binary, and stripping MCP
+//!   servers does not make it faster (measured — it is the startup, not the
+//!   servers). Hence [`TTL`] and the single-flight lock: a hover, a poll and
+//!   three browser tabs share one spawn.
+//! - It prints prose for humans, so [`parse_usage`] reads English. It takes
+//!   only the percentages as numbers and keeps each reset time as the CLI's own
+//!   literal words, so a wording change upstream costs us a bar rather than
+//!   showing a confidently wrong time. Unrecognised output means "no windows",
+//!   never a zero — an empty bar reads as headroom the user may not have.
 
-use std::{path::PathBuf, time::Duration};
+use std::{
+    process::Stdio,
+    sync::LazyLock,
+    time::{Duration, Instant},
+};
 
-use axum::{Router, response::Json as ResponseJson, routing::get};
+use axum::{Router, extract::Query, response::Json as ResponseJson, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use ts_rs::TS;
-use utils::response::ApiResponse;
+use utils::{response::ApiResponse, shell::resolve_executable_path};
 
 use crate::{DeploymentImpl, error::ApiError};
 
-/// The endpoint the CLI's own usage panel fetches. Auth on this host is checked
-/// before routing — a nonsense path answers 401 just like a bad token — so a
-/// probe cannot confirm this URL; it is taken from the shipping CLI's request.
-const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
+/// How long a reading stays good. The session window moves by a percent or two
+/// a minute under load, and each refresh costs a ~4.5s process spawn.
+const TTL: Duration = Duration::from_secs(60);
 
-/// The CLI gives up after 5s; a sidebar has even less patience.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
+/// Generous next to the ~4.5s we measured, because the failure mode of being
+/// impatient here is a footer that never fills in on a slower machine.
+const CLI_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// One rate-limit window, as the sidebar draws it.
-#[derive(Debug, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct UsageWindow {
-    /// Short label, e.g. 'Session', 'Week', 'Week (Sonnet)'.
+    /// Short label, e.g. 'Session', 'Week (all models)', 'Week (Opus)'.
     pub label: String,
     /// Percentage of the window consumed, 0–100.
     pub percent: f64,
-    /// When the window rolls over. None when upstream omits it.
-    pub resets_at: Option<DateTime<Utc>>,
+    /// When the window rolls over, in the CLI's own words — 'Sep 7 at 8:59am
+    /// (Asia/Jerusalem)'. Kept as text rather than a timestamp so we are never
+    /// re-deriving a time from prose; None when the CLI omits it.
+    pub resets: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct UsageResponse {
     /// The rolling session window — the one bar the sidebar shows at rest.
-    /// None when the account reports no session limit.
+    /// None when the CLI reports no session limit.
     pub session: Option<UsageWindow>,
     /// Weekly windows, revealed on hover.
     pub weekly: Vec<UsageWindow>,
+    /// When this reading was taken, so the sidebar can say how old it is.
+    pub fetched_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UsageParams {
+    /// Set by the footer's refresh button to spend a spawn on a fresh reading
+    /// instead of being handed the cached one.
+    #[serde(default)]
+    refresh: bool,
 }
 
 pub fn router() -> Router<DeploymentImpl> {
@@ -58,443 +89,256 @@ pub fn router() -> Router<DeploymentImpl> {
 }
 
 // ---------------------------------------------------------------------------
-// Upstream shape
+// Parsing
 // ---------------------------------------------------------------------------
 
-/// Every field is optional: this is an undocumented endpoint, and a missing
-/// window should cost us that one bar rather than the whole response.
-#[derive(Debug, Default, Deserialize)]
-struct Upstream {
-    #[serde(default)]
-    rate_limits: Option<UpstreamRateLimits>,
-    #[serde(default)]
-    subscription_type: Option<String>,
-}
+/// Read one `Current …: N% used · resets …` line, or None for anything else.
+///
+/// The CLI prints a paragraph of prose around these lines and a usage breakdown
+/// below them; this recognises the shape rather than the specific windows, so a
+/// plan with windows we have never seen still gets its bars.
+fn parse_line(line: &str) -> Option<UsageWindow> {
+    let rest = line.trim().strip_prefix("Current ")?;
+    let (label, rest) = rest.split_once(": ")?;
+    let (percent, rest) = rest.split_once('%')?;
+    let percent: f64 = percent.trim().parse().ok()?;
 
-#[derive(Debug, Default, Deserialize)]
-struct UpstreamRateLimits {
-    #[serde(default)]
-    five_hour: Option<UpstreamLimit>,
-    #[serde(default)]
-    seven_day: Option<UpstreamLimit>,
-    #[serde(default)]
-    seven_day_sonnet: Option<UpstreamLimit>,
-}
+    // 'session' -> 'Session', 'week (all models)' -> 'Week (all models)'.
+    let mut label: String = label.trim().to_string();
+    if let Some(first) = label.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
 
-#[derive(Debug, Default, Deserialize)]
-struct UpstreamLimit {
-    /// Already a percentage (0–100) — the CLI renders it with a plain floor, no
-    /// scaling. Null means the account has no figure for this window.
-    #[serde(default)]
-    utilization: Option<f64>,
-    #[serde(default)]
-    resets_at: Option<DateTime<Utc>>,
-}
-
-fn window(label: &str, limit: Option<UpstreamLimit>) -> Option<UsageWindow> {
-    let limit = limit?;
-    // A null utilization is upstream saying "no figure", not zero — drawing it
-    // as an empty bar would read as plenty of headroom.
-    let percent = limit.utilization?;
     Some(UsageWindow {
-        label: label.to_string(),
+        label,
         percent: percent.clamp(0.0, 100.0),
-        resets_at: limit.resets_at,
+        // Everything after 'resets ' verbatim, including the timezone the CLI
+        // has already resolved for this machine.
+        resets: rest
+            .split_once("resets ")
+            .map(|(_, when)| when.trim().to_string())
+            .filter(|when| !when.is_empty()),
     })
 }
 
-/// Split the upstream payload into the session window and the weekly ones.
+/// Split the CLI's output into the session window and the weekly ones.
 ///
-/// The per-model weekly window only applies to the plans that meter a model
-/// apart, which the CLI keys off `subscription_type` — so an absent or
-/// unrecognised subscription type keeps it, matching the CLI's own default.
-fn parse_usage(upstream: Upstream) -> UsageResponse {
-    let Some(limits) = upstream.rate_limits else {
-        return UsageResponse {
-            session: None,
-            weekly: Vec::new(),
-        };
-    };
-
-    let per_model_weekly = matches!(
-        upstream.subscription_type.as_deref(),
-        Some("max") | Some("team") | None
-    );
-
+/// Windows are sorted by what they are called because that is all the CLI tells
+/// us: 'Current session' is the one that interrupts work, anything 'week' is a
+/// weekly window, and a line we cannot place is dropped rather than guessed at.
+fn parse_usage(stdout: &str, fetched_at: DateTime<Utc>) -> UsageResponse {
+    let mut session = None;
     let mut weekly = Vec::new();
-    if let Some(w) = window("Week", limits.seven_day) {
-        weekly.push(w);
-    }
-    if per_model_weekly && let Some(w) = window("Week (Sonnet)", limits.seven_day_sonnet) {
-        weekly.push(w);
+
+    for window in stdout.lines().filter_map(parse_line) {
+        let kind = window.label.to_ascii_lowercase();
+        if kind.starts_with("session") {
+            // First wins: a second session line would be the CLI having changed
+            // shape, and the first is the one it leads with.
+            session.get_or_insert(window);
+        } else if kind.starts_with("week") {
+            weekly.push(window);
+        }
     }
 
     UsageResponse {
-        session: window("Session", limits.five_hour),
+        session,
         weekly,
+        fetched_at,
     }
 }
 
 // ---------------------------------------------------------------------------
-// Credentials
+// The CLI
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
-struct CredentialsFile {
-    #[serde(rename = "claudeAiOauth")]
-    claude_ai_oauth: Option<OauthCredentials>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OauthCredentials {
-    #[serde(rename = "accessToken")]
-    access_token: Option<String>,
-}
-
-fn credentials_path() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(".claude").join(".credentials.json"))
-}
-
-/// The CLI's own two plaintext credential sources, in its order of preference.
+/// Ask the CLI for its usage panel.
 ///
-/// On macOS the CLI can instead keep these in the Keychain, which this does not
-/// read: the service name could not be established from the CLI binary, and a
-/// guessed one fails silently. Those setups go through the environment variable,
-/// which `claude setup-token` mints — so the errors below name it rather than
-/// leaving an unexplained empty sidebar.
-fn load_token() -> Result<String, ApiError> {
-    if let Ok(token) = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
-        && !token.trim().is_empty()
-    {
-        return Ok(token);
+/// `--strict-mcp-config` with an empty server map is not about speed (it is not
+/// faster); it keeps this from starting the user's MCP servers, so a background
+/// poll cannot trip an auth prompt or a flaky server on its way to reading two
+/// percentages.
+async fn run_cli() -> Result<String, ApiError> {
+    let program = resolve_executable_path("claude").await.ok_or_else(|| {
+        ApiError::BadRequest(
+            "The Claude Code CLI is not on PATH, so its usage cannot be read.".to_string(),
+        )
+    })?;
+
+    let mut command = tokio::process::Command::new(program);
+    command
+        .arg("-p")
+        .arg("/usage")
+        .args(["--output-format", "text"])
+        .arg("--strict-mcp-config")
+        .args(["--mcp-config", r#"{"mcpServers":{}}"#])
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+
+    // Run somewhere neutral: a repo would pull in its CLAUDE.md, its settings
+    // and its trust state, none of which have anything to do with usage.
+    if let Some(home) = dirs::home_dir() {
+        command.current_dir(home);
     }
 
-    let path = credentials_path()
-        .ok_or_else(|| ApiError::BadRequest("Could not locate a home directory".to_string()))?;
+    let output = tokio::time::timeout(CLI_TIMEOUT, command.output())
+        .await
+        .map_err(|_| {
+            ApiError::BadRequest(format!(
+                "The Claude Code CLI did not answer within {}s.",
+                CLI_TIMEOUT.as_secs()
+            ))
+        })?
+        .map_err(|e| ApiError::BadRequest(format!("Could not run the Claude Code CLI: {e}")))?;
 
-    // Deliberately not distinguishing "no file" from "unreadable file": both mean
-    // the same thing to the caller, and the path is the useful part either way.
-    let raw = std::fs::read_to_string(&path).map_err(|_| {
-        ApiError::BadRequest(format!(
-            "No Claude Code credentials at {}. Log in with the Claude Code CLI, \
-             or run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN.",
-            path.display()
-        ))
-    })?;
+    if !output.status.success() {
+        // The CLI puts the reason on stderr — a missing login, a rejected
+        // token — and it is written for a person, so pass it straight through.
+        let reason = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(ApiError::BadRequest(if reason.is_empty() {
+            "The Claude Code CLI could not report usage.".to_string()
+        } else {
+            reason
+        }));
+    }
 
-    let parsed: CredentialsFile = serde_json::from_str(&raw).map_err(|_| {
-        ApiError::BadRequest(format!(
-            "Could not read {} — set CLAUDE_CODE_OAUTH_TOKEN instead.",
-            path.display()
-        ))
-    })?;
-
-    parsed
-        .claude_ai_oauth
-        .and_then(|c| c.access_token)
-        .filter(|t| !t.trim().is_empty())
-        .ok_or_else(|| {
-            ApiError::BadRequest(
-                "Claude Code credentials hold no access token. Log in again with the CLI, \
-                 or run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN."
-                    .to_string(),
-            )
-        })
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 // ---------------------------------------------------------------------------
 // Route
 // ---------------------------------------------------------------------------
 
-async fn get_usage() -> Result<ResponseJson<ApiResponse<UsageResponse>>, ApiError> {
-    let token = load_token()?;
-    let usage = fetch_usage(USAGE_URL, &token).await?;
-    Ok(ResponseJson(ApiResponse::success(usage)))
+struct Cached {
+    at: Instant,
+    value: UsageResponse,
 }
 
-/// Fetch one usage payload and map it to the sidebar's shape.
-///
-/// `url` is a parameter so the tests can stand a local upstream in front of it.
-/// It is deliberately *not* configurable at runtime: an override would be a way
-/// to point a full-access OAuth token at an arbitrary host.
-async fn fetch_usage(url: &str, token: &str) -> Result<UsageResponse, ApiError> {
-    let response = reqwest::Client::new()
-        .get(url)
-        // Bearer, not x-api-key: this is a subscription OAuth token. Headers
-        // deliberately mirror the CLI's own request for this endpoint — notably
-        // no `anthropic-beta`, which it does not send here.
-        .bearer_auth(token)
-        .header("Content-Type", "application/json")
-        .timeout(REQUEST_TIMEOUT)
-        .send()
-        .await
-        .map_err(|e| {
-            // `e` can carry the request URL but never the Authorization header,
-            // so this is safe to surface.
-            ApiError::BadRequest(format!("Could not reach the usage endpoint: {e}"))
-        })?;
+/// One reading for the whole app. Holding this across the spawn is also what
+/// makes the fetch single-flight: a second caller waits on the lock and then
+/// finds the answer already in it, rather than starting a second CLI.
+static CACHE: LazyLock<Mutex<Option<Cached>>> = LazyLock::new(|| Mutex::new(None));
 
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        // The CLI refreshes on 401 and retries; this only reads the token, and
-        // spending the refresh token would mean writing back to the CLI's own
-        // credential store — a race with the CLI over a secret, for a sidebar
-        // bar. Hand the refresh back to the tool that owns it instead.
-        return Err(ApiError::BadRequest(
-            "Claude Code credentials were rejected — they may have expired. \
-             Run any Claude Code command to refresh them, then retry."
-                .to_string(),
-        ));
+async fn get_usage(
+    Query(params): Query<UsageParams>,
+) -> Result<ResponseJson<ApiResponse<UsageResponse>>, ApiError> {
+    let mut cache = CACHE.lock().await;
+
+    if !params.refresh
+        && let Some(cached) = cache.as_ref()
+        && cached.at.elapsed() < TTL
+    {
+        return Ok(ResponseJson(ApiResponse::success(cached.value.clone())));
     }
 
-    if !response.status().is_success() {
-        return Err(ApiError::BadRequest(format!(
-            "Usage endpoint returned {}",
-            response.status()
-        )));
-    }
+    let stdout = run_cli().await?;
+    let value = parse_usage(&stdout, Utc::now());
 
-    let upstream: Upstream = response
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Unexpected usage response: {e}")))?;
+    *cache = Some(Cached {
+        at: Instant::now(),
+        value: value.clone(),
+    });
 
-    Ok(parse_usage(upstream))
+    Ok(ResponseJson(ApiResponse::success(value)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Shaped after the payload the CLI reads: percentages already 0–100,
-    /// RFC 3339 reset stamps, and a per-model weekly window.
-    const PAYLOAD: &str = r#"{
-        "subscription_type": "max",
-        "rate_limits": {
-            "five_hour":        { "utilization": 78.4, "resets_at": "2026-09-03T21:00:00Z" },
-            "seven_day":        { "utilization": 31.2, "resets_at": "2026-09-07T00:00:00Z" },
-            "seven_day_sonnet": { "utilization": 12.0, "resets_at": "2026-09-07T00:00:00Z" }
-        }
-    }"#;
+    /// Captured verbatim from `claude -p "/usage"` — including the breakdown
+    /// below the windows, which is the part most likely to grow lines that look
+    /// almost parseable.
+    const OUTPUT: &str = "You are currently using your subscription to power your Claude Code usage
+
+Current session: 4% used · resets Sep 4 at 2:49am (Asia/Jerusalem)
+Current week (all models): 40% used · resets Sep 7 at 8:59am (Asia/Jerusalem)
+Current week (Fable): 7% used · resets Sep 7 at 8:59am (Asia/Jerusalem)
+
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine.
+
+Last 24h · 1911 requests · 33 sessions
+  74% of your usage was at >150k context
+  Top skills: /superpowers:systematic-debugging 1%
+";
 
     fn parse(raw: &str) -> UsageResponse {
-        parse_usage(serde_json::from_str(raw).expect("fixture parses"))
+        parse_usage(raw, Utc::now())
     }
 
     #[test]
-    fn splits_session_from_weekly() {
-        let got = parse(PAYLOAD);
+    fn reads_the_session_window() {
+        let session = parse(OUTPUT).session.expect("session window");
 
-        let session = got.session.expect("session window");
         assert_eq!(session.label, "Session");
-        // Passed through, not rescaled: upstream is already a percentage.
-        assert_eq!(session.percent, 78.4);
+        assert_eq!(session.percent, 4.0);
+        // The CLI's words, kept whole: it has already worked out the timezone.
         assert_eq!(
-            session.resets_at.map(|d| d.to_rfc3339()),
-            Some("2026-09-03T21:00:00+00:00".to_string())
+            session.resets.as_deref(),
+            Some("Sep 4 at 2:49am (Asia/Jerusalem)")
         );
-
-        let labels: Vec<_> = got.weekly.iter().map(|w| w.label.as_str()).collect();
-        assert_eq!(labels, ["Week", "Week (Sonnet)"]);
     }
 
     #[test]
-    fn hides_per_model_weekly_off_the_plans_that_meter_it() {
-        let raw = PAYLOAD.replace(
-            r#""subscription_type": "max""#,
-            r#""subscription_type": "pro""#,
-        );
-        let labels: Vec<_> = parse(&raw)
-            .weekly
-            .into_iter()
-            .map(|w| w.label)
-            .collect::<Vec<_>>();
-        assert_eq!(labels, ["Week"]);
+    fn keeps_every_weekly_window_in_order() {
+        let weekly = parse(OUTPUT).weekly;
+
+        assert_eq!(weekly.len(), 2);
+        assert_eq!(weekly[0].label, "Week (all models)");
+        assert_eq!(weekly[0].percent, 40.0);
+        // A per-model window we have no list of: taken because it is called a
+        // week, not because we recognise the model.
+        assert_eq!(weekly[1].label, "Week (Fable)");
+        assert_eq!(weekly[1].percent, 7.0);
     }
 
     #[test]
-    fn absent_subscription_type_keeps_per_model_weekly() {
-        let raw = PAYLOAD.replace(r#""subscription_type": "max","#, "");
-        assert_eq!(parse(&raw).weekly.len(), 2);
-    }
-
-    #[test]
-    fn null_utilization_drops_the_window_rather_than_reading_as_empty() {
-        let raw = PAYLOAD.replace(r#""utilization": 78.4"#, r#""utilization": null"#);
-        let got = parse(&raw);
-        assert!(got.session.is_none(), "a null figure is not zero usage");
-        // The windows that do have figures still come through.
+    fn ignores_the_prose_and_the_breakdown() {
+        // Nothing from the paragraph, the headings, or the '74% of your usage'
+        // lines should reach a bar.
+        let got = parse(OUTPUT);
         assert_eq!(got.weekly.len(), 2);
+        assert!(got.session.is_some());
     }
 
     #[test]
-    fn tolerates_a_window_losing_its_reset_stamp() {
-        let raw = PAYLOAD.replace(r#", "resets_at": "2026-09-03T21:00:00Z""#, "");
-        let session = parse(&raw).session.expect("session survives");
-        assert_eq!(session.percent, 78.4);
-        assert_eq!(session.resets_at, None);
-    }
+    fn an_api_key_account_has_no_windows() {
+        // What the CLI prints when usage is billed per-token: no windows to
+        // report, so the footer has nothing to draw and hides itself.
+        let got = parse("Your Claude Code usage is billed via the Anthropic API.\n");
 
-    #[test]
-    fn missing_rate_limits_yields_no_windows() {
-        let got = parse(r#"{ "subscription_type": "max" }"#);
-        assert_eq!(
-            got,
-            UsageResponse {
-                session: None,
-                weekly: Vec::new()
-            }
-        );
-    }
-
-    #[test]
-    fn clamps_a_figure_outside_the_scale() {
-        let raw = PAYLOAD.replace(r#""utilization": 78.4"#, r#""utilization": 140.0"#);
-        assert_eq!(parse(&raw).session.expect("session").percent, 100.0);
-    }
-
-    // -----------------------------------------------------------------------
-    // Over real HTTP, against a local stand-in for the upstream. Covers what
-    // the fixture tests above cannot: that the request is actually shaped and
-    // sent as intended, and that each status maps to the right outcome.
-    // -----------------------------------------------------------------------
-
-    use std::sync::{Arc, Mutex};
-
-    use axum::{extract::State, http::HeaderMap, routing::get};
-
-    /// What the stand-in upstream saw, so a test can assert on the request
-    /// rather than only on the response.
-    #[derive(Clone, Default)]
-    struct Seen {
-        authorization: Option<String>,
-        headers: Vec<String>,
-    }
-
-    /// `run.rs` installs a rustls provider for the real server, and reqwest is
-    /// built `-no-provider`; the test harness never runs `run.rs`, so without
-    /// this every client construction panics with "No provider set".
-    fn install_crypto_provider() {
-        static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| {
-            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        });
-    }
-
-    /// Serve `body` with `status` on a loopback port; returns the URL and a
-    /// handle to what the request carried.
-    async fn stand_in(status: u16, body: &'static str) -> (String, Arc<Mutex<Seen>>) {
-        install_crypto_provider();
-        let seen = Arc::new(Mutex::new(Seen::default()));
-
-        let app = axum::Router::new()
-            .route(
-                "/api/oauth/usage",
-                get(
-                    async move |State((status, body, seen)): State<(
-                        u16,
-                        &'static str,
-                        Arc<Mutex<Seen>>,
-                    )>,
-                                headers: HeaderMap| {
-                        *seen.lock().expect("lock") = Seen {
-                            authorization: headers
-                                .get("authorization")
-                                .and_then(|v| v.to_str().ok())
-                                .map(str::to_string),
-                            headers: headers.keys().map(|k| k.as_str().to_string()).collect(),
-                        };
-                        (
-                            axum::http::StatusCode::from_u16(status).expect("status"),
-                            [(axum::http::header::CONTENT_TYPE, "application/json")],
-                            body,
-                        )
-                    },
-                ),
-            )
-            .with_state((status, body, Arc::clone(&seen)));
-
-        // Port 0: let the OS pick, so concurrent tests never collide.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind loopback");
-        let addr = listener.local_addr().expect("addr");
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, app).await;
-        });
-
-        (format!("http://{addr}/api/oauth/usage"), seen)
-    }
-
-    #[tokio::test]
-    async fn fetches_and_maps_a_live_payload() {
-        let (url, seen) = stand_in(200, PAYLOAD).await;
-
-        let got = fetch_usage(&url, "test-token").await.expect("fetch");
-
-        let session = got.session.expect("session window");
-        assert_eq!(session.label, "Session");
-        assert_eq!(session.percent, 78.4);
-        let labels: Vec<_> = got.weekly.iter().map(|w| w.label.as_str()).collect();
-        assert_eq!(labels, ["Week", "Week (Sonnet)"]);
-
-        // The token rides as a bearer credential, and no anthropic-beta header
-        // goes out — the CLI sends none for this endpoint.
-        let seen = seen.lock().expect("lock").clone();
-        assert_eq!(seen.authorization.as_deref(), Some("Bearer test-token"));
-        assert!(
-            !seen.headers.iter().any(|h| h == "anthropic-beta"),
-            "unexpected anthropic-beta header: {:?}",
-            seen.headers
-        );
-    }
-
-    #[tokio::test]
-    async fn a_401_asks_for_a_refresh_rather_than_reporting_a_shape_problem() {
-        let (url, _) = stand_in(401, r#"{"error":"nope"}"#).await;
-
-        let err = fetch_usage(&url, "stale-token")
-            .await
-            .expect_err("401 is an error");
-
-        let msg = err.to_string();
-        assert!(msg.contains("expired"), "unhelpful 401 message: {msg}");
-        // The token must not travel in the error text.
-        assert!(!msg.contains("stale-token"), "token leaked: {msg}");
-    }
-
-    #[tokio::test]
-    async fn other_failures_name_the_status() {
-        let (url, _) = stand_in(503, "upstream down").await;
-
-        let msg = fetch_usage(&url, "test-token")
-            .await
-            .expect_err("503 is an error")
-            .to_string();
-        assert!(msg.contains("503"), "status not surfaced: {msg}");
-    }
-
-    #[tokio::test]
-    async fn a_shape_change_is_reported_as_one() {
-        // 200, but nothing resembling the expected body.
-        let (url, _) = stand_in(200, r#"["not","an","object"]"#).await;
-
-        let msg = fetch_usage(&url, "test-token")
-            .await
-            .expect_err("unparseable body is an error")
-            .to_string();
-        assert!(
-            msg.contains("Unexpected usage response"),
-            "shape failure mislabelled: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn an_empty_but_valid_payload_yields_no_windows() {
-        // The degrade-gracefully path, end to end rather than in the parser.
-        let (url, _) = stand_in(200, r#"{"rate_limits":null}"#).await;
-
-        let got = fetch_usage(&url, "test-token").await.expect("fetch");
         assert!(got.session.is_none());
         assert!(got.weekly.is_empty());
+    }
+
+    #[test]
+    fn unrecognised_output_draws_nothing() {
+        // The point of the whole design: when the prose changes we lose the
+        // bars, we do not invent a 0%.
+        let got = parse("Session usage: nearly all of it\n\nCurrent session\n");
+
+        assert!(got.session.is_none());
+        assert!(got.weekly.is_empty());
+    }
+
+    #[test]
+    fn a_window_without_a_reset_time_still_counts() {
+        let session = parse("Current session: 12% used\n")
+            .session
+            .expect("session window");
+
+        assert_eq!(session.percent, 12.0);
+        assert_eq!(session.resets, None);
+    }
+
+    #[test]
+    fn percentages_are_clamped() {
+        let session = parse("Current session: 140% used · resets soon\n")
+            .session
+            .expect("session window");
+
+        assert_eq!(session.percent, 100.0);
+        assert_eq!(session.resets.as_deref(), Some("soon"));
     }
 }
