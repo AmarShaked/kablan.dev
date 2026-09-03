@@ -316,11 +316,16 @@ export function TaskFollowUpSection({
   const { entries } = useEntries();
   const hasPendingApproval = useMemo(() => {
     return entries.some((entry) => {
-      if (entry.type !== 'NORMALIZED_ENTRY') return false;
-      const entryType = entry.content.entry_type;
+      if (entry?.type !== 'NORMALIZED_ENTRY') return false;
+      // Optional at every hop, because this runs against whatever the conversation stream has
+      // produced so far. An entry that arrives without an `entry_type` — a partial frame, or a
+      // shape written by an older version — used to throw here during render, and a throw in
+      // render is the whole app: the composer, the conversation and the board all went white.
+      // Whether one entry is awaiting approval is not worth that.
+      const entryType = entry.content?.entry_type;
       return (
-        entryType.type === 'tool_use' &&
-        entryType.status.status === 'pending_approval'
+        entryType?.type === 'tool_use' &&
+        entryType.status?.status === 'pending_approval'
       );
     });
   }, [entries]);
