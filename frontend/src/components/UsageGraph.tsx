@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 interface UsageData {
   current: number;
   limit: number;
-  lastReset: Date;
+  nextReset: Date;
 }
 
 interface UsageGraphProps {
@@ -29,7 +29,7 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
   const data = usage || {
     current: 45,
     limit: 100,
-    lastReset: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+    nextReset: new Date(Date.now() + 23 * 60 * 60 * 1000), // 23 hours from now
   };
 
   const percentage = (data.current / data.limit) * 100;
@@ -43,14 +43,19 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
 
   const formatDate = (date: Date) => {
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = date.getTime() - now.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
+    if (diffDays === 0) {
+      if (diffHours === 1) return 'In 1 hour';
+      if (diffHours < 24) return `In ${diffHours}h`;
+      return 'Today';
+    }
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays < 7) return `In ${diffDays} days`;
+    if (diffDays < 30) return `In ${Math.floor(diffDays / 7)} weeks`;
+    return `In ${Math.floor(diffDays / 30)} months`;
   };
 
   return (
@@ -102,8 +107,8 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
                 <span className="font-medium">{percentage.toFixed(0)}%</span>
               </div>
               <div className="flex justify-between">
-                <span>Last reset:</span>
-                <span className="font-medium">{formatDate(data.lastReset)}</span>
+                <span>Next reset:</span>
+                <span className="font-medium">{formatDate(data.nextReset)}</span>
               </div>
             </div>
           )}
