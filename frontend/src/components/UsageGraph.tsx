@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { userApi } from '@/lib/api';
 
 /**
  * Usage data structure
@@ -13,24 +15,41 @@ interface UsageData {
 
 interface UsageGraphProps {
   usage?: UsageData;
-  onReload?: () => void;
-  isLoading?: boolean;
 }
 
 /**
  * Sidebar usage graph showing current usage with hover details.
- * On hover displays current usage, limit, and last reset date.
+ * On hover displays current usage, limit, and when it resets.
  * Includes a reload button to refresh data.
  */
-export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphProps) {
+export function UsageGraph({ usage }: UsageGraphProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [queryKey, setQueryKey] = useState(0);
 
-  // Mock data if none provided
-  const data = usage || {
-    current: 45,
-    limit: 100,
-    nextReset: new Date(Date.now() + 23 * 60 * 60 * 1000), // 23 hours from now
+  const { data: apiData, isLoading } = useQuery({
+    queryKey: ['usageStats', queryKey],
+    queryFn: () => userApi.getUsageStats(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const handleRefresh = () => {
+    setQueryKey((prev) => prev + 1);
   };
+
+  // Use provided data, API data, or mock fallback
+  const data = usage
+    ? usage
+    : apiData
+      ? {
+          current: (apiData as any).current || 0,
+          limit: (apiData as any).limit || 100,
+          nextReset: new Date((apiData as any).next_reset),
+        }
+      : {
+          current: 45,
+          limit: 100,
+          nextReset: new Date(Date.now() + 23 * 60 * 60 * 1000), // 23 hours from now
+        };
 
   const percentage = (data.current / data.limit) * 100;
 
@@ -71,7 +90,7 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
             Usage
           </span>
           <button
-            onClick={onReload}
+            onClick={handleRefresh}
             disabled={isLoading}
             className={cn(
               'p-1 rounded hover:bg-sidebar-accent transition-colors',

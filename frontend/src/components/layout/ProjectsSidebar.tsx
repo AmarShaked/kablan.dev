@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
@@ -60,9 +59,6 @@ export function ProjectsSidebar() {
     refetchInterval: 30_000,
   });
 
-  const [usageKey, setUsageKey] = React.useState(0);
-  const [isLoadingUsage, setIsLoadingUsage] = React.useState(false);
-
   const activeId = location.pathname.match(/^\/local-projects\/([^/]+)/)?.[1];
   const isArchiveView =
     location.pathname === '/tasks' &&
@@ -82,14 +78,6 @@ export function ProjectsSidebar() {
       // Non-fatal: the theme still changed for this session.
       console.error('Failed to persist theme preference:', err);
     }
-  };
-
-  const handleReloadUsage = async () => {
-    setIsLoadingUsage(true);
-    // Simulate loading delay for visual feedback
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setUsageKey((prev) => prev + 1);
-    setIsLoadingUsage(false);
   };
 
   return (
@@ -233,7 +221,7 @@ export function ProjectsSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <UsageGraph key={usageKey} onReload={handleReloadUsage} isLoading={isLoadingUsage} />
+        <UsageGraph />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={toggleTheme} tooltip="Theme">
