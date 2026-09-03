@@ -76,7 +76,7 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
             className={cn(
               'p-1 rounded hover:bg-sidebar-accent transition-colors',
               'group-data-[collapsible=icon]:p-0',
-              isLoading && 'opacity-50 cursor-not-allowed'
+              isLoading && 'cursor-not-allowed'
             )}
             title="Refresh usage data"
             aria-label="Refresh usage"
