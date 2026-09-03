@@ -14,7 +14,6 @@ import { BuildBadges } from '@/components/layout/BuildBadges';
 import { useTheme } from '@/components/ThemeProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { getActualTheme } from '@/utils/theme';
-import { UsageGraph } from '@/components/UsageGraph';
 import {
   Sidebar,
   SidebarContent,
@@ -221,8 +220,6 @@ export function ProjectsSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        {/* Owns its own fetch — the footer is the only thing that wants it. */}
-        <UsageGraph />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={toggleTheme} tooltip="Theme">

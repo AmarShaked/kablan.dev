@@ -18,6 +18,7 @@ import {
   ProjectSettings,
   ReposSettings,
   SettingsLayout,
+  UsageSettings,
 } from '@/pages/settings/';
 import { UserSystemProvider } from '@/components/ConfigProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
@@ -147,6 +148,7 @@ function AppContent() {
                 <Route path="repos" element={<ReposSettings />} />
                 <Route path="agents" element={<AgentSettings />} />
                 <Route path="mcp" element={<McpSettings />} />
+                <Route path="usage" element={<UsageSettings />} />
               </Route>
               <Route
                 path="/mcp-servers"

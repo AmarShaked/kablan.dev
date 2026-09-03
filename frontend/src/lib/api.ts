@@ -929,8 +929,14 @@ export const fileSystemApi = {
 
 // Claude subscription usage, read via the local Claude Code CLI credentials.
 export const usageApi = {
-  get: async (): Promise<UsageResponse> => {
-    const response = await makeRequest('/api/usage');
+  /**
+   * `refresh` spends a fresh CLI run instead of taking the backend's cached
+   * reading — what the footer's refresh button is for.
+   */
+  get: async (refresh = false): Promise<UsageResponse> => {
+    const response = await makeRequest(
+      `/api/usage${refresh ? '?refresh=true' : ''}`
+    );
     return handleApiResponse<UsageResponse>(response);
   },
 };
