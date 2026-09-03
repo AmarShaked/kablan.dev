@@ -6,6 +6,15 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["run", "frontend:dev"],
       "port": 5310
+    },
+    {
+      "name": "kablan",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "export FRONTEND_PORT=5310 BACKEND_PORT=5312 VK_ALLOWED_ORIGINS=http://localhost:5310 && npx --yes concurrently -k -n api,web 'cargo run --bin server' 'pnpm run frontend:dev'"
+      ],
+      "port": 5310
     }
   ]
 }
