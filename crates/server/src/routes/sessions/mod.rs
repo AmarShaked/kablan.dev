@@ -90,6 +90,15 @@ pub struct CreateFollowUpAttempt {
     pub retry_process_id: Option<Uuid>,
     pub force_when_dirty: Option<bool>,
     pub perform_git_reset: Option<bool>,
+    /// Start the agent on a clean conversation instead of resuming the existing one.
+    ///
+    /// An agent re-sends its whole history on every tool call, so a task worked on for hours
+    /// pays for all of it to do anything further. This is the equivalent of `/clear`: the
+    /// worktree, its branch and its changes all stay exactly as they are, and only the agent's
+    /// memory of the conversation goes. It has to be asked for explicitly, because the agent
+    /// will no longer know what it already tried.
+    #[serde(default)]
+    pub clear_context: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -166,7 +175,12 @@ pub async fn follow_up(
         .filter(|dir| !dir.is_empty())
         .cloned();
 
-    let action_type = if let Some(info) = latest_session_info {
+    // Clearing means not resuming: without a session id the executor starts a fresh
+    // conversation in the same working directory, which is the whole point — the files stay,
+    // the history goes.
+    let clear_context = payload.clear_context.unwrap_or(false);
+
+    let action_type = if let Some(info) = latest_session_info.filter(|_| !clear_context) {
         let is_reset = payload.retry_process_id.is_some();
         ExecutorActionType::CodingAgentFollowUpRequest(CodingAgentFollowUpRequest {
             prompt: prompt.clone(),

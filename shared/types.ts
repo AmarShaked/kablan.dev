@@ -356,7 +356,17 @@ export type CheckAgentAvailabilityQuery = { executor: BaseCodingAgent, };
 
 export type CurrentUserResponse = { user_id: string, };
 
-export type CreateFollowUpAttempt = { prompt: string, executor_profile_id: ExecutorProfileId, retry_process_id: string | null, force_when_dirty: boolean | null, perform_git_reset: boolean | null, };
+export type CreateFollowUpAttempt = { prompt: string, executor_profile_id: ExecutorProfileId, retry_process_id: string | null, force_when_dirty: boolean | null, perform_git_reset: boolean | null, 
+/**
+ * Start the agent on a clean conversation instead of resuming the existing one.
+ *
+ * An agent re-sends its whole history on every tool call, so a task worked on for hours
+ * pays for all of it to do anything further. This is the equivalent of `/clear`: the
+ * worktree, its branch and its changes all stay exactly as they are, and only the agent's
+ * memory of the conversation goes. It has to be asked for explicitly, because the agent
+ * will no longer know what it already tried.
+ */
+clear_context: boolean | null, };
 
 export type ResetProcessRequest = { process_id: string, force_when_dirty: boolean | null, perform_git_reset: boolean | null, };
 

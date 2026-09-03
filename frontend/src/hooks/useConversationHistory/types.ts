@@ -1,3 +1,4 @@
+import type { TokenUsageInfo } from 'shared/types';
 import { ExecutorAction, PatchType, Workspace } from 'shared/types';
 
 export type PatchTypeWithKey = PatchType & {
@@ -97,6 +98,14 @@ export type ExecutionProcessStateStore = Record<string, ExecutionProcessState>;
 export interface UseConversationHistoryParams {
   attempt: Workspace;
   onEntriesUpdated: OnEntriesUpdated;
+  /**
+   * The agent's own report of how much context it is carrying, when it sends one.
+   *
+   * These entries are stripped from the conversation before it is rendered — a token count is
+   * not a message — but the number is the only thing that says what the next turn will cost,
+   * so it is handed to the caller instead of dropped.
+   */
+  onTokenUsage?: (info: TokenUsageInfo | null) => void;
 }
 
 export interface UseConversationHistoryResult {}

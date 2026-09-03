@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Clock,
   X,
+  Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useReview } from '@/contexts/ReviewProvider';
 import { useClickedElements } from '@/contexts/ClickedElementsProvider';
 import { useEntries } from '@/contexts/EntriesContext';
+import { contextIsHeavy } from '@/components/tasks/ContextMeter';
 import { useKeySubmitFollowUp, Scope } from '@/keyboard';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { useProject } from '@/contexts/ProjectContext';
@@ -313,7 +315,7 @@ export function TaskFollowUpSection({
     isQueued && queuedMessage ? queuedMessage.data.message : localMessage;
 
   // Check if there's a pending approval - users shouldn't be able to type during approvals
-  const { entries } = useEntries();
+  const { entries, tokenUsageInfo } = useEntries();
   const hasPendingApproval = useMemo(() => {
     return entries.some((entry) => {
       if (entry?.type !== 'NORMALIZED_ENTRY') return false;
@@ -702,6 +704,30 @@ export function TaskFollowUpSection({
           Cancel-queue takes the slot once something is queued, since that is the only thing you
           can usefully do to a queued message from here. */}
       <div className="p-3">
+        {/* The one place the context size is worth interrupting for: right where you are about
+            to spend it. Above the threshold, sending costs several times what the same message
+            costs on a fresh session, and the only thing that changes that is clearing. */}
+        {contextIsHeavy(tokenUsageInfo) && !isQueued && (
+          <div className="mb-2 flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            <Gauge className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            <span className="min-w-0 flex-1">
+              This task is carrying{' '}
+              <span className="font-medium tabular-nums">
+                {tokenUsageInfo!.total_tokens.toLocaleString()}
+              </span>{' '}
+              tokens of context. Every further turn pays for all of it.
+            </span>
+            <button
+              type="button"
+              onClick={() => onSendFollowUp({ clearContext: true })}
+              disabled={!canSendFollowUp || isSendingFollowUp}
+              title="Send this message on a fresh conversation. Your branch, worktree and changes stay; the agent forgets what was said."
+              className="shrink-0 rounded-md border border-warning/50 px-2 py-0.5 font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
+            >
+              Send cleared
+            </button>
+          </div>
+        )}
         <div
           className={cn(
             'rounded-3xl border border-input bg-background px-4 py-3 transition-shadow',
@@ -778,7 +804,7 @@ export function TaskFollowUpSection({
 
               const action = !isAttemptRunning
                 ? {
-                    onClick: onSendFollowUp,
+                    onClick: () => onSendFollowUp(),
                     disabled: !canSendFollowUp || !isEditable,
                     label: conflictResolutionInstructions
                       ? t('followUp.resolveConflicts')

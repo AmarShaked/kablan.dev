@@ -88,7 +88,7 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
   const [channelData, setChannelData] =
     useState<DataWithScrollModifier<DisplayEntry> | null>(null);
   const [loading, setLoading] = useState(true);
-  const { setEntries, reset } = useEntries();
+  const { setEntries, setTokenUsageInfo, reset } = useEntries();
 
   useEffect(() => {
     setLoading(true);
@@ -120,7 +120,11 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
     }
   };
 
-  useConversationHistory({ attempt, onEntriesUpdated });
+  useConversationHistory({
+    attempt,
+    onEntriesUpdated,
+    onTokenUsage: setTokenUsageInfo,
+  });
 
   const messageListRef = useRef<VirtuosoMessageListMethods | null>(null);
   const messageListContext = useMemo(

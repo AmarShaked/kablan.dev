@@ -1,3 +1,4 @@
+import type { TokenUsageInfo } from 'shared/types';
 import {
   CommandExitStatus,
   ExecutionProcess,
@@ -27,6 +28,7 @@ import {
 export const useConversationHistoryOld = ({
   attempt,
   onEntriesUpdated,
+  onTokenUsage,
 }: UseConversationHistoryParams): UseConversationHistoryResult => {
   const { executionProcessesVisible: executionProcessesRaw } =
     useExecutionProcessesContext();
@@ -35,6 +37,10 @@ export const useConversationHistoryOld = ({
   const loadedInitialEntries = useRef(false);
   const streamingProcessIdsRef = useRef<Set<string>>(new Set());
   const onEntriesUpdatedRef = useRef<OnEntriesUpdated | null>(null);
+  const onTokenUsageRef =
+    useRef<UseConversationHistoryParams['onTokenUsage']>(undefined);
+  /** The last context report the agent sent, kept because the entries carrying it are dropped. */
+  const latestTokenUsageRef = useRef<TokenUsageInfo | null>(null);
 
   const mergeIntoDisplayed = (
     mutator: (state: ExecutionProcessStateStore) => void
@@ -44,6 +50,7 @@ export const useConversationHistoryOld = ({
   };
   useEffect(() => {
     onEntriesUpdatedRef.current = onEntriesUpdated;
+    onTokenUsageRef.current = onTokenUsage;
   }, [onEntriesUpdated]);
 
   // Keep executionProcesses up to date
@@ -185,6 +192,21 @@ export const useConversationHistoryOld = ({
               'user'
             );
             entries.push(userPatchTypeWithKey);
+
+            // The agent reports its context size as an entry; keep the last one before the
+            // entries carrying it are dropped, so something can say what the next turn costs.
+            for (const e of p.entries) {
+              if (
+                e.type === 'NORMALIZED_ENTRY' &&
+                e.content.entry_type.type === 'token_usage_info'
+              ) {
+                latestTokenUsageRef.current = {
+                  total_tokens: e.content.entry_type.total_tokens,
+                  model_context_window:
+                    e.content.entry_type.model_context_window,
+                };
+              }
+            }
 
             // Remove user messages (replaced with custom one) and token usage info (displayed separately)
             const filteredEntries = p.entries.filter(
@@ -377,6 +399,7 @@ export const useConversationHistoryOld = ({
       }
 
       onEntriesUpdatedRef.current?.(entries, modifiedAddEntryType, loading);
+      onTokenUsageRef.current?.(latestTokenUsageRef.current);
     },
     [flattenEntriesForEmit]
   );
