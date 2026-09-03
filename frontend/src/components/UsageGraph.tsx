@@ -98,12 +98,6 @@ export function UsageGraph({ usage, onReload, isLoading = false }: UsageGraphPro
           {showDetails && (
             <div className="text-xs text-sidebar-foreground/70 space-y-0.5 animate-in fade-in duration-150">
               <div className="flex justify-between">
-                <span>Usage:</span>
-                <span className="font-medium">
-                  {data.current} / {data.limit}
-                </span>
-              </div>
-              <div className="flex justify-between">
                 <span>Percentage:</span>
                 <span className="font-medium">{percentage.toFixed(0)}%</span>
               </div>
