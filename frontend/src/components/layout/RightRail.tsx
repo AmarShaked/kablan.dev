@@ -77,7 +77,7 @@ export function RightRail() {
     <TooltipProvider>
       <aside
         aria-label="Project actions"
-        className="flex w-14 shrink-0 flex-col items-center gap-2 border-l border-border bg-muted/30 py-3"
+        className="flex w-14 shrink-0 flex-col items-center gap-2 bg-muted/30 py-3"
       >
         <RailButton
           label="New task"
