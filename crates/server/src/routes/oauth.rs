@@ -33,6 +33,15 @@ pub struct CurrentUserResponse {
     pub user_id: String,
 }
 
+/// Response from GET /api/user/usage - returns usage statistics
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct UsageStatsResponse {
+    pub current: i64,
+    pub limit: i64,
+    pub next_reset: DateTime<Utc>,
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/auth/handoff/init", post(handoff_init))
@@ -41,6 +50,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/auth/status", get(status))
         .route("/auth/token", get(get_token))
         .route("/auth/user", get(get_current_user))
+        .route("/user/usage", get(get_usage_stats))
 }
 
 #[derive(Debug, Deserialize)]
@@ -240,6 +250,25 @@ async fn get_current_user(
 
     Ok(ResponseJson(ApiResponse::success(CurrentUserResponse {
         user_id,
+    })))
+}
+
+async fn get_usage_stats(
+    State(_deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<UsageStatsResponse>>, ApiError> {
+    // TODO: Replace with actual usage tracking from database
+    // For now, return mock data that resets daily
+    let now = Utc::now();
+    let next_reset = (now + chrono::Duration::days(1))
+        .with_hour(0)
+        .and_then(|dt| dt.with_minute(0))
+        .and_then(|dt| dt.with_second(0))
+        .unwrap_or_else(|| now + chrono::Duration::days(1));
+
+    Ok(ResponseJson(ApiResponse::success(UsageStatsResponse {
+        current: 45,
+        limit: 100,
+        next_reset,
     })))
 }
 
