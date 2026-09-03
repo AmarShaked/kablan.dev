@@ -11,9 +11,28 @@
           "plan": true
         }
       },
-      "OPUS": {
+      "FABLE_5_1": {
         "CLAUDE_CODE": {
-          "model": "opus"
+          "dangerously_skip_permissions": true,
+          "model": "claude-fable-5-1"
+        }
+      },
+      "OPUS_5": {
+        "CLAUDE_CODE": {
+          "dangerously_skip_permissions": true,
+          "model": "claude-opus-5"
+        }
+      },
+      "SONNET_5": {
+        "CLAUDE_CODE": {
+          "dangerously_skip_permissions": true,
+          "model": "claude-sonnet-5"
+        }
+      },
+      "HAIKU_4_5": {
+        "CLAUDE_CODE": {
+          "dangerously_skip_permissions": true,
+          "model": "claude-haiku-4-5-20251001"
         }
       },
       "APPROVALS": {

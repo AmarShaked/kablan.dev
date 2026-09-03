@@ -34,7 +34,7 @@ import type { ExecutorConfig, Tag } from 'shared/types';
  */
 const MODEL_FAMILIES = ['opus', 'sonnet', 'haiku', 'fable'] as const;
 
-function modelLabel(model: string): string {
+export function modelLabel(model: string): string {
   const family = MODEL_FAMILIES.find((f) => model === f);
   if (family)
     return `Claude ${family.charAt(0).toUpperCase()}${family.slice(1)}`;
