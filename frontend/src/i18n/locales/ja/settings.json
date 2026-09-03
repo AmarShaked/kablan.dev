@@ -22,6 +22,8 @@
         "agentsDesc": "コーディングエージェントの設定",
         "mcp": "MCPサーバー",
         "mcpDesc": "モデルコンテキストプロトコルサーバー",
+        "usage": "使用量",
+        "usageDesc": "Claude サブスクリプションの上限",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "プロジェクト",
@@ -374,6 +376,10 @@
         "loading": "現在のMCPサーバー設定を読み込み中...",
         "unsavedChanges": "• 未保存の変更があります"
       }
+    },
+    "usage": {
+      "title": "Claude の使用量",
+      "description": "Claude サブスクリプションの使用量の上限です。このページを開いたときに Claude Code CLI から読み取ります。"
     },
     "projects": {
       "title": "プロジェクト設定",

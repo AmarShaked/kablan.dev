@@ -22,6 +22,8 @@
         "agentsDesc": "编码代理配置",
         "mcp": "MCP 服务器",
         "mcpDesc": "模型上下文协议服务器",
+        "usage": "用量",
+        "usageDesc": "Claude 订阅额度",
         "organizations": "组织设置",
         "organizationsDesc": "管理组织成员和权限",
         "remote-projects": "项目",
@@ -374,6 +376,10 @@
         "loading": "加载当前 MCP 服务器配置...",
         "unsavedChanges": "• 您有未保存的更改"
       }
+    },
+    "usage": {
+      "title": "Claude 用量",
+      "description": "你的 Claude 订阅用量额度，在打开此页面时从 Claude Code CLI 读取。"
     },
     "projects": {
       "title": "项目配置",

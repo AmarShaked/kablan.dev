@@ -22,6 +22,8 @@
         "agentsDesc": "Configurations des agents de codage",
         "mcp": "Serveurs MCP",
         "mcpDesc": "Serveurs Model Context Protocol",
+        "usage": "Utilisation",
+        "usageDesc": "Limites de l'abonnement Claude",
         "organizations": "Paramètres de l'organisation",
         "organizationsDesc": "Gérer les membres et les permissions de l'organisation",
         "remote-projects": "Projets",
@@ -374,6 +376,10 @@
         "loading": "Chargement de la configuration actuelle des serveurs MCP...",
         "unsavedChanges": "• Vous avez des modifications non enregistrées"
       }
+    },
+    "usage": {
+      "title": "Utilisation de Claude",
+      "description": "Les limites d'utilisation de votre abonnement Claude, lues depuis la CLI Claude Code à l'ouverture de cette page."
     },
     "projects": {
       "title": "Configuration du projet",

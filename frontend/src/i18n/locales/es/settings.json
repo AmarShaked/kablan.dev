@@ -22,6 +22,8 @@
         "agentsDesc": "Configuraciones de agentes",
         "mcp": "Servidores MCP",
         "mcpDesc": "Servidores de Protocolo de Contexto de Modelo (MCP)",
+        "usage": "Uso",
+        "usageDesc": "Límites de la suscripción de Claude",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "Proyectos",
@@ -374,6 +376,10 @@
         "loading": "Cargando configuración actual del servidor MCP...",
         "unsavedChanges": "• Tienes cambios sin guardar"
       }
+    },
+    "usage": {
+      "title": "Uso de Claude",
+      "description": "Los límites de uso de tu suscripción de Claude, leídos desde la CLI de Claude Code al abrir esta página."
     },
     "projects": {
       "title": "Configuración de Proyectos",
