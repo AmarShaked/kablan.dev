@@ -12,7 +12,11 @@ export function NormalLayout() {
       style={{ '--sidebar-width': '15rem' } as CSSProperties}
     >
       <ProjectsSidebar />
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+      {/* `!mr-0` because the inset variant adds an 8px margin all round, and on the right that
+          margin sits between the page and the rail — so the rail's buttons read as off-centre
+          against a channel wider on one side than the other. Important, because `cn()` has
+          tailwind-merge disabled and would otherwise keep both this and the variant's `m-2`. */}
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden !mr-0">
         <ProjectHeader />
         <div className="min-h-0 flex-1 overflow-auto">
           <Outlet />
