@@ -241,6 +241,36 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   const isDirty = useStore(form.store, (state) => state.isDirty);
   const canSubmit = useStore(form.store, (state) => state.canSubmit);
 
+  // Branches arrive late — from the sidebar, not until a project has been picked, which is
+  // usually after the first keystroke. TanStack Form re-applies `defaultValues` only while the
+  // form is untouched, so by then the seeded branches never land: the form fails its own
+  // "need branch for all repos" rule and Create stays disabled with a branch on screen and no
+  // hint of what is missing. Put them into the field ourselves instead, keeping whatever branch
+  // the user has already picked for a repo that is still in play.
+  //
+  // `dontUpdateMeta`/`dontValidate` keep this a seed rather than an edit: it must not mark the
+  // form dirty (that would raise "discard unsaved changes?" over a form nobody typed in) or
+  // touched (that is what tells the onMount validator the user has started). The explicit
+  // `validate` is what refreshes `canSubmit` afterwards.
+  const seededBranches = useRef<string | null>(null);
+  useEffect(() => {
+    const key = defaultRepoBranches
+      .map((b) => `${b.repoId}@${b.branch}`)
+      .join();
+    if (key === seededBranches.current) return;
+    seededBranches.current = key;
+    form.setFieldValue(
+      'repoBranches',
+      (current) =>
+        defaultRepoBranches.map((fallback) => {
+          const chosen = current.find((c) => c.repoId === fallback.repoId);
+          return chosen?.branch ? chosen : fallback;
+        }),
+      { dontUpdateMeta: true, dontValidate: true }
+    );
+    form.validate('change');
+  }, [defaultRepoBranches, form]);
+
   // Load images for edit mode
   useEffect(() => {
     if (!taskImages) return;
@@ -399,8 +429,12 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
     when: () => modal.visible && showDiscardWarning,
   });
 
-  const loading = branchesLoading || userSystemLoading;
-  if (loading) return <></>;
+  // Only the executor profile has to be known before the form is worth showing. Branches are not
+  // waited for here: picking a project starts fetching them, and returning nothing would rip an
+  // open Radix dialog out of the DOM mid-life. Radix leaves `pointer-events: none` on <body> when
+  // that happens, so after the dialog is closed the whole app stops responding to clicks — the
+  // "New task" button included. The branch picker says it is loading on its own.
+  if (userSystemLoading) return <></>;
 
   return (
     <>
