@@ -336,8 +336,6 @@ export type TokenResponse = { access_token: string, expires_at: string | null, }
 
 export type CurrentUserResponse = { user_id: string, };
 
-export type UsageStatsResponse = { current: bigint, limit: bigint, next_reset: string, };
-
 export type UserSystemInfo = { config: Config, login_status: LoginStatus, environment: Environment, 
 /**
  * Capabilities supported per executor (e.g., { "CLAUDE_CODE": ["SESSION_FORK"] })

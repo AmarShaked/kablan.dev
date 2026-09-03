@@ -926,14 +926,6 @@ export const fileSystemApi = {
   },
 };
 
-// User APIs
-export const userApi = {
-  getUsageStats: async () => {
-    const response = await makeRequest('/api/user/usage');
-    return handleApiResponse(response);
-  },
-};
-
 // Repo APIs
 export const projectStatsApi = {
   /** Projects plus task counts — one query, so the list doesn't fan out per project. */

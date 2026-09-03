@@ -1,104 +1,119 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { userApi } from '@/lib/api';
-import type { UsageStatsResponse } from 'shared/types';
 
 /**
- * Usage data structure
+ * One rate-limit window, mirroring what the Claude CLI's `/usage` reports: a
+ * percentage of the window consumed, and the moment the window rolls over.
+ *
+ * `/usage` shows several of these at once rather than a single quota — a rolling
+ * session window plus weekly windows — which is why this is a list and not one
+ * current/limit pair.
  */
-interface UsageData {
-  current: number;
-  limit: number;
-  nextReset: Date;
+export interface UsageWindow {
+  /** Short label, e.g. 'Session', 'Week', 'Week (Opus)'. */
+  label: string;
+  /** 0–100. */
+  percent: number;
+  /** When this window rolls over. */
+  resetsAt: Date;
 }
 
 interface UsageGraphProps {
-  usage?: UsageData;
+  /** Omit to render the placeholder windows below. */
+  windows?: UsageWindow[];
+  onReload?: () => void;
+  isLoading?: boolean;
 }
 
 /**
- * Sidebar usage graph showing current usage with hover details.
- * On hover displays current usage, limit, and when it resets.
- * Includes a reload button to refresh data.
+ * Placeholder standing in for real `/usage` data, which this app cannot reach
+ * yet — see the note in the component doc comment.
  */
-export function UsageGraph({ usage }: UsageGraphProps) {
+const MOCK_WINDOWS: UsageWindow[] = [
+  {
+    label: 'Session',
+    percent: 78,
+    resetsAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+  },
+  {
+    label: 'Week',
+    percent: 31,
+    resetsAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+  },
+  {
+    label: 'Week (Opus)',
+    percent: 12,
+    resetsAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+  },
+];
+
+/** Green under 70%, amber to 90%, red above — the bar says "how close am I". */
+function barColor(percent: number): string {
+  if (percent >= 90) return 'bg-destructive';
+  if (percent >= 70) return 'bg-warning';
+  return 'bg-success';
+}
+
+/**
+ * A window rolling over within a day is a clock time ("3:00 PM"); anything
+ * further out is a weekday ("Thu"), since the hour stops being the useful part.
+ */
+function formatReset(date: Date): string {
+  const msAway = date.getTime() - Date.now();
+  if (msAway <= 0) return 'now';
+  if (msAway < 24 * 60 * 60 * 1000) {
+    return date.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  return date.toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+/**
+ * The rate-limit windows the Claude CLI's `/usage` reports, at the foot of the
+ * sidebar: one thin bar per window, with the numbers on hover.
+ *
+ * Collapsed to bars by default because the point at a glance is "how much
+ * headroom is left", which a bar answers without being read. The labels,
+ * percentages and reset times are what you want once you've noticed a bar is
+ * full, so they wait for the hover.
+ *
+ * NOTE: `windows` is currently unpopulated in the app — these numbers are
+ * placeholders. Real `/usage` data lives on Anthropic's servers behind the
+ * user's Claude subscription credentials, which this app holds no path to (its
+ * own OAuth is for kablan's remote service). Wiring it up needs a data source
+ * decision first; see the sidebar's usage TODO.
+ */
+export function UsageGraph({
+  windows,
+  onReload,
+  isLoading = false,
+}: UsageGraphProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const [queryKey, setQueryKey] = useState(0);
-
-  const { data: apiData, isLoading } = useQuery<UsageStatsResponse>({
-    queryKey: ['usageStats', queryKey],
-    queryFn: () => userApi.getUsageStats(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  const handleRefresh = () => {
-    setQueryKey((prev) => prev + 1);
-  };
-
-  // Use provided data, API data, or mock fallback
-  const data = usage
-    ? usage
-    : apiData
-      ? {
-          current: Number(apiData.current) || 0,
-          limit: Number(apiData.limit) || 100,
-          nextReset: new Date(apiData.next_reset),
-        }
-      : {
-          current: 45,
-          limit: 100,
-          nextReset: new Date(Date.now() + 23 * 60 * 60 * 1000), // 23 hours from now
-        };
-
-  const percentage = (data.current / data.limit) * 100;
-
-  // Determine color based on usage percentage
-  const getColor = () => {
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diffMs = date.getTime() - now.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-    if (diffDays === 0) {
-      if (diffHours === 1) return 'In 1 hour';
-      if (diffHours < 24) return `In ${diffHours}h`;
-      return 'Today';
-    }
-    if (diffDays === 1) return 'Tomorrow';
-    if (diffDays < 7) return `In ${diffDays} days`;
-    if (diffDays < 30) return `In ${Math.floor(diffDays / 7)} weeks`;
-    return `In ${Math.floor(diffDays / 30)} months`;
-  };
+  const data = windows ?? MOCK_WINDOWS;
 
   return (
-    <div className="px-2 py-3 border-t border-sidebar-border">
+    <div className="border-t border-sidebar-border px-2 py-3">
       <div
-        className="space-y-2 cursor-pointer"
+        className="space-y-2"
         onMouseEnter={() => setShowDetails(true)}
         onMouseLeave={() => setShowDetails(false)}
       >
-        {/* Header with title and reload button */}
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
             Usage
           </span>
           <button
-            onClick={handleRefresh}
+            onClick={onReload}
             disabled={isLoading}
             className={cn(
-              'p-1 rounded hover:bg-sidebar-accent transition-colors',
+              'rounded p-1 transition-colors hover:bg-sidebar-accent',
               'group-data-[collapsible=icon]:p-0',
               isLoading && 'cursor-not-allowed'
             )}
-            title="Refresh usage data"
+            title="Refresh usage"
             aria-label="Refresh usage"
           >
             <RotateCcw
@@ -110,28 +125,30 @@ export function UsageGraph({ usage }: UsageGraphProps) {
           </button>
         </div>
 
-        {/* Graph bar */}
-        <div className="group-data-[collapsible=icon]:hidden">
-          <div className="h-1.5 bg-sidebar-accent rounded-full overflow-hidden">
-            <div
-              className={cn('h-full rounded-full transition-all duration-300', getColor())}
-              style={{ width: `${Math.min(percentage, 100)}%` }}
-            />
-          </div>
-
-          {/* Details shown on hover */}
-          {showDetails && (
-            <div className="text-xs text-sidebar-foreground/70 space-y-0.5 mt-1 animate-in fade-in duration-150">
-              <div className="flex justify-between">
-                <span>Percentage:</span>
-                <span className="font-medium">{percentage.toFixed(0)}%</span>
+        <div className="space-y-1.5 group-data-[collapsible=icon]:hidden">
+          {data.map((w) => (
+            <div key={w.label} className="space-y-0.5">
+              {/* The bar alone in the resting state; the row of numbers below
+                  it only exists on hover, so the footer stays quiet. */}
+              <div className="h-1.5 overflow-hidden rounded-full bg-sidebar-accent">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-300',
+                    barColor(w.percent)
+                  )}
+                  style={{ width: `${Math.min(Math.max(w.percent, 0), 100)}%` }}
+                />
               </div>
-              <div className="flex justify-between">
-                <span>Next reset:</span>
-                <span className="font-medium">{formatDate(data.nextReset)}</span>
-              </div>
+              {showDetails && (
+                <div className="flex justify-between gap-2 text-xs text-sidebar-foreground/70 animate-in fade-in duration-150">
+                  <span className="truncate">{w.label}</span>
+                  <span className="shrink-0 font-medium">
+                    {w.percent}% · {formatReset(w.resetsAt)}
+                  </span>
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>
