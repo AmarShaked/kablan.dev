@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { useReview } from '@/contexts/ReviewProvider';
 import { useClickedElements } from '@/contexts/ClickedElementsProvider';
 import { useEntries } from '@/contexts/EntriesContext';
-import { contextIsHeavy } from '@/components/tasks/ContextMeter';
+import { ContextMeter, contextIsHeavy } from '@/components/tasks/ContextMeter';
 import { useKeySubmitFollowUp, Scope } from '@/keyboard';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { useProject } from '@/contexts/ProjectContext';
@@ -778,6 +778,10 @@ export function TaskFollowUpSection({
               onVariantChange={setSelectedVariant}
               disabled={!isEditable}
             />
+
+            {/* Always visible, beside the controls: the context is what the next turn costs, so it
+                belongs on the row you are about to press send on. */}
+            <ContextMeter info={tokenUsageInfo} variant="row" />
 
             <div className="min-w-0 flex-1" />
 

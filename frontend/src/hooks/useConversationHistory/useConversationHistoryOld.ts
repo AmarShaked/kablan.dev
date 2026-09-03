@@ -196,14 +196,15 @@ export const useConversationHistoryOld = ({
             // The agent reports its context size as an entry; keep the last one before the
             // entries carrying it are dropped, so something can say what the next turn costs.
             for (const e of p.entries) {
-              if (
-                e.type === 'NORMALIZED_ENTRY' &&
-                e.content.entry_type.type === 'token_usage_info'
-              ) {
+              // Narrowed and optional at every hop: this list can hold an undefined element or
+              // a partial entry, and a throw here is a throw during render — the whole tree,
+              // not one component. A token count is not worth that.
+              if (e?.type !== 'NORMALIZED_ENTRY') continue;
+              const usage = e.content?.entry_type;
+              if (usage?.type === 'token_usage_info') {
                 latestTokenUsageRef.current = {
-                  total_tokens: e.content.entry_type.total_tokens,
-                  model_context_window:
-                    e.content.entry_type.model_context_window,
+                  total_tokens: usage.total_tokens,
+                  model_context_window: usage.model_context_window,
                 };
               }
             }

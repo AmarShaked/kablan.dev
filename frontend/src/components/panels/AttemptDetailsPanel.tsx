@@ -1,5 +1,3 @@
-import { useEntries } from '@/contexts/EntriesContext';
-import { ContextMeter } from '@/components/tasks/ContextMeter';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -19,7 +17,6 @@ import {
   Square,
   SquareTerminal,
   Wrench,
-  Gauge,
 } from 'lucide-react';
 
 import {
@@ -156,7 +153,6 @@ export function AttemptDetailsPanel({
   const { repos, selectedRepoId } = useAttemptRepo(attempt.id);
   const openInEditor = useOpenInEditor(attempt.id);
   const { fileCount, added, deleted } = useDiffSummary(attempt.id);
-  const { tokenUsageInfo } = useEntries();
   const { data: projectHasDevScript = false } =
     useHasDevServerScript(projectId);
 
@@ -456,14 +452,6 @@ export function AttemptDetailsPanel({
           )}
         </span>
       </Property>
-
-      {/* What the next turn will cost. Every tool call re-sends this, so it is the price of the
-          task, not of the message you are about to type. */}
-      {tokenUsageInfo && (
-        <Property icon={Gauge} label="Context">
-          <ContextMeter info={tokenUsageInfo} />
-        </Property>
-      )}
 
       <div className="mt-2 border-t border-border px-2 pt-2">
         <GitOperations
