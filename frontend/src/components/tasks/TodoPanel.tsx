@@ -20,7 +20,7 @@ function getStatusIcon(status?: string) {
 function TodoPanel() {
   const { t } = useTranslation('tasks');
   const { entries } = useEntries();
-  const { todos } = useTodos(entries);
+  const { todos, hasOutstanding } = useTodos(entries);
   const [isOpen, setIsOpen] = useState(() => {
     const stored = localStorage.getItem(TODO_PANEL_OPEN_KEY);
     return stored === null ? true : stored === 'true';
@@ -30,7 +30,9 @@ function TodoPanel() {
     localStorage.setItem(TODO_PANEL_OPEN_KEY, String(isOpen));
   }, [isOpen]);
 
-  if (!todos || todos.length === 0) return null;
+  // Gone once the list is settled: every item completed or cancelled means the panel is
+  // reporting history, and it sits directly above the composer where the next turn is typed.
+  if (!todos || todos.length === 0 || !hasOutstanding) return null;
 
   return (
     <details

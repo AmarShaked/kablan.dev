@@ -6,6 +6,12 @@ interface UseTodosResult {
   todos: TodoItem[];
   inProgressTodo: TodoItem | null;
   lastUpdated: string | null;
+  /**
+   * Whether any todo is still waiting on the agent. The list is read from the whole
+   * conversation, so a finished one lingers past the turn that wrote it — and past the next
+   * session started in the same workspace. Nothing outstanding means nothing left to track.
+   */
+  hasOutstanding: boolean;
 }
 
 /**
@@ -59,10 +65,17 @@ export const useTodos = (entries: PatchTypeWithKey[]): UseTodosResult => {
         return status === 'in_progress' || status === 'in-progress';
       }) ?? null;
 
+    // Cancelled counts as settled: the agent decided against it, so it is not pending work.
+    const hasOutstanding = latestTodos.some((todo) => {
+      const status = todo.status?.toLowerCase();
+      return status !== 'completed' && status !== 'cancelled';
+    });
+
     return {
       todos: latestTodos,
       inProgressTodo,
       lastUpdated: lastUpdatedTime,
+      hasOutstanding,
     };
   }, [entries]);
 };
