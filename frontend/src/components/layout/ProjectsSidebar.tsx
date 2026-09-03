@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
@@ -58,6 +59,15 @@ export function ProjectsSidebar() {
     // pushes turns at this query — so it asks, at the pace an agent finishes work.
     refetchInterval: 30_000,
   });
+
+  // The usage footer has no data source yet (see UsageGraph), so this only
+  // exercises the button's spinner — it fetches nothing. It exists so the
+  // interaction is reviewable while the real source is still undecided.
+  const [isRefreshingUsage, setIsRefreshingUsage] = useState(false);
+  const refreshUsage = () => {
+    setIsRefreshingUsage(true);
+    window.setTimeout(() => setIsRefreshingUsage(false), 600);
+  };
 
   const activeId = location.pathname.match(/^\/local-projects\/([^/]+)/)?.[1];
   const isArchiveView =
@@ -221,7 +231,7 @@ export function ProjectsSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <UsageGraph />
+        <UsageGraph onReload={refreshUsage} isLoading={isRefreshingUsage} />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={toggleTheme} tooltip="Theme">
