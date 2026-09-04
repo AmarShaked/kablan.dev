@@ -124,6 +124,16 @@ impl ClaudeCode {
             "--include-partial-messages",
             "--replay-user-messages",
             "--disallowedTools=AskUserQuestion",
+            // Moves cwd, env info, memory paths and git status out of the system
+            // prompt and into the first user message. Every attempt runs in its
+            // own worktree, so those sections differ per attempt and used to push
+            // the whole prompt past the shared cache prefix. Measured over three
+            // worktrees each way: cache_creation 11.9k -> 8.1k per spawn, the
+            // difference landing in cache_read instead, for ~27% less per spawn.
+            // Safe with the frozen system prompt: --system-prompt-snapshot is on
+            // by default for the built-in prompt, so these sections were already
+            // recorded once per conversation rather than refreshed per request.
+            "--exclude-dynamic-system-prompt-sections",
         ]);
 
         apply_overrides(builder, &self.cmd)

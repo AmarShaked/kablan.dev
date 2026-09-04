@@ -186,6 +186,9 @@ impl ClaudeCode {
         builder = builder.extend_params([
             "--verbose",
             "--output-format=stream-json",
+            // Same reason as the main spawn: keeps this discovery run's prompt
+            // prefix identical across worktrees so it can be served from cache.
+            "--exclude-dynamic-system-prompt-sections",
             "--max-turns",
             "1",
             "--",
