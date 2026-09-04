@@ -53,7 +53,7 @@ fn base_command(claude_code_router: bool) -> &'static str {
     if claude_code_router {
         "npx -y @musistudio/claude-code-router@1.0.66 code"
     } else {
-        "npx -y @anthropic-ai/claude-code@2.1.32"
+        "npx -y @anthropic-ai/claude-code@2.1.236"
     }
 }
 
@@ -395,6 +395,8 @@ pub enum HistoryStrategy {
 
 /// Default context window for models (used until we get actual value from result)
 const DEFAULT_CLAUDE_CONTEXT_WINDOW: u32 = 200_000;
+/// Window for the `[1m]` model variants, recognised from the model name.
+const CLAUDE_1M_CONTEXT_WINDOW: u32 = 1_000_000;
 
 /// Handles log processing and interpretation for Claude executor
 pub struct ClaudeLogProcessor {
@@ -575,6 +577,9 @@ impl ClaudeLogProcessor {
             ClaudeJson::ControlRequest { .. } => None,
             ClaudeJson::ControlResponse { .. } => None,
             ClaudeJson::ControlCancelRequest { .. } => None,
+            ClaudeJson::ApprovalRequested { .. } => None,
+            ClaudeJson::QuestionResponse { .. } => None,
+            ClaudeJson::RateLimitEvent { session_id, .. } => session_id.clone(),
             ClaudeJson::Unknown { .. } => None,
         }
     }
@@ -881,6 +886,12 @@ impl ClaudeLogProcessor {
                             // this name matches the model names in the usage report in the result message
                             if let Some(model) = model {
                                 self.main_model_name = Some(model.clone());
+                                // The Result message carries the real window, but it
+                                // only arrives at the end of the turn. Until then a 1M
+                                // model would report its usage against the 200k default.
+                                if model.contains("[1m]") {
+                                    self.main_model_context_window = CLAUDE_1M_CONTEXT_WINDOW;
+                                }
                             }
                         }
                         // Skip system init messages because it doesn't contain the actual model that will be used in assistant messages in case of claude-code-router.
@@ -1446,7 +1457,10 @@ impl ClaudeLogProcessor {
             }
             ClaudeJson::ControlRequest { .. }
             | ClaudeJson::ControlResponse { .. }
-            | ClaudeJson::ControlCancelRequest { .. } => {}
+            | ClaudeJson::ControlCancelRequest { .. }
+            | ClaudeJson::ApprovalRequested { .. }
+            | ClaudeJson::QuestionResponse { .. }
+            | ClaudeJson::RateLimitEvent { .. } => {}
         }
         patches
     }
@@ -1715,6 +1729,9 @@ impl StreamingContentState {
             ) => {
                 self.buffer.push_str(thinking);
             }
+            // Closes every thinking block and carries no display content. Without
+            // this arm it lands in `Unknown` and warns once per thinking block.
+            (StreamingContentKind::Thinking, ClaudeContentBlockDelta::SignatureDelta { .. }) => {}
             _ => {
                 tracing::warn!(
                     "Mismatched content types: delta {:?}, kind {:?}",
@@ -1826,6 +1843,35 @@ pub enum ClaudeJson {
     ControlCancelRequest {
         request_id: String,
     },
+    // The three below carry nothing we display. They exist so the CLI's own
+    // bookkeeping messages match a variant instead of falling through to
+    // `Unknown`, which renders itself into the conversation as raw JSON.
+    // Every field is optional on purpose: a shape change upstream should still
+    // land here and be discarded, not resurface as a JSON blob in the task view.
+    ApprovalRequested {
+        #[serde(default)]
+        tool_call_id: Option<String>,
+        #[serde(default)]
+        tool_name: Option<String>,
+        #[serde(default)]
+        approval_id: Option<String>,
+    },
+    QuestionResponse {
+        #[serde(default)]
+        tool_call_id: Option<String>,
+        #[serde(default)]
+        tool_name: Option<String>,
+        #[serde(default)]
+        question_status: Option<serde_json::Value>,
+    },
+    /// Emitted as a subscription window fills up. `rate_limit_info` is not
+    /// modelled: see routes/usage.rs for where these numbers come from today.
+    RateLimitEvent {
+        #[serde(default)]
+        session_id: Option<String>,
+        #[serde(default)]
+        rate_limit_info: Option<serde_json::Value>,
+    },
     // Catch-all for unknown message types
     #[serde(untagged)]
     Unknown {
@@ -1932,6 +1978,8 @@ pub enum ClaudeContentBlockDelta {
     TextDelta { text: String },
     #[serde(rename = "thinking_delta")]
     ThinkingDelta { thinking: String },
+    #[serde(rename = "signature_delta")]
+    SignatureDelta { signature: String },
     #[serde(other)]
     Unknown,
 }
@@ -2202,6 +2250,121 @@ mod tests {
     fn normalize(json: &ClaudeJson, worktree: &str) -> Vec<NormalizedEntry> {
         let mut processor = ClaudeLogProcessor::new();
         normalize_helper(&mut processor, json, worktree)
+    }
+
+    /// The CLI emits these as bookkeeping. They must reach a real variant:
+    /// `Unknown` renders itself into the conversation as raw JSON, so a
+    /// `rate_limit_event` would put a JSON blob in the task view exactly when a
+    /// subscription window fills up.
+    #[test]
+    fn bookkeeping_messages_are_discarded_not_rendered() {
+        let cases = [
+            r#"{"type":"rate_limit_event","session_id":"abc123","rate_limit_info":{"five_hour":{"remaining":12}}}"#,
+            r#"{"type":"approval_requested","tool_call_id":"t1","tool_name":"Bash","approval_id":"a1"}"#,
+            r#"{"type":"question_response","tool_call_id":"t1","tool_name":"AskUserQuestion","question_status":{"status":"answered"}}"#,
+        ];
+
+        for raw in cases {
+            let parsed: ClaudeJson = serde_json::from_str(raw).unwrap();
+            assert!(
+                !matches!(parsed, ClaudeJson::Unknown { .. }),
+                "fell through to Unknown: {raw}"
+            );
+            assert!(
+                normalize(&parsed, "").is_empty(),
+                "rendered an entry: {raw}"
+            );
+        }
+    }
+
+    /// Every field on those variants is optional, so a field the CLI renames or
+    /// drops still lands on the variant instead of reverting to a JSON blob.
+    #[test]
+    fn bookkeeping_messages_tolerate_missing_fields() {
+        for raw in [
+            r#"{"type":"rate_limit_event"}"#,
+            r#"{"type":"approval_requested"}"#,
+            r#"{"type":"question_response"}"#,
+        ] {
+            let parsed: ClaudeJson = serde_json::from_str(raw).unwrap();
+            assert!(
+                !matches!(parsed, ClaudeJson::Unknown { .. }),
+                "fell through to Unknown: {raw}"
+            );
+        }
+    }
+
+    /// The catch-all must keep working for types we genuinely do not know.
+    #[test]
+    fn genuinely_unknown_messages_still_surface() {
+        let parsed: ClaudeJson =
+            serde_json::from_str(r#"{"type":"some_future_thing","x":1}"#).unwrap();
+        assert!(matches!(parsed, ClaudeJson::Unknown { .. }));
+        let entries = normalize(&parsed, "");
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].content.starts_with("Unrecognized JSON message"));
+    }
+
+    #[test]
+    fn rate_limit_event_carries_its_session_id() {
+        let parsed: ClaudeJson =
+            serde_json::from_str(r#"{"type":"rate_limit_event","session_id":"abc123"}"#).unwrap();
+        assert_eq!(
+            ClaudeLogProcessor::extract_session_id(&parsed),
+            Some("abc123".to_string())
+        );
+    }
+
+    /// signature_delta closes every thinking block. Before it had its own arm it
+    /// hit `Unknown` and warned once per block.
+    #[test]
+    fn signature_delta_is_absorbed_by_thinking_blocks() {
+        let parsed: ClaudeContentBlockDelta =
+            serde_json::from_str(r#"{"type":"signature_delta","signature":"deadbeef"}"#).unwrap();
+        assert!(matches!(
+            parsed,
+            ClaudeContentBlockDelta::SignatureDelta { .. }
+        ));
+
+        let mut state = StreamingContentState {
+            kind: StreamingContentKind::Thinking,
+            buffer: "thought so far".to_string(),
+            entry_index: None,
+        };
+        state.apply_content_delta(&parsed);
+        assert_eq!(
+            state.buffer, "thought so far",
+            "signature leaked into buffer"
+        );
+    }
+
+    #[test]
+    fn one_million_context_window_is_set_from_the_model_name() {
+        let init = |model: &str| {
+            format!(r#"{{"type":"system","subtype":"init","session_id":"s","model":"{model}"}}"#)
+        };
+
+        let mut processor = ClaudeLogProcessor::new();
+        normalize_helper(
+            &mut processor,
+            &serde_json::from_str(&init("claude-sonnet-4-5[1m]")).unwrap(),
+            "",
+        );
+        assert_eq!(
+            processor.main_model_context_window,
+            CLAUDE_1M_CONTEXT_WINDOW
+        );
+
+        let mut processor = ClaudeLogProcessor::new();
+        normalize_helper(
+            &mut processor,
+            &serde_json::from_str(&init("claude-sonnet-4-5")).unwrap(),
+            "",
+        );
+        assert_eq!(
+            processor.main_model_context_window,
+            DEFAULT_CLAUDE_CONTEXT_WINDOW
+        );
     }
 
     #[test]
