@@ -4,7 +4,7 @@ name: Deploy landing page
 # Enable once in Settings → Pages → Source: "Deploy from a branch" → gh-pages / root.
 on:
   push:
-    branches: [kablan]
+    branches: [main]
     paths:
       - "landing/**"
       - ".github/workflows/pages.yml"

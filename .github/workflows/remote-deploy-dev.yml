@@ -1,12 +1,8 @@
 name: Remote Deploy Dev
 
+# Automatic runs are disabled: this dispatches to BloopAI/vibe-kanban-remote-deployment
+# (upstream's deploy repo) and needs a REMOTE_DEPLOYMENT_TOKEN this fork does not have.
 on:
-  push:
-    branches:
-      - main 
-    paths:
-      - crates/remote/**
-      - remote-frontend/**
   workflow_dispatch:
 
 jobs:
