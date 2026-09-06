@@ -27,7 +27,7 @@ function firstLine(text?: string | null): string | undefined {
  */
 export function taskActivity(task: TaskWithAttemptStatus): string | undefined {
   if (task.has_in_progress_attempt) return 'Agent is working…';
-  if (task.last_attempt_failed) return 'Attempt failed';
+  if (task.last_attempt_failed) return 'Run failed';
 
   const summary = firstLine(task.last_turn_summary);
   if (summary) return summary;

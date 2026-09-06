@@ -15,7 +15,7 @@ import { statusLabels } from '@/utils/statusLabels';
 /** What the task is doing right now, in preference to a status word the glyph already carries. */
 function activityLine(task: TaskWithAttemptStatus): string {
   if (task.has_in_progress_attempt) return 'Agent is working…';
-  if (task.last_attempt_failed) return 'Last attempt failed';
+  if (task.last_attempt_failed) return 'Last run failed';
   return statusLabels[task.status];
 }
 
@@ -75,7 +75,7 @@ export function TaskSidebarList({
                   {task.has_in_progress_attempt && (
                     <Loader2
                       className="h-3 w-3 shrink-0 animate-spin text-info"
-                      aria-label="Attempt running"
+                      aria-label="Agent running"
                     />
                   )}
                   {task.has_running_dev_server && (

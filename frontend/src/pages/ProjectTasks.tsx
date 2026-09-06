@@ -11,8 +11,7 @@ import { usePostHog } from 'posthog-js/react';
 
 import { useSearch } from '@/contexts/SearchContext';
 import { useProject } from '@/contexts/ProjectContext';
-import { useTaskAttempts } from '@/hooks/useTaskAttempts';
-import { useTaskAttemptWithSession } from '@/hooks/useTaskAttempt';
+import { useTaskWorkspace } from '@/hooks/useTaskWorkspace';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { paths } from '@/lib/paths';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
@@ -64,7 +63,7 @@ import { AttemptDetailsPanel } from '@/components/panels/AttemptDetailsPanel';
 import { DevServerLogsPanel } from '@/components/panels/DevServerLogsPanel';
 import { WorkspaceEnvPanel } from '@/components/panels/WorkspaceEnvPanel';
 import { DiffsPanel } from '@/components/panels/DiffsPanel';
-import TaskAttemptPanel from '@/components/panels/TaskAttemptPanel';
+import TaskRunPanel from '@/components/panels/TaskRunPanel';
 import TaskPanel from '@/components/panels/TaskPanel';
 import TodoPanel from '@/components/tasks/TodoPanel';
 import { NewCard, NewCardHeader } from '@/components/ui/new-card';
@@ -72,7 +71,6 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
-  BreadcrumbLink,
   BreadcrumbPage,
 } from '@/components/ui/breadcrumb';
 import { AttemptHeaderActions } from '@/components/panels/AttemptHeaderActions';
@@ -118,10 +116,9 @@ function DiffsPanelContainer({ attempt }: { attempt: Workspace | null }) {
 
 export function ProjectTasks() {
   const { t } = useTranslation(['tasks', 'common']);
-  const { taskId, attemptId } = useParams<{
+  const { taskId } = useParams<{
     projectId: string;
     taskId?: string;
-    attemptId?: string;
   }>();
   const navigate = useNavigate();
   const { enableScope, disableScope, activeScopes } = useHotkeysContext();
@@ -174,24 +171,6 @@ export function ProjectTasks() {
   // author's personal CDN (vkcdn.britannio.dev), so every user of this fork would have pulled
   // promotional media from them. Removed rather than rebranded.
 
-  const isLatest = attemptId === 'latest';
-  const { data: attempts = [], isLoading: isAttemptsLoading } = useTaskAttempts(
-    taskId,
-    {
-      enabled: !!taskId && isLatest,
-    }
-  );
-
-  const latestAttemptId = useMemo(() => {
-    if (!attempts?.length) return undefined;
-    return [...attempts].sort((a, b) => {
-      const diff =
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (diff !== 0) return diff;
-      return a.id.localeCompare(b.id);
-    })[0].id;
-  }, [attempts]);
-
   const navigateWithSearch = useCallback(
     (pathname: string, options?: { replace?: boolean }) => {
       const search = searchParams.toString();
@@ -201,44 +180,27 @@ export function ProjectTasks() {
   );
 
   useEffect(() => {
-    if (!projectId || !taskId) return;
-    if (!isLatest) return;
-    if (isAttemptsLoading) return;
-
-    if (!latestAttemptId) {
-      navigateWithSearch(paths.task(projectId, taskId), { replace: true });
-      return;
-    }
-
-    navigateWithSearch(paths.attempt(projectId, taskId, latestAttemptId), {
-      replace: true,
-    });
-  }, [
-    projectId,
-    taskId,
-    isLatest,
-    isAttemptsLoading,
-    latestAttemptId,
-    navigate,
-    navigateWithSearch,
-  ]);
-
-  useEffect(() => {
     if (!projectId || !taskId || isLoading) return;
     if (selectedTask === null) {
       navigate(`/local-projects/${projectId}/tasks`, { replace: true });
     }
   }, [projectId, taskId, isLoading, selectedTask, navigate]);
 
-  const effectiveAttemptId = attemptId === 'latest' ? undefined : attemptId;
-  const isTaskView = !!taskId && !effectiveAttemptId;
-  const { data: attempt } = useTaskAttemptWithSession(effectiveAttemptId);
+  // One run per task, so the task id is the whole address: no attempt to choose, nothing to
+  // resolve, and no redirect between "which run" and "the run".
+  const { data: workspace, isLoading: isWorkspaceLoading } =
+    useTaskWorkspace(taskId);
+  const attempt = workspace ?? undefined;
+
+  // Until the task has been started there is no conversation to show, so the panel shows the
+  // task itself and the button that starts it.
+  const isTaskView = !!taskId && !isWorkspaceLoading && !attempt;
 
   const rawMode = searchParams.get('view');
-  // The details column is the default company for an open attempt — you almost always want the
-  // attempt's branch, dev server and git state in sight while the agent works. `view=chat` is
-  // how "I closed the column" is spelled, since the absent param now means the default.
-  const mode: LayoutMode = !effectiveAttemptId
+  // The details column is the default company for a running task — you almost always want the
+  // branch, dev server and git state in sight while the agent works. `view=chat` is how
+  // "I closed the column" is spelled, since the absent param now means the default.
+  const mode: LayoutMode = !attempt
     ? null
     : rawMode === 'diffs' || rawMode === 'logs' || rawMode === 'env'
       ? rawMode
@@ -589,7 +551,7 @@ export function ProjectTasks() {
   }, [projectId, navigate]);
 
   const handleViewTaskDetails = useCallback(
-    (task: Task, attemptIdToShow?: string) => {
+    (task: Task) => {
       if (!projectId) return;
 
       // Opening the task is reading it. Fire and forget: the stream brings the row back without
@@ -606,11 +568,7 @@ export function ProjectTasks() {
           .catch(() => {});
       }
 
-      if (attemptIdToShow) {
-        navigateWithSearch(paths.attempt(projectId, task.id, attemptIdToShow));
-      } else {
-        navigateWithSearch(`${paths.task(projectId, task.id)}/attempts/latest`);
-      }
+      navigateWithSearch(paths.task(projectId, task.id));
     },
     [projectId, navigateWithSearch, queryClient]
   );
@@ -837,7 +795,9 @@ export function ProjectTasks() {
           />
         ) : (
           <AttemptHeaderActions
-            mode={mode}
+            // The pane toggles have nothing to point at until the task is running, so they stay
+            // out of the header rather than appearing as four dead buttons while it loads.
+            mode={attempt ? mode : undefined}
             onModeChange={setMode}
             task={selectedTask}
             attempt={attempt ?? null}
@@ -852,20 +812,9 @@ export function ProjectTasks() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              {isTaskView ? (
-                <BreadcrumbPage>
-                  {truncateTitle(selectedTask?.title)}
-                </BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink
-                  className="cursor-pointer hover:underline"
-                  onClick={() =>
-                    navigateWithSearch(paths.task(projectId!, taskId!))
-                  }
-                >
-                  {truncateTitle(selectedTask?.title)}
-                </BreadcrumbLink>
-              )}
+              <BreadcrumbPage>
+                {truncateTitle(selectedTask?.title)}
+              </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -878,7 +827,7 @@ export function ProjectTasks() {
       {isTaskView ? (
         <TaskPanel task={selectedTask} />
       ) : (
-        <TaskAttemptPanel attempt={attempt} task={selectedTask}>
+        <TaskRunPanel workspace={attempt} task={selectedTask}>
           {({ logs, followUp }) => (
             <>
               <GitErrorBanner />
@@ -922,7 +871,7 @@ export function ProjectTasks() {
               </div>
             </>
           )}
-        </TaskAttemptPanel>
+        </TaskRunPanel>
       )}
     </NewCard>
   ) : (

@@ -37,7 +37,7 @@ export function useTaskMutations(projectId?: string) {
         });
       }
       if (projectId) {
-        navigate(`${paths.task(projectId, createdTask.id)}/attempts/latest`);
+        navigate(paths.task(projectId, createdTask.id));
       }
     },
     onError: (err) => {
@@ -59,7 +59,7 @@ export function useTaskMutations(projectId?: string) {
         });
       }
       if (projectId) {
-        navigate(`${paths.task(projectId, createdTask.id)}/attempts/latest`);
+        navigate(paths.task(projectId, createdTask.id));
       }
     },
     onError: (err) => {

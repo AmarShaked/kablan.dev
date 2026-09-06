@@ -31,7 +31,7 @@ export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
         {server}
         <span
           className="font-ibm-plex-mono inline-flex shrink-0 items-center gap-1 bg-info/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-info"
-          title="An attempt is running for this task"
+          title="The agent is working on this task"
         >
           <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
           Running
@@ -46,7 +46,7 @@ export function TaskActivityBadge({ task }: { task: TaskWithAttemptStatus }) {
         {server}
         <span
           className="font-ibm-plex-mono inline-flex shrink-0 items-center gap-1 bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-destructive"
-          title="The last attempt for this task failed"
+          title="The last run of this task failed"
         >
           <XCircle className="h-3 w-3" aria-hidden />
           Failed

@@ -34,8 +34,6 @@
       "withTarget": "变基到 {{branch}}"
     },
     "dialog": {
-      "title": "变基任务尝试",
-      "description": "选择一个新的基础分支以将此任务尝试变基到其上。",
       "upstreamLabel": "上游分支",
       "upstreamPlaceholder": "选择上游分支",
       "targetLabel": "目标分支",
@@ -52,7 +50,6 @@
     "changeTarget": {
       "dialog": {
         "title": "更改目标分支",
-        "description": "为任务尝试选择新的目标分支。",
         "placeholder": "选择目标分支",
         "action": "更改分支",
         "inProgress": "更改中..."
@@ -179,19 +176,13 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "未选择任务",
-    "loadingAttempts": "加载尝试中...",
-    "errorLoadingAttempts": "加载尝试失败",
-    "attemptsCount": "尝试（{{count}}）",
-    "noAttempts": "还没有尝试"
+    "noTaskSelected": "未选择任务"
   },
   "processes": {
     "noLogsAvailable": "没有可用的日志",
-    "selectAttempt": "选择尝试以查看执行进程。",
     "errorLoadingUpdates": "加载进程的实时更新失败。",
     "reconnecting": "重新连接中...",
     "loading": "加载执行进程中...",
-    "noProcesses": "未找到此尝试的执行进程。",
     "processId": "进程 ID：{{id}}",
     "deleted": "已删除",
     "deletedTooltip": "因恢复而删除：时间轴已恢复到检查点，后续执行已被移除",
@@ -211,7 +202,6 @@
     "deleteTask": "删除任务",
     "closePanel": "关闭面板"
   },
-  "navigateToParent": "导航到父任务尝试",
   "toolbar": {
     "actions": "操作",
     "noAttempts": "还没有尝试",
@@ -286,14 +276,10 @@
     "startDev": "启动开发",
     "viewDevLogs": "查看开发服务器日志",
     "stopping": "停止中...",
-    "stopAttempt": "停止尝试",
-    "newAttempt": "新尝试",
-    "viewHistory": "查看尝试历史",
     "createSubtask": "创建子任务",
     "preview": "预览",
     "diffs": "差异",
     "gitActions": "Git 操作",
-    "tryAgain": "重试",
     "runSetup": "运行设置",
     "setupHelpText": "{{agent}} 未正确设置。点击运行设置以安装并登录。",
     "devScriptMissingTooltip": "要启动开发服务器，请为此项目添加开发脚本"
@@ -388,22 +374,11 @@
       }
     }
   },
-  "createAttemptDialog": {
-    "title": "创建尝试",
-    "description": "使用编码代理开始新的尝试。将创建 git 工作树和任务分支。",
-    "baseBranch": "基础分支",
-    "loadingBranches": "加载分支中...",
-    "selectBranch": "选择分支",
-    "error": "创建尝试失败。请重试。",
-    "creating": "创建中...",
-    "start": "开始"
-  },
   "viewProcessesDialog": {
     "title": "执行进程"
   },
   "viewRelatedTasksDialog": {
     "title": "相关任务",
-    "empty": "此尝试没有相关任务",
     "error": "加载相关任务失败",
     "tasksCount": "任务（{{count}}）",
     "columns": {
@@ -419,11 +394,9 @@
     "tryNewUI": "试用新界面"
   },
   "actionsMenu": {
-    "attempt": "尝试",
     "openInIde": "在 IDE 中打开尝试",
     "viewProcesses": "查看进程",
     "viewRelatedTasks": "查看相关任务",
-    "createNewAttempt": "创建新尝试",
     "createSubtask": "创建子任务",
     "gitActions": "Git 操作",
     "editBranchName": "编辑分支名称",
@@ -480,7 +453,6 @@
   },
   "createPrDialog": {
     "title": "创建拉取请求",
-    "description": "为此任务尝试创建拉取请求。",
     "titleLabel": "标题",
     "titlePlaceholder": "输入 PR 标题",
     "descriptionLabel": "描述（可选）",
@@ -754,5 +726,9 @@
       "repoNotInProject": "仓库不在任何项目中",
       "failedToCreateWorkspace": "创建工作区失败"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "加载分支中...",
+    "selectBranch": "选择分支"
   }
 }

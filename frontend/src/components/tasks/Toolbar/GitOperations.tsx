@@ -321,7 +321,7 @@ function GitOperations({
               : commitsAhead === 0 && !recentlyActed
                 ? t(
                     'git.why.nothingToMerge',
-                    'Nothing to merge — this attempt has made no commits'
+                    'Nothing to merge — this task has made no commits'
                   )
                 : null;
 
@@ -344,7 +344,7 @@ function GitOperations({
         : commitsAhead === 0 && remoteAhead === 0 && !recentlyActed
           ? t(
               'git.why.nothingToPush',
-              'Nothing to push — this attempt has made no commits'
+              'Nothing to push — this task has made no commits'
             )
           : null;
 

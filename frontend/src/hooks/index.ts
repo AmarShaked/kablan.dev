@@ -1,7 +1,7 @@
 export { useBranchStatus } from './useBranchStatus';
 export { useAttemptExecution } from './useAttemptExecution';
 export { useOpenInEditor } from './useOpenInEditor';
-export { useTaskAttempt, useTaskAttemptWithSession } from './useTaskAttempt';
+export { useTaskAttempt } from './useTaskAttempt';
 export { useTaskImages } from './useTaskImages';
 export { useImageUpload } from './useImageUpload';
 export { useTaskMutations } from './useTaskMutations';
@@ -22,7 +22,7 @@ export { useProjectRepos } from './useProjectRepos';
 export { useHasDevServerScript } from './useHasDevServerScript';
 export { useRepoBranchSelection } from './useRepoBranchSelection';
 export type { RepoBranchConfig } from './useRepoBranchSelection';
-export { useTaskAttempts } from './useTaskAttempts';
+export { useTaskWorkspace } from './useTaskWorkspace';
 export { useAuth } from './auth/useAuth';
 export { useAuthMutations } from './auth/useAuthMutations';
 export { useAuthStatus } from './auth/useAuthStatus';

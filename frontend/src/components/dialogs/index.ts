@@ -80,7 +80,6 @@ export {
   EditBranchNameDialog,
   type EditBranchNameDialogResult,
 } from './tasks/EditBranchNameDialog';
-export { CreateAttemptDialog } from './tasks/CreateAttemptDialog';
 export {
   StartReviewDialog,
   type StartReviewDialogProps,

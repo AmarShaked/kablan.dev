@@ -44,8 +44,8 @@
       "withTarget": "Rebase onto {{branch}}"
     },
     "dialog": {
-      "title": "Rebase Task Attempt",
-      "description": "Choose a new base branch to rebase this task attempt onto.",
+      "title": "Rebase Task",
+      "description": "Choose a new base branch to rebase this task onto.",
       "upstreamLabel": "Upstream Branch",
       "upstreamPlaceholder": "Select an upstream branch",
       "targetLabel": "Target Branch",
@@ -62,7 +62,7 @@
     "changeTarget": {
       "dialog": {
         "title": "Change target branch",
-        "description": "Choose a new target branch for the task attempt.",
+        "description": "Choose a new target branch for the task.",
         "placeholder": "Select a target branch",
         "action": "Change Branch",
         "inProgress": "Changing..."
@@ -177,29 +177,31 @@
   },
   "taskPanel": {
     "noTaskSelected": "No task selected",
-    "loadingAttempts": "Loading attempts...",
-    "errorLoadingAttempts": "Failed to load attempts",
-    "attemptsCount": "Attempts ({{count}})",
-    "noAttempts": "No attempts yet",
     "empty": {
-      "eyebrow": "NO ATTEMPTS YET",
+      "eyebrow": "NOT STARTED YET",
       "headline": "Nothing has run for this task.",
-      "body": "An attempt gives this task its own branch and worktree, then hands it to a coding agent. Your working copy is untouched until you review what comes back.",
-      "start": "Start an attempt",
+      "body": "Starting gives this task its own branch and worktree, then hands it to a coding agent. Your working copy is untouched until you review what comes back.",
+      "start": "Start task",
       "steps": {
         "worktree": "A worktree is created from the base branch.",
         "agent": "The agent works in it, on its own branch.",
         "review": "Review the diff, then merge it or throw it away."
-      }
-    }
+      },
+      "starting": "Starting…",
+      "noRepos": "This project has no repositories yet. Add one in project settings before starting a task.",
+      "error": "Failed to start this task. Please try again.",
+      "preparing": "Checking branches…",
+      "noBranches": "No branch could be resolved for {{repos}}. Check the repository before starting.",
+      "noAgent": "No default agent is configured. Pick one in settings before starting."
+    },
+    "parentTask": "Parent task:"
   },
   "processes": {
     "noLogsAvailable": "No logs available",
-    "selectAttempt": "Select an attempt to view execution processes.",
     "errorLoadingUpdates": "Failed to load live updates for processes.",
     "reconnecting": "Reconnecting...",
     "loading": "Loading execution processes...",
-    "noProcesses": "No execution processes found for this attempt.",
+    "noProcesses": "No execution processes found for this task.",
     "processId": "Process ID: {{id}}",
     "deleted": "Deleted",
     "deletedTooltip": "Deleted by restore: timeline was restored to a checkpoint and later executions were removed",
@@ -212,14 +214,15 @@
     "loadingDetails": "Loading process details...",
     "errorLoadingDetails": "Failed to load process details. Please try again.",
     "copyLogs": "Copy logs",
-    "logsCopied": "Copied!"
+    "logsCopied": "Copied!",
+    "selectTask": "Select a task to view execution processes."
   },
   "taskHeader": {
     "editTask": "Edit task",
     "deleteTask": "Delete task",
     "closePanel": "Close panel"
   },
-  "navigateToParent": "Navigate to parent task attempt",
+  "navigateToParent": "Navigate to parent task",
   "toolbar": {
     "actions": "Actions",
     "noAttempts": "No attempts yet",
@@ -378,14 +381,11 @@
     "startDev": "Start Dev",
     "viewDevLogs": "View dev server logs",
     "stopping": "Stopping...",
-    "stopAttempt": "Stop Attempt",
-    "newAttempt": "New Attempt",
-    "viewHistory": "View attempt history",
     "createSubtask": "Create Subtask",
     "preview": "Preview",
     "diffs": "Diffs",
     "gitActions": "Git Actions",
-    "tryAgain": "Try Again",
+    "tryAgain": "Retry in a new task",
     "runSetup": "Run Setup",
     "setupHelpText": "{{agent}} isn't setup correctly. Click 'Run Setup' to install it and login.",
     "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
@@ -482,16 +482,6 @@
       }
     }
   },
-  "createAttemptDialog": {
-    "title": "Create Attempt",
-    "description": "Start a new attempt with a coding agent. A git worktree and task branch will be created.",
-    "baseBranch": "Base branch",
-    "loadingBranches": "Loading branches...",
-    "selectBranch": "Select branch",
-    "error": "Failed to create attempt. Please try again.",
-    "creating": "Creating...",
-    "start": "Start"
-  },
   "repoBranchSelector": {
     "label": "Base branch"
   },
@@ -510,7 +500,7 @@
   },
   "viewRelatedTasksDialog": {
     "title": "Related tasks",
-    "empty": "No related tasks for this attempt",
+    "empty": "No related tasks for this task",
     "error": "Failed to load related tasks",
     "tasksCount": "Tasks ({{count}})",
     "columns": {
@@ -526,18 +516,17 @@
     "tryNewUI": "try the new UI"
   },
   "actionsMenu": {
-    "attempt": "Attempt",
     "openInIde": "Open attempt in IDE",
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
-    "createNewAttempt": "Create new attempt",
     "createSubtask": "Create subtask",
     "gitActions": "Git actions",
     "editBranchName": "Edit branch name",
     "startReview": "Start Review",
     "startingReview": "Starting Review...",
     "task": "Task",
-    "duplicate": "Duplicate"
+    "duplicate": "Duplicate",
+    "run": "Run"
   },
   "editBranchName": {
     "dialog": {
@@ -587,7 +576,7 @@
   },
   "createPrDialog": {
     "title": "Create Pull Request",
-    "description": "Create a pull request for this task attempt.",
+    "description": "Create a pull request for this task.",
     "titleLabel": "Title",
     "titlePlaceholder": "Enter PR title",
     "descriptionLabel": "Description (optional)",
@@ -784,5 +773,9 @@
       "repoNotInProject": "Repository is not in any project",
       "failedToCreateWorkspace": "Failed to create workspace"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "Loading branches...",
+    "selectBranch": "Select branch"
   }
 }

@@ -64,7 +64,7 @@ export function TaskStatePills({
       {task.last_attempt_failed && !task.has_in_progress_attempt && (
         <span
           className={cn(PILL, 'border-destructive/35 text-destructive')}
-          title="The last attempt for this task failed"
+          title="The last run of this task failed"
         >
           Failed
         </span>

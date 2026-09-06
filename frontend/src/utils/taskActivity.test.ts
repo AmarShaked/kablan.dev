@@ -42,7 +42,7 @@ describe('taskActivity', () => {
 
   it('reports a failure once nothing is running', () => {
     expect(taskActivity(task({ last_attempt_failed: true }))).toBe(
-      'Attempt failed'
+      'Run failed'
     );
   });
 

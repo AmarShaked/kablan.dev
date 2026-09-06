@@ -40,8 +40,8 @@ export function RepoBranchSelector({
           onBranchSelect={(branch) => onBranchChange(config.repoId, branch)}
           placeholder={
             isLoading
-              ? t('createAttemptDialog.loadingBranches')
-              : t('createAttemptDialog.selectBranch')
+              ? t('taskForm.loadingBranches')
+              : t('taskForm.selectBranch')
           }
         />
       </div>
@@ -63,8 +63,8 @@ export function RepoBranchSelector({
               onBranchSelect={(branch) => onBranchChange(config.repoId, branch)}
               placeholder={
                 isLoading
-                  ? t('createAttemptDialog.loadingBranches')
-                  : t('createAttemptDialog.selectBranch')
+                  ? t('taskForm.loadingBranches')
+                  : t('taskForm.selectBranch')
               }
             />
           </div>

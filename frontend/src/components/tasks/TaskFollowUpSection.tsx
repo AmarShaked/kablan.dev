@@ -572,7 +572,7 @@ export function TaskFollowUpSection({
     () =>
       hasExtraContext
         ? '(Optional) Add additional instructions... Type @ to insert tags or search files.'
-        : 'Continue working on this task attempt... Type @ to insert tags or search files.',
+        : 'Continue working on this task... Type @ to insert tags or search files.',
     [hasExtraContext]
   );
 

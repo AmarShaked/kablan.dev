@@ -155,7 +155,7 @@ function ProcessesTab({ sessionId }: ProcessesTabProps) {
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
           <Cog className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>{t('processes.selectAttempt')}</p>
+          <p>{t('processes.selectTask')}</p>
         </div>
       </div>
     );

@@ -34,8 +34,6 @@
       "withTarget": "重基底到 {{branch}}"
     },
     "dialog": {
-      "title": "重基底任務嘗試",
-      "description": "選擇新的基底分支以將此任務嘗試重基底到該分支上。",
       "upstreamLabel": "上游分支",
       "upstreamPlaceholder": "選擇上游分支",
       "targetLabel": "目標分支",
@@ -52,7 +50,6 @@
     "changeTarget": {
       "dialog": {
         "title": "變更目標分支",
-        "description": "為任務嘗試選擇新的目標分支。",
         "placeholder": "選擇目標分支",
         "action": "變更分支",
         "inProgress": "變更中..."
@@ -179,19 +176,13 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "未選擇任務",
-    "loadingAttempts": "載入嘗試中...",
-    "errorLoadingAttempts": "載入嘗試失敗",
-    "attemptsCount": "嘗試（{{count}}）",
-    "noAttempts": "尚無嘗試"
+    "noTaskSelected": "未選擇任務"
   },
   "processes": {
     "noLogsAvailable": "沒有可用的日誌",
-    "selectAttempt": "選擇嘗試以查看執行程序。",
     "errorLoadingUpdates": "載入程序的即時更新失敗。",
     "reconnecting": "重新連線中...",
     "loading": "載入執行程序中...",
-    "noProcesses": "找不到此嘗試的執行程序。",
     "processId": "程序 ID：{{id}}",
     "deleted": "已刪除",
     "deletedTooltip": "因復原而刪除：時間軸已回復到檢查點，後續執行已移除",
@@ -211,7 +202,6 @@
     "deleteTask": "刪除任務",
     "closePanel": "關閉面板"
   },
-  "navigateToParent": "導航到父任務嘗試",
   "toolbar": {
     "actions": "操作",
     "noAttempts": "尚無嘗試",
@@ -286,14 +276,10 @@
     "startDev": "啟動開發",
     "viewDevLogs": "查看開發伺服器日誌",
     "stopping": "停止中...",
-    "stopAttempt": "停止嘗試",
-    "newAttempt": "新嘗試",
-    "viewHistory": "查看嘗試歷史",
     "createSubtask": "建立子任務",
     "preview": "預覽",
     "diffs": "差異",
     "gitActions": "Git 操作",
-    "tryAgain": "重試",
     "runSetup": "執行設定",
     "setupHelpText": "{{agent}} 未正確設定。點擊執行設定以安裝並登入。",
     "devScriptMissingTooltip": "要啟動開發伺服器，請為此專案新增開發腳本"
@@ -388,22 +374,11 @@
       }
     }
   },
-  "createAttemptDialog": {
-    "title": "建立嘗試",
-    "description": "使用編碼代理開始新的嘗試。將建立 Git 工作樹與任務分支。",
-    "baseBranch": "基底分支",
-    "loadingBranches": "載入分支中...",
-    "selectBranch": "選擇分支",
-    "error": "建立嘗試失敗。請重試。",
-    "creating": "建立中...",
-    "start": "開始"
-  },
   "viewProcessesDialog": {
     "title": "執行程序"
   },
   "viewRelatedTasksDialog": {
     "title": "相關任務",
-    "empty": "此嘗試沒有相關任務",
     "error": "載入相關任務失敗",
     "tasksCount": "任務（{{count}}）",
     "columns": {
@@ -419,11 +394,9 @@
     "tryNewUI": "試用新界面"
   },
   "actionsMenu": {
-    "attempt": "嘗試",
     "openInIde": "在 IDE 中開啟嘗試",
     "viewProcesses": "查看程序",
     "viewRelatedTasks": "查看相關任務",
-    "createNewAttempt": "建立新嘗試",
     "createSubtask": "建立子任務",
     "gitActions": "Git 操作",
     "editBranchName": "編輯分支名稱",
@@ -480,7 +453,6 @@
   },
   "createPrDialog": {
     "title": "建立 PR",
-    "description": "為此任務嘗試建立 PR。",
     "titleLabel": "標題",
     "titlePlaceholder": "輸入 PR 標題",
     "descriptionLabel": "描述（選填）",
@@ -754,5 +726,9 @@
       "repoNotInProject": "儲存庫不在任何專案中",
       "failedToCreateWorkspace": "建立工作區失敗"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "載入分支中...",
+    "selectBranch": "選擇分支"
   }
 }

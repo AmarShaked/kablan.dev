@@ -628,12 +628,8 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                                       }}
                                       placeholder={
                                         branchesLoading
-                                          ? t(
-                                              'createAttemptDialog.loadingBranches'
-                                            )
-                                          : t(
-                                              'createAttemptDialog.selectBranch'
-                                            )
+                                          ? t('taskForm.loadingBranches')
+                                          : t('taskForm.selectBranch')
                                       }
                                     />
                                   </div>

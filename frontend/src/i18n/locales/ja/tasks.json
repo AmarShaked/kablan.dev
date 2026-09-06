@@ -22,8 +22,6 @@
     "sharedToggleTooltip": "共有コンテンツを表示/非表示"
   },
   "actionsMenu": {
-    "attempt": "Attempt",
-    "createNewAttempt": "Create new attempt",
     "createSubtask": "Create subtask",
     "duplicate": "Duplicate",
     "editBranchName": "ブランチ名を編集",
@@ -74,18 +72,14 @@
       "diffs": "差分",
       "summaryAndActions": "概要とアクション"
     },
-    "newAttempt": "New Attempt",
     "openInEditor": "Open in {{editor}}",
     "path": "Path",
     "pauseDev": "Dev を一時停止",
     "preview": "Preview",
     "startDev": "Start Dev",
-    "stopAttempt": "Stop Attempt",
     "stopDev": "Stop Dev",
     "stopping": "Stopping...",
     "viewDevLogs": "View dev server logs",
-    "viewHistory": "View attempt history",
-    "tryAgain": "Try Again",
     "runSetup": "セットアップを実行",
     "setupHelpText": "{{agent}}が正しく設定されていません。「セットアップを実行」をクリックしてインストールとログインを行ってください。",
     "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
@@ -119,7 +113,6 @@
   },
   "createPrDialog": {
     "title": "プルリクエストを作成",
-    "description": "このタスク試行のプルリクエストを作成します。",
     "titleLabel": "タイトル",
     "titlePlaceholder": "PRタイトルを入力",
     "descriptionLabel": "説明 (オプション)",
@@ -155,7 +148,6 @@
     "changeTarget": {
       "dialog": {
         "action": "ブランチを変更",
-        "description": "タスク試行の新しいターゲットブランチを選択してください。",
         "inProgress": "変更中...",
         "placeholder": "ターゲットブランチを選択",
         "title": "ターゲットブランチを変更"
@@ -189,16 +181,6 @@
       "title": "Gitリポジトリを選択",
       "description": "この試行に追加するGitリポジトリを選択してください"
     }
-  },
-  "createAttemptDialog": {
-    "baseBranch": "Base branch",
-    "creating": "Creating...",
-    "description": "Start a new attempt with a coding agent. A git worktree and task branch will be created.",
-    "error": "Failed to create attempt. Please try again.",
-    "loadingBranches": "Loading branches...",
-    "selectBranch": "Select branch",
-    "start": "Start",
-    "title": "Create Attempt"
   },
   "diff": {
     "collapseAll": "Collapse all diffs",
@@ -420,10 +402,8 @@
     "exit": "Exit: {{code}}",
     "loading": "Loading execution processes...",
     "loadingDetails": "Loading process details...",
-    "noProcesses": "No execution processes found for this attempt.",
     "processId": "Process ID: {{id}}",
     "reconnecting": "Reconnecting...",
-    "selectAttempt": "Select an attempt to view execution processes.",
     "started": "Started: {{date}}",
     "copyLogs": "ログをコピー",
     "logsCopied": "コピーしました！"
@@ -436,10 +416,8 @@
     },
     "dialog": {
       "advanced": "詳細設定",
-      "description": "このタスク試行をリベースする新しいベースブランチを選択してください。",
       "targetLabel": "ターゲットブランチ",
       "targetPlaceholder": "ターゲットブランチを選択",
-      "title": "タスク試行をリベース",
       "upstreamLabel": "アップストリームブランチ",
       "upstreamPlaceholder": "アップストリームブランチを選択"
     },
@@ -454,12 +432,7 @@
     "deleteTask": "Delete task",
     "editTask": "Edit task"
   },
-  "navigateToParent": "親タスクの試行に移動",
   "taskPanel": {
-    "attemptsCount": "Attempts ({{count}})",
-    "errorLoadingAttempts": "Failed to load attempts",
-    "loadingAttempts": "Loading attempts...",
-    "noAttempts": "No attempts yet",
     "noTaskSelected": "No task selected"
   },
   "todos": {
@@ -497,7 +470,6 @@
   },
   "viewRelatedTasksDialog": {
     "title": "Related tasks",
-    "empty": "No related tasks for this attempt",
     "error": "Failed to load related tasks",
     "tasksCount": "Tasks ({{count}})",
     "columns": {
@@ -754,5 +726,9 @@
       "repoNotInProject": "リポジトリがどのプロジェクトにも属していません",
       "failedToCreateWorkspace": "ワークスペースの作成に失敗しました"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "Loading branches...",
+    "selectBranch": "Select branch"
   }
 }

@@ -46,16 +46,12 @@ export function TaskCard({
 
       setIsNavigatingToParent(true);
       try {
-        const parentAttempt = await attemptsApi.get(task.parent_workspace_id);
-        navigate(
-          paths.attempt(
-            projectId,
-            parentAttempt.task_id,
-            task.parent_workspace_id
-          )
-        );
+        // Subtasks still point at the workspace they were spawned from; the task that owns it
+        // is what the reader wants, and now also the only thing the URL can name.
+        const parentWorkspace = await attemptsApi.get(task.parent_workspace_id);
+        navigate(paths.task(projectId, parentWorkspace.task_id));
       } catch (error) {
-        console.error('Failed to navigate to parent task attempt:', error);
+        console.error('Failed to navigate to parent task:', error);
         setIsNavigatingToParent(false);
       }
     },

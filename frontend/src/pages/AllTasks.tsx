@@ -472,7 +472,7 @@ export function AllTasks() {
     const result = await ConfirmDialog.show({
       title: `Delete "${task.title}"?`,
       message:
-        'Its attempts, worktrees and conversation go with it. This cannot be undone.',
+        'Its worktree and conversation go with it. This cannot be undone.',
       confirmText: 'Delete',
       variant: 'destructive',
     }).catch(() => 'canceled');
@@ -492,7 +492,7 @@ export function AllTasks() {
     const result = await ConfirmDialog.show({
       title: `Delete ${count} ${count === 1 ? 'task' : 'tasks'}?`,
       message:
-        'Their attempts, worktrees and conversations go with them. This cannot be undone.',
+        'Their worktrees and conversations go with them. This cannot be undone.',
       confirmText: 'Delete',
       variant: 'destructive',
     }).catch(() => 'canceled');

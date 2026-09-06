@@ -34,8 +34,6 @@
       "withTarget": "Rebaser sur {{branch}}"
     },
     "dialog": {
-      "title": "Rebaser la tentative de tâche",
-      "description": "Choisissez une nouvelle branche de base pour rebaser cette tentative de tâche.",
       "upstreamLabel": "Branche amont",
       "upstreamPlaceholder": "Sélectionner une branche amont",
       "targetLabel": "Branche cible",
@@ -52,7 +50,6 @@
     "changeTarget": {
       "dialog": {
         "title": "Changer la branche cible",
-        "description": "Choisissez une nouvelle branche cible pour la tentative de tâche.",
         "placeholder": "Sélectionner une branche cible",
         "action": "Changer de branche",
         "inProgress": "Changement en cours..."
@@ -166,19 +163,13 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "Aucune tâche sélectionnée",
-    "loadingAttempts": "Chargement des tentatives...",
-    "errorLoadingAttempts": "Échec du chargement des tentatives",
-    "attemptsCount": "Tentatives ({{count}})",
-    "noAttempts": "Aucune tentative pour le moment"
+    "noTaskSelected": "Aucune tâche sélectionnée"
   },
   "processes": {
     "noLogsAvailable": "Aucun log disponible",
-    "selectAttempt": "Sélectionnez une tentative pour voir les processus d'exécution.",
     "errorLoadingUpdates": "Échec du chargement des mises à jour en direct pour les processus.",
     "reconnecting": "Reconnexion...",
     "loading": "Chargement des processus d'exécution...",
-    "noProcesses": "Aucun processus d'exécution trouvé pour cette tentative.",
     "processId": "ID du processus : {{id}}",
     "deleted": "Supprimé",
     "deletedTooltip": "Supprimé par restauration : la timeline a été restaurée à un point de contrôle et les exécutions ultérieures ont été supprimées",
@@ -198,7 +189,6 @@
     "deleteTask": "Supprimer la tâche",
     "closePanel": "Fermer le panneau"
   },
-  "navigateToParent": "Naviguer vers la tentative de tâche parente",
   "toolbar": {
     "actions": "Actions",
     "noAttempts": "Aucune tentative pour le moment",
@@ -350,14 +340,10 @@
     "startDev": "Démarrer le développement",
     "viewDevLogs": "Voir les logs du serveur de développement",
     "stopping": "Arrêt en cours...",
-    "stopAttempt": "Arrêter la tentative",
-    "newAttempt": "Nouvelle tentative",
-    "viewHistory": "Voir l'historique des tentatives",
     "createSubtask": "Créer une sous-tâche",
     "preview": "Aperçu",
     "diffs": "Diffs",
     "gitActions": "Actions Git",
-    "tryAgain": "Réessayer",
     "runSetup": "Exécuter la configuration",
     "setupHelpText": "{{agent}} n'est pas configuré correctement. Cliquez sur 'Exécuter la configuration' pour l'installer et vous connecter.",
     "devScriptMissingTooltip": "Pour démarrer le serveur de développement, ajoutez un script de développement à ce projet"
@@ -452,16 +438,6 @@
       }
     }
   },
-  "createAttemptDialog": {
-    "title": "Créer une tentative",
-    "description": "Démarrez une nouvelle tentative avec un agent de codage. Un worktree git et une branche de tâche seront créés.",
-    "baseBranch": "Branche de base",
-    "loadingBranches": "Chargement des branches...",
-    "selectBranch": "Sélectionner une branche",
-    "error": "Échec de la création de la tentative. Veuillez réessayer.",
-    "creating": "Création en cours...",
-    "start": "Démarrer"
-  },
   "repoBranchSelector": {
     "label": "Branche de base"
   },
@@ -480,7 +456,6 @@
   },
   "viewRelatedTasksDialog": {
     "title": "Tâches associées",
-    "empty": "Aucune tâche associée pour cette tentative",
     "error": "Échec du chargement des tâches associées",
     "tasksCount": "Tâches ({{count}})",
     "columns": {
@@ -496,11 +471,9 @@
     "tryNewUI": "essayer la nouvelle interface"
   },
   "actionsMenu": {
-    "attempt": "Tentative",
     "openInIde": "Ouvrir la tentative dans l'IDE",
     "viewProcesses": "Voir les processus",
     "viewRelatedTasks": "Voir les tâches associées",
-    "createNewAttempt": "Créer une nouvelle tentative",
     "createSubtask": "Créer une sous-tâche",
     "gitActions": "Actions Git",
     "editBranchName": "Modifier le nom de la branche",
@@ -557,7 +530,6 @@
   },
   "createPrDialog": {
     "title": "Créer une Pull Request",
-    "description": "Créer une pull request pour cette tentative de tâche.",
     "titleLabel": "Titre",
     "titlePlaceholder": "Saisir le titre de la PR",
     "descriptionLabel": "Description (optionnel)",
@@ -754,5 +726,9 @@
       "repoNotInProject": "Le dépôt n'est dans aucun projet",
       "failedToCreateWorkspace": "Échec de la création de l'espace de travail"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "Chargement des branches...",
+    "selectBranch": "Sélectionner une branche"
   }
 }

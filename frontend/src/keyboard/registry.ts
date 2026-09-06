@@ -354,14 +354,14 @@ export const keyBindings: KeyBinding[] = [
     keys: ['meta+enter', 'ctrl+enter'],
     scopes: [Scope.KANBAN],
     description:
-      'Open details; when open, cycle views forward (attempt → preview → diffs)',
+      'Open details; when open, cycle views forward (chat → details → diffs)',
     group: 'Navigation',
   },
   {
     action: Action.CYCLE_VIEW_BACKWARD,
     keys: ['meta+shift+enter', 'ctrl+shift+enter'],
     scopes: [Scope.KANBAN],
-    description: 'Cycle views backward (diffs → preview → attempt)',
+    description: 'Cycle views backward (diffs → details → chat)',
     group: 'Navigation',
   },
 

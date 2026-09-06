@@ -1,9 +1,7 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import {
   Bot,
   Check,
-  ChevronDown,
   CircleDot,
   GitBranchPlus,
   Copy,
@@ -11,7 +9,6 @@ import {
   FileDiff,
   FileKey2,
   GitBranch,
-  Plus,
   Loader2,
   Play,
   Square,
@@ -19,20 +16,12 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { BranchStatusChips } from '@/components/tasks/Toolbar/BranchStatus';
 import {
   BaseBranchField,
   BranchNameField,
 } from '@/components/panels/BranchFields';
 import GitOperations from '@/components/tasks/Toolbar/GitOperations';
-import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
 import { IconAction } from '@/components/ui/icon-action';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -45,9 +34,7 @@ import { useHasDevServerScript } from '@/hooks/useHasDevServerScript';
 import { useLogStream } from '@/hooks/useLogStream';
 import { useOpenInEditor } from '@/hooks/useOpenInEditor';
 import { useDiffSummary } from '@/hooks/useDiffSummary';
-import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { openTaskForm } from '@/lib/openTaskForm';
-import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
 import { agentLabel } from '@/utils/agentLabels';
 import { statusLabels } from '@/utils/statusLabels';
@@ -56,7 +43,7 @@ import type { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 
 /**
- * The attempt's properties and actions, as a column beside the conversation.
+ * The task's branch, worktree and git state, as a column beside the conversation.
  *
  * Everything here used to be reachable only through a dialog or a second pane you had to switch
  * to — git actions behind the actions menu, the dev server behind the preview pane, the diff
@@ -139,10 +126,8 @@ export function AttemptDetailsPanel({
   onOpenDiffs,
   onOpenEnv,
 }: AttemptDetailsPanelProps) {
-  const navigate = useNavigate();
   const { project, projectId } = useProject();
 
-  const { data: attempts = [] } = useTaskAttempts(task.id);
   const { isAttemptRunning, stopExecution, isStopping } = useAttemptExecution(
     attempt.id,
     task.id
@@ -172,23 +157,10 @@ export function AttemptDetailsPanel({
   const devServerUrl = useDevserverUrlFromLogs(logStream.logs)?.url;
   const hasRunningDevServer = runningDevServers.length > 0;
 
-  // Attempts come back newest-first from the API; number them the way a person counts them.
-  const ordered = useMemo(
-    () =>
-      [...attempts].sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ),
-    [attempts]
-  );
-  const attemptNumber = ordered.findIndex((a) => a.id === attempt.id) + 1;
-
   const selectedRepoStatus = branchStatus?.find(
     (r) => r.repo_id === (selectedRepoId ?? repos[0]?.id)
   );
   const targetBranch = selectedRepoStatus?.target_branch_name;
-
-  const handleNewAttempt = () => CreateAttemptDialog.show({ taskId: task.id });
 
   const handleCreateSubtask = () => {
     if (!projectId || !attempt.branch) return;
@@ -238,62 +210,16 @@ export function AttemptDetailsPanel({
             disabled={!projectId || !attempt.branch}
           />
 
-          {/* Attempts live up here with the other things you do to the attempt, rather than as
-              a property: which attempt you are on is a choice, and starting another or stopping
-              this one are the two acts that go with it. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Attempts"
-                title={`Attempt ${Math.max(attemptNumber, 1)} of ${Math.max(ordered.length, 1)}`}
-                className="inline-flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Play className="h-3.5 w-3.5" />
-                <span className="tabular-nums">
-                  {Math.max(attemptNumber, 1)}/{Math.max(ordered.length, 1)}
-                </span>
-                <ChevronDown className="h-3 w-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[260px]">
-              {isAttemptRunning ? (
-                <DropdownMenuItem
-                  onClick={() => stopExecution()}
-                  disabled={isStopping}
-                >
-                  <Square className="mr-2 h-3.5 w-3.5" />
-                  {isStopping ? 'Stopping…' : 'Stop attempt'}
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={handleNewAttempt}>
-                  <Plus className="mr-2 h-3.5 w-3.5" />
-                  New attempt
-                </DropdownMenuItem>
-              )}
-              {ordered.length > 1 && (
-                <>
-                  <DropdownMenuSeparator />
-                  {ordered.map((a, i) => (
-                    <DropdownMenuItem
-                      key={a.id}
-                      onClick={() =>
-                        projectId &&
-                        navigate(paths.attempt(projectId, task.id, a.id))
-                      }
-                    >
-                      <span className="min-w-0 flex-1 truncate">
-                        Attempt {i + 1} · {a.branch}
-                      </span>
-                      {a.id === attempt.id && (
-                        <Check className="ml-2 h-3.5 w-3.5 shrink-0" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Stopping the agent is the one act that belongs up here with the other things you
+              do to the task; there is no run to switch to, so nothing sits beside it. */}
+          {isAttemptRunning && (
+            <IconAction
+              icon={Square}
+              label={isStopping ? 'Stopping…' : 'Stop'}
+              onClick={() => stopExecution()}
+              disabled={isStopping}
+            />
+          )}
         </div>
       </TooltipProvider>
 
@@ -323,7 +249,7 @@ export function AttemptDetailsPanel({
         <Property
           icon={Bot}
           label="Agent"
-          title="The agent running this attempt"
+          title="The agent working on this task"
         >
           {agentLabel(attempt.session.executor)}
         </Property>

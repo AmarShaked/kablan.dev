@@ -4,7 +4,8 @@ import { I18nextProvider } from 'react-i18next';
 import i18n from '@/i18n';
 import { Projects } from '@/pages/Projects';
 import { ProjectTasks } from '@/pages/ProjectTasks';
-import { FullAttemptLogsPage } from '@/pages/FullAttemptLogs';
+import { FullTaskLogsPage } from '@/pages/FullTaskLogs';
+import { LegacyAttemptRedirect } from '@/components/routing/LegacyAttemptRedirect';
 import { Migration } from '@/pages/Migration';
 import { NormalLayout } from '@/components/layout/NormalLayout';
 import { useAuth } from '@/hooks';
@@ -117,12 +118,16 @@ function AppContent() {
             {/* ========== LEGACY DESIGN ROUTES ========== */}
             {/* VS Code full-page logs route (outside NormalLayout for minimal UI) */}
             <Route
-              path="/local-projects/:projectId/tasks/:taskId/attempts/:attemptId/full"
+              path="/local-projects/:projectId/tasks/:taskId/full"
               element={
                 <LegacyDesignScope>
-                  <FullAttemptLogsPage />
+                  <FullTaskLogsPage />
                 </LegacyDesignScope>
               }
+            />
+            <Route
+              path="/local-projects/:projectId/tasks/:taskId/attempts/:attemptId/full"
+              element={<LegacyAttemptRedirect full />}
             />
 
             <Route
@@ -160,7 +165,7 @@ function AppContent() {
               />
               <Route
                 path="/local-projects/:projectId/tasks/:taskId/attempts/:attemptId"
-                element={<ProjectTasks />}
+                element={<LegacyAttemptRedirect />}
               />
             </Route>
           </Routes>

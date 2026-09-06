@@ -15,6 +15,7 @@ import { ViewProcessesDialog } from '@/components/dialogs/tasks/ViewProcessesDia
 import { ViewRelatedTasksDialog } from '@/components/dialogs/tasks/ViewRelatedTasksDialog';
 import { useProject } from '@/contexts/ProjectContext';
 import { openTaskForm } from '@/lib/openTaskForm';
+import { paths } from '@/lib/paths';
 
 import { useNavigate } from 'react-router-dom';
 import { WorkspaceWithSession } from '@/types/attempt';
@@ -72,7 +73,7 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
       attempt,
       onNavigateToTask: (taskId: string) => {
         if (projectId) {
-          navigate(`/projects/${projectId}/tasks/${taskId}/attempts/latest`);
+          navigate(paths.task(projectId, taskId));
         }
       },
     });
@@ -93,11 +94,11 @@ export function ActionsDropdown({ task, attempt }: ActionsDropdownProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {/* Open in IDE, new attempt, subtask, branch rename and the git actions moved to the
-              details column beside the conversation; only what has no home there is left. */}
+          {/* Open in IDE, subtask, branch rename and the git actions moved to the details
+              column beside the conversation; only what has no home there is left. */}
           {hasAttemptActions && (
             <>
-              <DropdownMenuLabel>{t('actionsMenu.attempt')}</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('actionsMenu.run')}</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={!attempt?.id}
                 onClick={handleViewProcesses}

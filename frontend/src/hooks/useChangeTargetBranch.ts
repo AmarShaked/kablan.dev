@@ -26,7 +26,7 @@ export function useChangeTargetBranch(
   >({
     mutationFn: async ({ newTargetBranch, repoId }) => {
       if (!attemptId) {
-        throw new Error('Attempt id is not set');
+        throw new Error('This task has not been started yet');
       }
 
       const payload: ChangeTargetBranchRequest = {

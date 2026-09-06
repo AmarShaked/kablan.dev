@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ViewProcessesDialog } from '@/components/dialogs/tasks/ViewProcessesDialog';
-import { CreateAttemptDialog } from '@/components/dialogs/tasks/CreateAttemptDialog';
+import { openTaskForm } from '@/lib/openTaskForm';
 import { useOpenInEditor } from '@/hooks/useOpenInEditor';
 import { useDiffSummary } from '@/hooks/useDiffSummary';
 import { useDevServer } from '@/hooks/useDevServer';
@@ -52,6 +52,7 @@ export function NextActionCard({
   containerRef,
   failed,
   execution_processes,
+  task,
   needsSetup,
 }: NextActionCardProps) {
   const { t } = useTranslation('tasks');
@@ -114,12 +115,13 @@ export function NextActionCard({
     navigate({ search: '?view=diffs' });
   }, [navigate]);
 
+  // A task gets one run, so "try again" is a second task rather than a second run: the form
+  // opens pre-filled from this one and starts as soon as it is submitted, which gives you the
+  // clean worktree the old retry gave you without a task owning two conversations.
   const handleTryAgain = useCallback(() => {
-    if (!attempt?.task_id) return;
-    CreateAttemptDialog.show({
-      taskId: attempt.task_id,
-    });
-  }, [attempt?.task_id]);
+    if (!projectId || !task) return;
+    openTaskForm({ mode: 'duplicate', projectId, initialTask: task });
+  }, [projectId, task]);
 
   // Git actions live in the details column now, so this reveals that column rather than
   // opening a second copy of the same controls in a dialog.
@@ -222,7 +224,7 @@ export function NextActionCard({
                   variant="destructive"
                   size="sm"
                   onClick={handleTryAgain}
-                  disabled={!attempt?.task_id}
+                  disabled={!task || !projectId}
                   className="text-sm w-full sm:w-auto"
                   aria-label={t('attempt.tryAgain')}
                 >

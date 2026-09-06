@@ -6,19 +6,15 @@ import { EntriesProvider } from '@/contexts/EntriesContext';
 import { RetryUiProvider } from '@/contexts/RetryUiContext';
 import type { ReactNode } from 'react';
 
-interface TaskAttemptPanelProps {
-  attempt: WorkspaceWithSession | undefined;
+interface TaskRunPanelProps {
+  workspace: WorkspaceWithSession | undefined;
   task: TaskWithAttemptStatus | null;
   children: (sections: { logs: ReactNode; followUp: ReactNode }) => ReactNode;
 }
 
-const TaskAttemptPanel = ({
-  attempt,
-  task,
-  children,
-}: TaskAttemptPanelProps) => {
-  if (!attempt) {
-    return <div className="p-6 text-muted-foreground">Loading attempt...</div>;
+const TaskRunPanel = ({ workspace, task, children }: TaskRunPanelProps) => {
+  if (!workspace) {
+    return <div className="p-6 text-muted-foreground">Loading…</div>;
   }
 
   if (!task) {
@@ -26,14 +22,18 @@ const TaskAttemptPanel = ({
   }
 
   return (
-    <EntriesProvider key={attempt.id}>
-      <RetryUiProvider attemptId={attempt.id}>
+    <EntriesProvider key={workspace.id}>
+      <RetryUiProvider attemptId={workspace.id}>
         {children({
           logs: (
-            <VirtualizedList key={attempt.id} attempt={attempt} task={task} />
+            <VirtualizedList
+              key={workspace.id}
+              attempt={workspace}
+              task={task}
+            />
           ),
           followUp: (
-            <TaskFollowUpSection task={task} session={attempt.session} />
+            <TaskFollowUpSection task={task} session={workspace.session} />
           ),
         })}
       </RetryUiProvider>
@@ -41,4 +41,4 @@ const TaskAttemptPanel = ({
   );
 };
 
-export default TaskAttemptPanel;
+export default TaskRunPanel;

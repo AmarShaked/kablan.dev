@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { attemptsApi } from '@/lib/api';
+import { taskWorkspaceKeys } from '@/hooks/useTaskWorkspace';
 import type { Workspace } from 'shared/types';
 
 interface RenameBranchContext {
@@ -15,7 +16,7 @@ export function useRenameBranch(
 
   return useMutation<{ branch: string }, unknown, string, RenameBranchContext>({
     mutationFn: async (newBranchName) => {
-      if (!attemptId) throw new Error('Attempt id is not set');
+      if (!attemptId) throw new Error('This task has not been started yet');
       return attemptsApi.renameBranch(attemptId, newBranchName);
     },
     onMutate: async (newBranchName) => {
@@ -49,7 +50,7 @@ export function useRenameBranch(
         queryClient.invalidateQueries({
           queryKey: ['branchStatus', attemptId],
         });
-        queryClient.invalidateQueries({ queryKey: ['taskAttempts'] });
+        queryClient.invalidateQueries({ queryKey: taskWorkspaceKeys.all });
       }
       onSuccess?.(data.branch);
     },

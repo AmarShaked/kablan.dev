@@ -22,8 +22,6 @@
     "sharedToggleTooltip": "공유 콘텐츠 표시/숨기기"
   },
   "actionsMenu": {
-    "attempt": "Attempt",
-    "createNewAttempt": "Create new attempt",
     "createSubtask": "Create subtask",
     "duplicate": "Duplicate",
     "editBranchName": "브랜치 이름 편집",
@@ -74,18 +72,14 @@
       "diffs": "변경사항",
       "summaryAndActions": "요약 및 작업"
     },
-    "newAttempt": "New Attempt",
     "openInEditor": "Open in {{editor}}",
     "path": "Path",
     "pauseDev": "Dev 일시정지",
     "preview": "Preview",
     "startDev": "Start Dev",
-    "stopAttempt": "Stop Attempt",
     "stopDev": "Stop Dev",
     "stopping": "Stopping...",
     "viewDevLogs": "View dev server logs",
-    "viewHistory": "View attempt history",
-    "tryAgain": "Try Again",
     "runSetup": "설정 실행",
     "setupHelpText": "{{agent}}이(가) 올바르게 설정되지 않았습니다. '설정 실행'을 클릭하여 설치하고 로그인하세요.",
     "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
@@ -119,7 +113,6 @@
   },
   "createPrDialog": {
     "title": "Pull Request 생성",
-    "description": "이 작업 시도에 대한 Pull Request를 생성합니다.",
     "titleLabel": "제목",
     "titlePlaceholder": "PR 제목 입력",
     "descriptionLabel": "설명 (선택사항)",
@@ -155,7 +148,6 @@
     "changeTarget": {
       "dialog": {
         "action": "브랜치 변경",
-        "description": "작업 시도의 새 대상 브랜치를 선택하세요.",
         "inProgress": "변경 중...",
         "placeholder": "대상 브랜치 선택",
         "title": "대상 브랜치 변경"
@@ -189,16 +181,6 @@
       "title": "Git 저장소 선택",
       "description": "이 시도에 추가할 Git 저장소를 선택하세요"
     }
-  },
-  "createAttemptDialog": {
-    "baseBranch": "Base branch",
-    "creating": "Creating...",
-    "description": "Start a new attempt with a coding agent. A git worktree and task branch will be created.",
-    "error": "Failed to create attempt. Please try again.",
-    "loadingBranches": "Loading branches...",
-    "selectBranch": "Select branch",
-    "start": "Start",
-    "title": "Create Attempt"
   },
   "diff": {
     "collapseAll": "Collapse all diffs",
@@ -420,10 +402,8 @@
     "exit": "Exit: {{code}}",
     "loading": "Loading execution processes...",
     "loadingDetails": "Loading process details...",
-    "noProcesses": "No execution processes found for this attempt.",
     "processId": "Process ID: {{id}}",
     "reconnecting": "Reconnecting...",
-    "selectAttempt": "Select an attempt to view execution processes.",
     "started": "Started: {{date}}",
     "copyLogs": "로그 복사",
     "logsCopied": "복사됨!"
@@ -436,10 +416,8 @@
     },
     "dialog": {
       "advanced": "고급",
-      "description": "이 작업 시도를 리베이스할 새 기본 브랜치를 선택하세요.",
       "targetLabel": "대상 브랜치",
       "targetPlaceholder": "대상 브랜치 선택",
-      "title": "작업 시도 리베이스",
       "upstreamLabel": "업스트림 브랜치",
       "upstreamPlaceholder": "업스트림 브랜치 선택"
     },
@@ -454,12 +432,7 @@
     "deleteTask": "Delete task",
     "editTask": "Edit task"
   },
-  "navigateToParent": "상위 작업 시도로 이동",
   "taskPanel": {
-    "attemptsCount": "Attempts ({{count}})",
-    "errorLoadingAttempts": "Failed to load attempts",
-    "loadingAttempts": "Loading attempts...",
-    "noAttempts": "No attempts yet",
     "noTaskSelected": "No task selected"
   },
   "todos": {
@@ -482,7 +455,6 @@
   },
   "viewRelatedTasksDialog": {
     "title": "Related tasks",
-    "empty": "No related tasks for this attempt",
     "error": "Failed to load related tasks",
     "tasksCount": "Tasks ({{count}})",
     "columns": {
@@ -754,5 +726,9 @@
       "repoNotInProject": "저장소가 어떤 프로젝트에도 없습니다",
       "failedToCreateWorkspace": "워크스페이스 만들기 실패"
     }
+  },
+  "taskForm": {
+    "loadingBranches": "Loading branches...",
+    "selectBranch": "Select branch"
   }
 }

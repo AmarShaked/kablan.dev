@@ -96,7 +96,7 @@ function ActivityBar({ activity }: { activity: GroupActivity }) {
       key: 'failed',
       n: activity.failed,
       className: 'bg-destructive/70',
-      label: 'last attempt failed',
+      label: 'last run failed',
     },
     {
       key: 'servers',
