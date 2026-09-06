@@ -568,7 +568,12 @@ enabled_agents: Array<BaseCodingAgent> | null, disclaimer_acknowledged: boolean,
  * Defaulted rather than versioned: a config written before this existed reads as the same
  * seven days a new one gets, so nothing has to migrate.
  */
-archive_tasks_after_days: number | null, };
+archive_tasks_after_days: number | null, 
+/**
+ * 12- or 24-hour clock for times in lists. Defaulted rather than versioned so a config
+ * written before this existed keeps the 12-hour display it already had.
+ */
+time_format: TimeFormat, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 
@@ -589,6 +594,8 @@ export type UiLanguage = "BROWSER" | "EN" | "FR" | "JA" | "ES" | "KO" | "ZH_HANS
 export type ShowcaseState = { seen_features: Array<string>, };
 
 export type SendMessageShortcut = "ModifierEnter" | "Enter";
+
+export enum TimeFormat { HOUR12 = "HOUR12", HOUR24 = "HOUR24" }
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 

@@ -130,7 +130,7 @@ export function ProjectsSidebar() {
               // Collapsed, the sidebar is a column of 32px glyphs; the button becomes one of
               // them rather than a stretched pill with a clipped label.
               className={cn(
-                'w-full justify-start gap-2',
+                'w-full justify-start gap-2 text-[13px]',
                 'group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!px-0'
               )}
               onClick={() => openTaskForm({ mode: 'create' }).catch(() => {})}

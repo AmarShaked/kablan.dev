@@ -52,6 +52,13 @@
           "label": "言語",
           "placeholder": "言語を選択",
           "helper": "お好みの言語を選択してください。ブラウザ設定では、システム言語に従います。"
+        },
+        "timeFormat": {
+          "label": "時刻",
+          "placeholder": "時刻形式を選択",
+          "helper": "タスク一覧での時刻の表示形式です。",
+          "hour12": "12時間制 (2:04 PM)",
+          "hour24": "24時間制 (14:04)"
         }
       },
       "taskExecution": {

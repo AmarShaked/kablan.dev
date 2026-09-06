@@ -52,6 +52,13 @@
           "label": "Idioma",
           "placeholder": "Selecciona tu idioma",
           "helper": "Elige tu idioma preferido. El predeterminado del navegador sigue el idioma de tu sistema."
+        },
+        "timeFormat": {
+          "label": "Hora",
+          "placeholder": "Seleccionar formato de hora",
+          "helper": "Cómo se muestran las horas en las listas de tareas.",
+          "hour12": "12 horas (2:04 PM)",
+          "hour24": "24 horas (14:04)"
         }
       },
       "taskExecution": {

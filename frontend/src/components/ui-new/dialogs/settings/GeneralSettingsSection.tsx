@@ -15,6 +15,7 @@ import {
   SoundFile,
   ThemeMode,
   UiLanguage,
+  TimeFormat,
 } from 'shared/types';
 import { getModifierKey } from '@/utils/platform';
 import { getLanguageOptions } from '@/i18n/languages';
@@ -257,6 +258,31 @@ export function GeneralSettingsSection() {
             options={languageOptions}
             onChange={(value: UiLanguage) => updateDraft({ language: value })}
             placeholder={t('settings.general.appearance.language.placeholder')}
+          />
+        </SettingsField>
+
+        <SettingsField
+          label={t('settings.general.appearance.timeFormat.label')}
+          description={t('settings.general.appearance.timeFormat.helper')}
+        >
+          <SettingsSelect
+            value={draft?.time_format}
+            options={[
+              {
+                value: TimeFormat.HOUR12,
+                label: t('settings.general.appearance.timeFormat.hour12'),
+              },
+              {
+                value: TimeFormat.HOUR24,
+                label: t('settings.general.appearance.timeFormat.hour24'),
+              },
+            ]}
+            onChange={(value: TimeFormat) =>
+              updateDraft({ time_format: value })
+            }
+            placeholder={t(
+              'settings.general.appearance.timeFormat.placeholder'
+            )}
           />
         </SettingsField>
       </SettingsCard>

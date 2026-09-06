@@ -32,6 +32,7 @@ import {
   EditorType,
   SoundFile,
   ThemeMode,
+  TimeFormat,
   UiLanguage,
 } from 'shared/types';
 import { getLanguageOptions } from '@/i18n/languages';
@@ -299,6 +300,37 @@ export function GeneralSettings() {
             </Select>
             <p className="text-sm text-muted-foreground">
               {t('settings.general.appearance.language.helper')}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="time-format">
+              {t('settings.general.appearance.timeFormat.label')}
+            </Label>
+            <Select
+              value={draft?.time_format}
+              onValueChange={(value: TimeFormat) =>
+                updateDraft({ time_format: value })
+              }
+            >
+              <SelectTrigger id="time-format">
+                <SelectValue
+                  placeholder={t(
+                    'settings.general.appearance.timeFormat.placeholder'
+                  )}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TimeFormat.HOUR12}>
+                  {t('settings.general.appearance.timeFormat.hour12')}
+                </SelectItem>
+                <SelectItem value={TimeFormat.HOUR24}>
+                  {t('settings.general.appearance.timeFormat.hour24')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              {t('settings.general.appearance.timeFormat.helper')}
             </p>
           </div>
         </CardContent>

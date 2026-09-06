@@ -52,6 +52,13 @@
           "label": "Language",
           "placeholder": "Select language",
           "helper": "Choose your preferred language. Browser Default follows your system language."
+        },
+        "timeFormat": {
+          "label": "Time",
+          "placeholder": "Select time format",
+          "helper": "How times are shown in task lists.",
+          "hour12": "12-hour (2:04 PM)",
+          "hour24": "24-hour (14:04)"
         }
       },
       "taskExecution": {

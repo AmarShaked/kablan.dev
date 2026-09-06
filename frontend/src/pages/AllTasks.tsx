@@ -42,7 +42,7 @@ import { tasksApi } from '@/lib/api';
 import { paths } from '@/lib/paths';
 import { invalidateTaskViews } from '@/lib/taskCache';
 import { cn } from '@/lib/utils';
-import { relativeDay } from '@/utils/relativeDay';
+import { relativeDay, usesHour12 } from '@/utils/relativeDay';
 import {
   taskActivity,
   taskIsUnread,
@@ -51,6 +51,7 @@ import {
 import { STATUS_ORDER, statusLabels } from '@/utils/statusLabels';
 import type { ArchiveFilter, TaskStatus } from 'shared/types';
 import { projectKeys } from '@/lib/queryKeys';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 
 /**
  * Every task, across every project, grouped by status.
@@ -93,6 +94,8 @@ function Row({
   const activity = taskActivity(task);
   const unread = taskIsUnread(task);
   const ProjectGlyph = projectIcon(task.projectIcon);
+  const { config } = useUserSystem();
+  const hour12 = usesHour12(config?.time_format);
 
   return (
     <li
@@ -140,7 +143,7 @@ function Row({
 
           {/* Hidden under the hover actions, which take this corner of the row. */}
           <span className="shrink-0 text-[13px] leading-[18px] tabular-nums text-muted-foreground transition-opacity group-hover/row:opacity-0">
-            {relativeDay(task.updated_at)}
+            {relativeDay(task.updated_at, hour12)}
           </span>
         </div>
 

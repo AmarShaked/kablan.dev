@@ -52,6 +52,13 @@
           "label": "語言",
           "placeholder": "選擇語言",
           "helper": "選擇您偏好的語言。瀏覽器預設將跟隨系統語言。"
+        },
+        "timeFormat": {
+          "label": "時間",
+          "placeholder": "選擇時間格式",
+          "helper": "任務列表中時間的顯示方式。",
+          "hour12": "12 小時 (2:04 PM)",
+          "hour24": "24 小時 (14:04)"
         }
       },
       "taskExecution": {

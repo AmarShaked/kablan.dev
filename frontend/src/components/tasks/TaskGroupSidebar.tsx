@@ -23,7 +23,7 @@ import {
   type TaskFilters,
   type TaskSort,
 } from '@/components/tasks/TaskFilterMenu';
-import { relativeDay } from '@/utils/relativeDay';
+import { relativeDay, usesHour12 } from '@/utils/relativeDay';
 import { taskActivity, taskIsUnread } from '@/utils/taskActivity';
 import { statusLabels } from '@/utils/statusLabels';
 import {
@@ -45,6 +45,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { cn } from '@/lib/utils';
 
 const COLLAPSE_KEY = 'kablan.taskSidebar.groupCollapse';
@@ -167,6 +168,8 @@ function TaskRow({
 
   const activity = taskActivity(task);
   const unread = taskIsUnread(task);
+  const { config } = useUserSystem();
+  const hour12 = usesHour12(config?.time_format);
 
   // Ungrouped there is nothing to drop into, so the row is not a drag handle either.
   const dragHandle = showStatus ? {} : listeners;
@@ -216,7 +219,7 @@ function TaskRow({
                   hasActions && 'group-hover/row:opacity-0'
                 )}
               >
-                {relativeDay(task.updated_at)}
+                {relativeDay(task.updated_at, hour12)}
               </span>
               {hasActions && (
                 // Hover only: a selected row keeps focus, and buttons that linger on the

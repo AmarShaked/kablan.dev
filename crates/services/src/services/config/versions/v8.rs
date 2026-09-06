@@ -29,6 +29,15 @@ pub enum SendMessageShortcut {
     Enter,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[ts(use_ts_enum)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TimeFormat {
+    #[default]
+    Hour12,
+    Hour24,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct Config {
     pub config_version: String,
@@ -73,6 +82,10 @@ pub struct Config {
     /// seven days a new one gets, so nothing has to migrate.
     #[serde(default = "default_archive_tasks_after_days")]
     pub archive_tasks_after_days: Option<u32>,
+    /// 12- or 24-hour clock for times in lists. Defaulted rather than versioned so a config
+    /// written before this existed keeps the 12-hour display it already had.
+    #[serde(default)]
+    pub time_format: TimeFormat,
 }
 
 fn default_archive_tasks_after_days() -> Option<u32> {
@@ -105,6 +118,7 @@ impl Config {
             commit_reminder_enabled: true,
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
+            time_format: TimeFormat::default(),
         }
     }
 
@@ -200,6 +214,7 @@ impl Default for Config {
             commit_reminder_enabled: true,
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
+            time_format: TimeFormat::default(),
         }
     }
 }
@@ -217,5 +232,16 @@ mod tests {
             .remove("enabled_agents");
         let config: Config = serde_json::from_value(value).unwrap();
         assert_eq!(config.enabled_agents, None);
+    }
+
+    #[test]
+    fn missing_time_format_deserializes_as_hour12() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value
+            .as_object_mut()
+            .expect("config json is an object")
+            .remove("time_format");
+        let config: Config = serde_json::from_value(value).unwrap();
+        assert_eq!(config.time_format, TimeFormat::Hour12);
     }
 }

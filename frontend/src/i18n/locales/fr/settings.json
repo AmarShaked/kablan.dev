@@ -52,6 +52,13 @@
           "label": "Langue",
           "placeholder": "Sélectionner une langue",
           "helper": "Choisissez votre langue préférée. Par défaut du navigateur suit la langue de votre système."
+        },
+        "timeFormat": {
+          "label": "Heure",
+          "placeholder": "Sélectionner le format d'heure",
+          "helper": "Comment les heures s'affichent dans les listes de tâches.",
+          "hour12": "12 heures (2:04 PM)",
+          "hour24": "24 heures (14:04)"
         }
       },
       "taskExecution": {
