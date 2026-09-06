@@ -5,13 +5,15 @@ import {
   DiffLineType,
   parseInstance,
 } from '@git-diff-view/react';
-import { SquarePen } from 'lucide-react';
+import { FileClock, FileX } from 'lucide-react';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { getHighLightLanguageFromPath } from '@/utils/extToLanguage';
 import { getActualTheme } from '@/utils/theme';
+import { FileChangePill } from './FileChangePill';
 import '@/styles/diff-style-overrides.css';
 import '@/styles/edit-diff-overrides.css';
 import { cn } from '@/lib/utils';
+import { useExpandable } from '@/stores/useExpandableStore';
 
 type Props = {
   path: string;
@@ -29,11 +31,9 @@ type Props = {
  * - Decide whether to hide line numbers based on backend data
  */
 function processUnifiedDiff(unifiedDiff: string, hasLineNumbers: boolean) {
-  // Hide line numbers when backend says they are unreliable
   const hideNums = !hasLineNumbers;
   let isValidDiff;
 
-  // Pre-compute additions/deletions using the library parser so counts are available while collapsed
   let additions = 0;
   let deletions = 0;
   try {
@@ -58,8 +58,6 @@ function processUnifiedDiff(unifiedDiff: string, hasLineNumbers: boolean) {
     isValidDiff,
   };
 }
-
-import { useExpandable } from '@/stores/useExpandableStore';
 
 function EditDiffRenderer({
   path,
@@ -91,32 +89,28 @@ function EditDiffRenderer({
     };
   }, [hunks, path]);
 
-  const headerClass = cn(
-    'flex items-center gap-1.5 text-secondary-foreground',
-    statusAppearance === 'denied' && 'text-red-700 dark:text-red-300',
-    statusAppearance === 'timed_out' && 'text-amber-700 dark:text-amber-200'
-  );
+  if (statusAppearance === 'denied' || statusAppearance === 'timed_out') {
+    const Icon = statusAppearance === 'denied' ? FileX : FileClock;
+    return (
+      <div className="flex items-center gap-1.5 text-secondary-foreground">
+        <Icon className="h-3 w-3" />
+        <p className="text-sm font-light overflow-x-auto flex-1">{path}</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className={headerClass}>
-        <SquarePen className="h-3 w-3" />
-        <p
-          onClick={() => setExpanded()}
-          className="text-sm font-mono overflow-x-auto flex-1 cursor-pointer"
-        >
-          {path}{' '}
-          <span style={{ color: 'hsl(var(--console-success))' }}>
-            +{additions}
-          </span>{' '}
-          <span style={{ color: 'hsl(var(--console-error))' }}>
-            -{deletions}
-          </span>
-        </p>
-      </div>
+      <FileChangePill
+        path={path}
+        added={additions}
+        removed={deletions}
+        selected={effectiveExpanded}
+        onClick={() => setExpanded()}
+      />
 
       {effectiveExpanded && (
-        <div className={'mt-2 border ' + hideLineNumbersClass}>
+        <div className={cn('mt-2 border', hideLineNumbersClass)}>
           {isValidDiff ? (
             <DiffView
               data={diffData}
@@ -127,14 +121,12 @@ function EditDiffRenderer({
               diffViewFontSize={12}
             />
           ) : (
-            <>
-              <pre
-                className="px-4 pb-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap"
-                style={{ color: 'hsl(var(--muted-foreground) / 0.9)' }}
-              >
-                {unifiedDiff}
-              </pre>
-            </>
+            <pre
+              className="px-4 pb-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap"
+              style={{ color: 'hsl(var(--muted-foreground) / 0.9)' }}
+            >
+              {unifiedDiff}
+            </pre>
           )}
         </div>
       )}

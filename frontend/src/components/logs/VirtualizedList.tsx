@@ -14,11 +14,12 @@ import {
   AddEntryType,
   DisplayEntry,
   PatchTypeWithKey,
+  isAggregatedDiffGroup,
   isAggregatedGroup,
   useConversationHistory,
 } from '@/hooks/useConversationHistory';
-import { CommandGroup } from './CommandGroup';
-import { groupConsecutiveCommands } from './groupCommands';
+import { CollapsedEntryGroup } from './CollapsedEntryGroup';
+import { groupConversationEntries } from './groupConversationEntries';
 import { Loader2 } from 'lucide-react';
 import { TaskWithAttemptStatus } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
@@ -54,8 +55,8 @@ const ItemContent: VirtuosoMessageListProps<
   const attempt = context?.attempt;
   const task = context?.task;
 
-  if (isAggregatedGroup(data) && attempt) {
-    return <CommandGroup group={data} attempt={attempt} task={task} />;
+  if ((isAggregatedGroup(data) || isAggregatedDiffGroup(data)) && attempt) {
+    return <CollapsedEntryGroup group={data} attempt={attempt} task={task} />;
   }
 
   if (data.type === 'STDOUT') {
@@ -110,7 +111,7 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
     // Grouped for display; the context keeps the flat list, since everything else counting or
     // scanning entries expects one item per entry.
     setChannelData({
-      data: groupConsecutiveCommands(newEntries),
+      data: groupConversationEntries(newEntries),
       scrollModifier,
     });
     setEntries(newEntries);

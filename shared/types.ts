@@ -594,6 +594,10 @@ export type GitBranch = { name: string, is_current: boolean, is_remote: boolean,
 
 export type QueuedMessage = { 
 /**
+ * Stable id so a single item can be cancelled without dropping the rest
+ */
+id: string, 
+/**
  * The session this message is queued for
  */
 session_id: string, 
@@ -606,7 +610,7 @@ data: DraftFollowUpData,
  */
 queued_at: string, };
 
-export type QueueStatus = { "status": "empty" } | { "status": "queued", message: QueuedMessage, };
+export type QueueStatus = { "status": "empty" } | { "status": "queued", messages: Array<QueuedMessage>, };
 
 export type ConflictOp = "rebase" | "merge" | "cherry_pick" | "revert";
 

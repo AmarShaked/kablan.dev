@@ -12,26 +12,18 @@ export type PatchTypeWithKey = PatchType & {
  */
 export type AggregatedPatchGroup = {
   type: 'AGGREGATED_GROUP';
-  /** The aggregation category (e.g., 'file_read', 'search', 'web_fetch') */
-  aggregationType: 'file_read' | 'search' | 'web_fetch';
-  /** The individual entries in this group */
+  aggregationType: 'tool_call' | 'file_read' | 'search' | 'web_fetch';
   entries: PatchTypeWithKey[];
-  /** Unique key for the group */
   patchKey: string;
   executionProcessId: string;
 };
 
 /**
- * A group of consecutive file_edit entries for the same file path.
- * Used to display multiple edits to the same file in a collapsed accordion style.
+ * Consecutive file_edit tool uses, shown as one “N changes” row.
  */
 export type AggregatedDiffGroup = {
   type: 'AGGREGATED_DIFF_GROUP';
-  /** The file path being edited */
-  filePath: string;
-  /** The individual file_edit entries in this group */
   entries: PatchTypeWithKey[];
-  /** Unique key for the group */
   patchKey: string;
   executionProcessId: string;
 };

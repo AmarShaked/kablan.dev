@@ -8,7 +8,9 @@ use git2::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ts_rs::TS;
-use utils::diff::{Diff, DiffChangeKind, FileDiffDetails, compute_line_change_counts};
+use utils::diff::{
+    Diff, DiffChangeKind, FileDiffDetails, compute_line_change_counts, normalize_diff_text,
+};
 
 mod cli;
 mod validation;
@@ -563,8 +565,8 @@ impl GitService {
                     change,
                     old_path,
                     new_path,
-                    old_content,
-                    new_content,
+                    old_content: old_content.as_deref().map(normalize_diff_text),
+                    new_content: new_content.as_deref().map(normalize_diff_text),
                     content_omitted,
                     additions,
                     deletions,
@@ -754,6 +756,9 @@ impl GitService {
             };
             (old_content, new_content)
         };
+
+        let old_content = old_content.map(|s| normalize_diff_text(&s));
+        let new_content = new_content.map(|s| normalize_diff_text(&s));
 
         // If reported as Modified but content is identical, treat as a permission-only change
         if matches!(change, DiffChangeKind::Modified)

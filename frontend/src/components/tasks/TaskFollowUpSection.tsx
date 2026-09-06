@@ -4,8 +4,6 @@ import {
   CornerDownLeft,
   StopCircle,
   AlertCircle,
-  Clock,
-  X,
   Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,6 +29,7 @@ import { useProjectTags } from '@/hooks/useProjectTags';
 import { ComposerMenu } from '@/components/tasks/ComposerMenu';
 import { useAttemptBranch } from '@/hooks/useAttemptBranch';
 import { FollowUpConflictSection } from '@/components/tasks/follow-up/FollowUpConflictSection';
+import { QueuedFollowUps } from '@/components/tasks/follow-up/QueuedFollowUps';
 import { ClickedElementsBanner } from '@/components/tasks/ClickedElementsBanner';
 import WYSIWYGEditor from '@/components/ui/wysiwyg';
 import { useRetryUi } from '@/contexts/RetryUiContext';
@@ -51,6 +50,7 @@ import { queueApi } from '@/lib/api';
 import { imagesApi } from '@/lib/api';
 import type { Session } from 'shared/types';
 import { buildAgentPrompt } from '@/utils/promptMessage';
+import { queuedMessages } from '@/utils/queueStatus';
 
 interface TaskFollowUpSectionProps {
   task: TaskWithAttemptStatus;
@@ -118,6 +118,7 @@ export function TaskFollowUpSection({
   const {
     scratch,
     updateScratch,
+    deleteScratch,
     isLoading: isScratchLoading,
   } = useScratch(ScratchType.DRAFT_FOLLOW_UP, sessionId ?? '');
 
@@ -236,10 +237,7 @@ export function TaskFollowUpSection({
     enabled: !!sessionId,
   });
 
-  const isQueued = queueStatus.status === 'queued';
-  const queuedMessage = isQueued
-    ? (queueStatus as Extract<QueueStatus, { status: 'queued' }>).message
-    : null;
+  const queued = queuedMessages(queueStatus);
 
   const queueMutation = useMutation({
     mutationFn: ({
@@ -261,6 +259,14 @@ export function TaskFollowUpSection({
     },
   });
 
+  const cancelOneMutation = useMutation({
+    mutationFn: (messageId: string) =>
+      queueApi.cancelOne(sessionId!, messageId),
+    onSuccess: (status) => {
+      queryClient.setQueryData([QUEUE_STATUS_KEY, sessionId], status);
+    },
+  });
+
   const queueMessage = useCallback(
     async (message: string, executorProfileId: ExecutorProfileId) => {
       if (!sessionId) return;
@@ -277,7 +283,18 @@ export function TaskFollowUpSection({
     await cancelMutation.mutateAsync();
   }, [sessionId, cancelMutation]);
 
-  const isQueueLoading = queueMutation.isPending || cancelMutation.isPending;
+  const cancelQueuedMessage = useCallback(
+    async (messageId: string) => {
+      if (!sessionId) return;
+      await cancelOneMutation.mutateAsync(messageId);
+    },
+    [sessionId, cancelOneMutation]
+  );
+
+  const isQueueLoading =
+    queueMutation.isPending ||
+    cancelMutation.isPending ||
+    cancelOneMutation.isPending;
 
   // Track previous process count to detect new processes
   const prevProcessCountRef = useRef(processes.length);
@@ -310,9 +327,8 @@ export function TaskFollowUpSection({
     scratchData?.message,
   ]);
 
-  // When queued, display the queued message content so user can edit it
-  const displayMessage =
-    isQueued && queuedMessage ? queuedMessage.data.message : localMessage;
+  // The composer is always the next draft. Queued items live in the stack above it.
+  const displayMessage = localMessage;
 
   // Check if there's a pending approval - users shouldn't be able to type during approvals
   const { entries, tokenUsageInfo } = useEntries();
@@ -359,7 +375,6 @@ export function TaskFollowUpSection({
 
     if (isRetryActive) return false; // disable typing while retry editor is active
     if (hasPendingApproval) return false; // disable typing during approval
-    // Note: isQueued no longer blocks typing - editing auto-cancels the queue
     return true;
   }, [
     workspaceId,
@@ -402,10 +417,9 @@ export function TaskFollowUpSection({
       return;
     }
 
-    // Cancel any pending debounced save and save immediately before queueing
-    // This prevents the race condition where the debounce fires after queueing
+    // Don't persist this draft — it is moving into the queue, and the composer
+    // should be empty for the next follow-up.
     cancelDebouncedSave();
-    await saveToScratch(localMessage, selectedVariant);
 
     // Combine all the content that would be sent (same as follow-up send)
     const { prompt } = buildAgentPrompt(
@@ -419,6 +433,13 @@ export function TaskFollowUpSection({
         executor: latestProfileId.executor,
         variant: selectedVariant,
       });
+      cancelDebouncedSave();
+      setLocalMessage('');
+      try {
+        await deleteScratch();
+      } catch (e) {
+        console.error('Failed to clear follow-up draft after queueing', e);
+      }
     }
   }, [
     localMessage,
@@ -429,7 +450,7 @@ export function TaskFollowUpSection({
     selectedVariant,
     queueMessage,
     cancelDebouncedSave,
-    saveToScratch,
+    deleteScratch,
   ]);
 
   // Keyboard shortcut handler - send follow-up or queue depending on state
@@ -437,15 +458,12 @@ export function TaskFollowUpSection({
     (e?: KeyboardEvent) => {
       e?.preventDefault();
       if (isAttemptRunning) {
-        // When running, CMD+Enter queues the message (if not already queued)
-        if (!isQueued) {
-          handleQueueMessage();
-        }
+        handleQueueMessage();
       } else {
         onSendFollowUp();
       }
     },
-    [isAttemptRunning, isQueued, handleQueueMessage, onSendFollowUp]
+    [isAttemptRunning, handleQueueMessage, onSendFollowUp]
   );
 
   // Ref to access setFollowUpMessage without adding it as a dependency
@@ -460,19 +478,6 @@ export function TaskFollowUpSection({
     followUpErrorRef.current = followUpError;
   }, [followUpError]);
 
-  // Helper to get current queue state from cache (avoids ref-sync pattern)
-  const getQueueState = useCallback(() => {
-    const status = queryClient.getQueryData<QueueStatus>([
-      QUEUE_STATUS_KEY,
-      sessionId,
-    ]);
-    const queued = status?.status === 'queued';
-    const message = queued
-      ? (status as Extract<QueueStatus, { status: 'queued' }>).message
-      : null;
-    return { isQueued: queued, queuedMessage: message };
-  }, [queryClient, sessionId]);
-
   // Handle image paste - upload to container and insert markdown
   const handlePasteFiles = useCallback(
     async (files: File[]) => {
@@ -481,37 +486,20 @@ export function TaskFollowUpSection({
       for (const file of files) {
         try {
           const response = await imagesApi.uploadForAttempt(workspaceId, file);
-          // Append markdown image to current message
           const imageMarkdown = `![${response.original_name}](${response.file_path})`;
-
-          // If queued, cancel queue and use queued message as base (same as editor change behavior)
-          const {
-            isQueued: currentlyQueued,
-            queuedMessage: currentQueuedMessage,
-          } = getQueueState();
-          if (currentlyQueued && currentQueuedMessage) {
-            cancelMutation.mutate();
-            const base = currentQueuedMessage.data.message;
-            const newMessage = base
-              ? `${base}\n\n${imageMarkdown}`
+          setLocalMessage((prev) => {
+            const newMessage = prev
+              ? `${prev}\n\n${imageMarkdown}`
               : imageMarkdown;
-            setLocalMessage(newMessage);
             setFollowUpMessageRef.current(newMessage);
-          } else {
-            setLocalMessage((prev) => {
-              const newMessage = prev
-                ? `${prev}\n\n${imageMarkdown}`
-                : imageMarkdown;
-              setFollowUpMessageRef.current(newMessage); // Debounced save to scratch
-              return newMessage;
-            });
-          }
+            return newMessage;
+          });
         } catch (error) {
           console.error('Failed to upload image:', error);
         }
       }
     },
-    [workspaceId, getQueueState, cancelMutation]
+    [workspaceId]
   );
 
   // Attachment button - file input ref and handlers
@@ -554,16 +542,11 @@ export function TaskFollowUpSection({
   // Stable onChange handler for WYSIWYGEditor
   const handleEditorChange = useCallback(
     (value: string) => {
-      // Auto-cancel queue when user starts editing
-      const { isQueued: currentlyQueued } = getQueueState();
-      if (currentlyQueued) {
-        cancelMutation.mutate();
-      }
-      setLocalMessage(value); // Immediate update for UI responsiveness
-      setFollowUpMessageRef.current(value); // Debounced save to scratch
+      setLocalMessage(value);
+      setFollowUpMessageRef.current(value);
       if (followUpErrorRef.current) setFollowUpError(null);
     },
-    [setFollowUpError, getQueueState, cancelMutation]
+    [setFollowUpError]
   );
 
   // Memoize placeholder to avoid re-renders
@@ -678,19 +661,6 @@ export function TaskFollowUpSection({
 
             {/* Clicked elements notice and actions */}
             <ClickedElementsBanner />
-
-            {/* Queued message indicator */}
-            {isQueued && queuedMessage && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted p-3 rounded-md border">
-                <Clock className="h-4 w-4 flex-shrink-0" />
-                <div className="font-medium">
-                  {t(
-                    'followUp.queuedMessage',
-                    'Message queued - will execute when current run finishes'
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -703,11 +673,11 @@ export function TaskFollowUpSection({
             running, empty  → Stop (there is nothing to queue, so the useful act is to interrupt)
           Cancel-queue takes the slot once something is queued, since that is the only thing you
           can usefully do to a queued message from here. */}
-      <div className="p-3">
+      <div className="min-h-0 shrink-0 p-3">
         {/* The one place the context size is worth interrupting for: right where you are about
             to spend it. Above the threshold, sending costs several times what the same message
             costs on a fresh session, and the only thing that changes that is clearing. */}
-        {contextIsHeavy(tokenUsageInfo) && !isQueued && (
+        {contextIsHeavy(tokenUsageInfo) && (
           <div className="mb-2 flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
             <Gauge className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <span className="min-w-0 flex-1">
@@ -730,7 +700,7 @@ export function TaskFollowUpSection({
         )}
         <div
           className={cn(
-            'rounded-3xl border border-input bg-background px-4 py-3 transition-shadow',
+            'flex max-h-[min(55vh,28rem)] min-h-0 flex-col overflow-hidden rounded-3xl border border-input bg-background transition-shadow',
             'group-data-[scrolled=true]/composer:shadow-lg',
             isTextareaFocused && 'border-ring'
           )}
@@ -743,11 +713,17 @@ export function TaskFollowUpSection({
             className="hidden"
             onChange={handleFileInputChange}
           />
+          <QueuedFollowUps
+            messages={queued}
+            workspaceId={workspaceId}
+            onRemove={cancelQueuedMessage}
+            onClearAll={cancelQueue}
+            disabled={!isEditable || isQueueLoading}
+          />
           <div
-            className="flex flex-col gap-2"
+            className="min-h-0 flex-1 overflow-y-auto px-4 pt-3"
             onFocus={() => setIsTextareaFocused(true)}
             onBlur={(e) => {
-              // Only blur if focus is leaving the container entirely
               if (!e.currentTarget.contains(e.relatedTarget)) {
                 setIsTextareaFocused(false);
               }
@@ -768,7 +744,7 @@ export function TaskFollowUpSection({
             />
           </div>
 
-          <div className="flex items-center gap-2 pt-3">
+          <div className="flex shrink-0 items-center gap-2 px-4 pb-3 pt-3">
             <ComposerMenu
               onUpload={handleAttachClick}
               tags={tags}
@@ -816,29 +792,21 @@ export function TaskFollowUpSection({
                     icon: <ArrowUp className="h-4 w-4" />,
                     destructive: false,
                   }
-                : isQueued
+                : hasText
                   ? {
-                      onClick: cancelQueue,
+                      onClick: handleQueueMessage,
                       disabled: isQueueLoading,
-                      label: t('followUp.cancelQueue', 'Cancel Queue'),
-                      icon: <X className="h-4 w-4" />,
+                      label: t('followUp.queue', 'Queue'),
+                      icon: <CornerDownLeft className="h-4 w-4" />,
                       destructive: false,
                     }
-                  : hasText
-                    ? {
-                        onClick: handleQueueMessage,
-                        disabled: isQueueLoading,
-                        label: t('followUp.queue', 'Queue'),
-                        icon: <CornerDownLeft className="h-4 w-4" />,
-                        destructive: false,
-                      }
-                    : {
-                        onClick: stopExecution,
-                        disabled: isStopping,
-                        label: t('followUp.stop'),
-                        icon: <StopCircle className="h-4 w-4" />,
-                        destructive: true,
-                      };
+                  : {
+                      onClick: stopExecution,
+                      disabled: isStopping,
+                      label: t('followUp.stop'),
+                      icon: <StopCircle className="h-4 w-4" />,
+                      destructive: true,
+                    };
 
               return (
                 <Button

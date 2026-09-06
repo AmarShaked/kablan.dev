@@ -1528,12 +1528,26 @@ export const queueApi = {
   },
 
   /**
-   * Cancel a queued follow-up message
+   * Cancel every queued follow-up for this session
    */
   cancel: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`, {
       method: 'DELETE',
     });
+    return handleApiResponse<QueueStatus>(response);
+  },
+
+  /**
+   * Cancel a single queued follow-up
+   */
+  cancelOne: async (
+    sessionId: string,
+    messageId: string
+  ): Promise<QueueStatus> => {
+    const response = await makeRequest(
+      `/api/sessions/${sessionId}/queue/${messageId}`,
+      { method: 'DELETE' }
+    );
     return handleApiResponse<QueueStatus>(response);
   },
 

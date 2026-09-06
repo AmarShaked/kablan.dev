@@ -9,7 +9,6 @@ import {
 } from '../context/task-attempt-context';
 import { useImageMetadata } from '@/hooks/useImageMetadata';
 import { ImagePreviewDialog } from '@/components/dialogs/wysiwyg/ImagePreviewDialog';
-import { formatFileSize } from '@/lib/utils';
 import {
   createDecoratorNode,
   type DecoratorNodeConfig,
@@ -101,7 +100,6 @@ function ImageComponent({
   // Determine what to show as thumbnail
   let thumbnailContent: React.ReactNode;
   let displayName: string;
-  let metadataLine: string | null = null;
 
   // Check if we have context for fetching metadata (either taskAttemptId or taskId)
   const hasContext = !!taskAttemptId || !!taskId;
@@ -111,8 +109,8 @@ function ImageComponent({
   if (isVibeImage && (hasLocalImage || hasContext)) {
     if (loading) {
       thumbnailContent = (
-        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
-          <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+        <div className="w-4 h-4 flex items-center justify-center bg-muted rounded-full flex-shrink-0">
+          <Loader2 className="w-2.5 h-2.5 text-muted-foreground animate-spin" />
         </div>
       );
       displayName = truncatePath(src);
@@ -121,28 +119,16 @@ function ImageComponent({
         <img
           src={metadata.proxy_url}
           alt={altText}
-          className="w-10 h-10 object-cover rounded flex-shrink-0"
+          className="w-4 h-4 object-cover rounded-full flex-shrink-0"
           draggable={false}
         />
       );
       displayName = truncatePath(metadata.file_name || altText || src);
-      // Build metadata line
-      const parts: string[] = [];
-      if (metadata.format) {
-        parts.push(metadata.format.toUpperCase());
-      }
-      const sizeStr = formatFileSize(metadata.size_bytes);
-      if (sizeStr) {
-        parts.push(sizeStr);
-      }
-      if (parts.length > 0) {
-        metadataLine = parts.join(' · ');
-      }
     } else {
       // Vibe image but not found or error
       thumbnailContent = (
-        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
-          <HelpCircle className="w-5 h-5 text-muted-foreground" />
+        <div className="w-4 h-4 flex items-center justify-center bg-muted rounded-full flex-shrink-0">
+          <HelpCircle className="w-2.5 h-2.5 text-muted-foreground" />
         </div>
       );
       displayName = truncatePath(src);
@@ -150,16 +136,16 @@ function ImageComponent({
   } else if (!isVibeImage) {
     // Non-vibe-image: show question mark and path
     thumbnailContent = (
-      <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
-        <HelpCircle className="w-5 h-5 text-muted-foreground" />
+      <div className="w-4 h-4 flex items-center justify-center bg-muted rounded-full flex-shrink-0">
+        <HelpCircle className="w-2.5 h-2.5 text-muted-foreground" />
       </div>
     );
     displayName = truncatePath(altText || src);
   } else {
     // isVibeImage but no context available - fallback to question mark
     thumbnailContent = (
-      <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
-        <HelpCircle className="w-5 h-5 text-muted-foreground" />
+      <div className="w-4 h-4 flex items-center justify-center bg-muted rounded-full flex-shrink-0">
+        <HelpCircle className="w-2.5 h-2.5 text-muted-foreground" />
       </div>
     );
     displayName = truncatePath(src);
@@ -167,31 +153,24 @@ function ImageComponent({
 
   return (
     <span
-      className="group relative inline-flex items-center gap-1.5 pl-1.5 pr-5 py-1 ml-0.5 mr-0.5 bg-muted rounded border cursor-pointer border-border hover:border-muted-foreground transition-colors align-bottom"
+      className="group relative inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full border border-border bg-background pl-[3px] pr-1.5 align-middle cursor-pointer hover:border-muted-foreground"
       onClick={handleClick}
       onDoubleClick={onDoubleClickEdit}
       role="button"
       tabIndex={0}
     >
       {thumbnailContent}
-      <span className="flex flex-col min-w-0">
-        <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-          {displayName}
-        </span>
-        {metadataLine && (
-          <span className="text-[10px] text-muted-foreground/70 truncate max-w-[120px]">
-            {metadataLine}
-          </span>
-        )}
+      <span className="truncate text-xs text-foreground max-w-[9rem]">
+        {displayName}
       </span>
       {editor.isEditable() && (
         <button
           onClick={handleDelete}
-          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-foreground/70 hover:bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-60 hover:bg-destructive hover:text-destructive-foreground hover:opacity-100"
           aria-label="Remove image"
           type="button"
         >
-          <X className="w-2.5 h-2.5 text-background" />
+          <X className="h-2.5 w-2.5" />
         </button>
       )}
     </span>
@@ -212,7 +191,7 @@ const config: DecoratorNodeConfig<ImageData> = {
     display: 'inline-block',
     paddingLeft: '2px',
     paddingRight: '2px',
-    verticalAlign: 'bottom',
+    verticalAlign: 'middle',
   },
   keyboardSelectable: false,
   importDOM: (createNode) => ({

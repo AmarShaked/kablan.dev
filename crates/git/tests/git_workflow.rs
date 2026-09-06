@@ -520,3 +520,36 @@ fn squash_merge_libgit2_sets_author_without_user() {
         assert_eq!(email.as_deref(), Some("noreply@kablan.dev"));
     }
 }
+
+#[test]
+fn worktree_crlf_only_change_is_not_a_full_rewrite() {
+    let td = TempDir::new().unwrap();
+    let repo_path = init_repo_main(&td);
+    let s = GitService::new();
+    let body: String = (0..30).map(|i| format!("line {i}\n")).collect();
+    write_file(&repo_path, "notes.txt", &body);
+    let _ = s.commit(&repo_path, "add notes").unwrap();
+
+    create_branch(&repo_path, "feature");
+    checkout_branch(&repo_path, "feature");
+    write_file(&repo_path, "notes.txt", &body.replace('\n', "\r\n"));
+
+    let base_commit = s.get_base_commit(&repo_path, "feature", "main").unwrap();
+    let diffs = s
+        .get_diffs(
+            DiffTarget::Worktree {
+                worktree_path: Path::new(&repo_path),
+                base_commit: &base_commit,
+            },
+            None,
+        )
+        .unwrap();
+
+    let notes = diffs
+        .iter()
+        .find(|d| d.new_path.as_deref() == Some("notes.txt"));
+    if let Some(diff) = notes {
+        assert_eq!(diff.additions, Some(0));
+        assert_eq!(diff.deletions, Some(0));
+    }
+}

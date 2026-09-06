@@ -62,6 +62,8 @@
       "todoOperation": "{{operation}} todos"
     },
     "fixScript": "Fix Script",
+    "toolCallCount": "{{count}} tool calls",
+    "changeCount": "{{count}} changes",
     "subagent": {
       "defaultType": "Subagent"
     }

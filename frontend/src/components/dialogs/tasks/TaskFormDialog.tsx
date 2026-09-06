@@ -455,7 +455,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           <div className="relative min-w-0">
             <div
               {...getRootProps()}
-              className="h-full flex flex-col gap-4 p-4 min-h-0"
+              className="flex h-full min-h-0 flex-col gap-4 p-4 pt-12"
             >
               <input {...getInputProps()} />
               {/* Drag overlay */}

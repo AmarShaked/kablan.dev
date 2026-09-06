@@ -74,8 +74,10 @@ pub fn create_unified_diff(file_path: &str, old: &str, new: &str) -> String {
 
 /// Compute addition/deletion counts between two text snapshots.
 pub fn compute_line_change_counts(old: &str, new: &str) -> (usize, usize) {
-    let old = ensure_newline(old);
-    let new = ensure_newline(new);
+    let old = normalize_diff_text(old);
+    let new = normalize_diff_text(new);
+    let old = ensure_newline(&old);
+    let new = ensure_newline(&new);
 
     let mut opts = DiffOptions::new();
     opts.context_lines(0);
@@ -89,6 +91,16 @@ pub fn compute_line_change_counts(old: &str, new: &str) -> (usize, usize) {
             (0, 0)
         }
     }
+}
+
+/// Strip a BOM and normalize newlines so CRLF/CR copies of the same file are not
+/// treated as a full rewrite against an LF blob.
+pub fn normalize_diff_text(s: &str) -> String {
+    let s = s.strip_prefix('\u{feff}').unwrap_or(s);
+    if !s.as_bytes().contains(&b'\r') {
+        return s.to_string();
+    }
+    s.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 // ensure a line ends with a newline character
@@ -245,4 +257,23 @@ pub fn concatenate_diff_hunks(file_path: &str, hunks: &[String]) -> String {
 pub fn normalize_unified_diff(file_path: &str, unified_diff: &str) -> String {
     let hunks = extract_unified_diff_hunks(unified_diff);
     concatenate_diff_hunks(file_path, &hunks)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crlf_vs_lf_is_not_a_line_change() {
+        let lf = "hello\nworld\nthird\n";
+        let crlf = "hello\r\nworld\r\nthird\r\n";
+        assert_eq!(compute_line_change_counts(lf, crlf), (0, 0));
+    }
+
+    #[test]
+    fn one_line_edit_counts_only_that_line() {
+        let old: String = (0..40).map(|i| format!("line {i}\n")).collect();
+        let new = old.replacen("line 10\n", "line ten\n", 1);
+        assert_eq!(compute_line_change_counts(&old, &new), (1, 1));
+    }
 }

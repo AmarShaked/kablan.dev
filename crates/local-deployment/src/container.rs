@@ -19,7 +19,7 @@ use db::{
         },
         execution_process_repo_state::ExecutionProcessRepoState,
         repo::Repo,
-        scratch::{DraftFollowUpData, Scratch, ScratchType},
+        scratch::DraftFollowUpData,
         session::{Session, SessionError},
         task::{Task, TaskStatus},
         workspace::Workspace,
@@ -556,54 +556,42 @@ impl LocalContainerService {
 
                 if container.should_finalize(&ctx) {
                     // Only execute queued messages if the execution succeeded
-                    // If it failed or was killed, just clear the queue and finalize
+                    // If it failed or was killed, drop the whole queue and finalize
                     let should_execute_queued = !matches!(
                         ctx.execution_process.status,
                         ExecutionProcessStatus::Failed | ExecutionProcessStatus::Killed
                     );
 
-                    if let Some(queued_msg) =
-                        container.queued_message_service.take_queued(ctx.session.id)
-                    {
-                        if should_execute_queued {
+                    if should_execute_queued {
+                        if let Some(queued_msg) =
+                            container.queued_message_service.take_queued(ctx.session.id)
+                        {
                             tracing::info!(
                                 "Found queued message for session {}, starting follow-up execution",
                                 ctx.session.id
                             );
 
-                            // Delete the scratch since we're consuming the queued message
-                            if let Err(e) = Scratch::delete(
-                                &db.pool,
-                                ctx.session.id,
-                                &ScratchType::DraftFollowUp,
-                            )
-                            .await
-                            {
-                                tracing::warn!(
-                                    "Failed to delete scratch after consuming queued message: {}",
-                                    e
-                                );
-                            }
-
-                            // Execute the queued follow-up
+                            // Execute the queued follow-up. The composer scratch is the *next*
+                            // draft, not this queued item, so leave it alone.
                             if let Err(e) = container
                                 .start_queued_follow_up(&ctx, &queued_msg.data)
                                 .await
                             {
                                 tracing::error!("Failed to start queued follow-up: {}", e);
-                                // Fall back to finalization if follow-up fails
                                 container.finalize_task(&ctx).await;
                             }
                         } else {
-                            // Execution failed or was killed - discard the queued message and finalize
-                            tracing::info!(
-                                "Discarding queued message for session {} due to execution status {:?}",
-                                ctx.session.id,
-                                ctx.execution_process.status
-                            );
                             container.finalize_task(&ctx).await;
                         }
                     } else {
+                        tracing::info!(
+                            "Discarding queued messages for session {} due to execution status {:?}",
+                            ctx.session.id,
+                            ctx.execution_process.status
+                        );
+                        container
+                            .queued_message_service
+                            .cancel_queued(ctx.session.id);
                         container.finalize_task(&ctx).await;
                     }
                 }

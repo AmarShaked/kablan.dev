@@ -150,10 +150,14 @@ pub async fn load_tag_middleware(
 
 pub async fn load_session_middleware(
     State(deployment): State<DeploymentImpl>,
-    Path(session_id): Path<Uuid>,
+    Path(params): Path<std::collections::HashMap<String, String>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let session_id = params
+        .get("session_id")
+        .and_then(|id| Uuid::parse_str(id).ok())
+        .ok_or(StatusCode::BAD_REQUEST)?;
     let session = match Session::find_by_id(&deployment.db().pool, session_id).await {
         Ok(Some(session)) => session,
         Ok(None) => {

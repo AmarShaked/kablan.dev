@@ -1,13 +1,13 @@
 import { type FileChange } from 'shared/types';
 import { useUserSystem } from '@/contexts/UserSystemContext';
-import { Trash2, FilePlus2, ArrowRight, FileX, FileClock } from 'lucide-react';
+import { FileClock, FileX } from 'lucide-react';
 import { getHighLightLanguageFromPath } from '@/utils/extToLanguage';
 import { getActualTheme } from '@/utils/theme';
 import EditDiffRenderer from './EditDiffRenderer';
 import FileContentView from './FileContentView';
+import { FileChangePill } from './FileChangePill';
 import '@/styles/diff-style-overrides.css';
 import { useExpandable } from '@/stores/useExpandableStore';
-import { cn } from '@/lib/utils';
 
 type Props = {
   path: string;
@@ -39,6 +39,11 @@ function isEdit(
   return change?.action === 'edit';
 }
 
+function writeLineCount(content: string): number {
+  if (!content) return 0;
+  return content.split('\n').length;
+}
+
 const FileChangeRenderer = ({
   path,
   change,
@@ -52,27 +57,17 @@ const FileChangeRenderer = ({
   const effectiveExpanded = forceExpanded || expanded;
 
   const theme = getActualTheme(config?.theme);
-  const headerClass = cn('flex items-center gap-1.5 text-secondary-foreground');
 
-  const statusIcon =
-    statusAppearance === 'denied' ? (
-      <FileX className="h-3 w-3" />
-    ) : statusAppearance === 'timed_out' ? (
-      <FileClock className="h-3 w-3" />
-    ) : null;
-
-  if (statusIcon) {
+  if (statusAppearance === 'denied' || statusAppearance === 'timed_out') {
+    const Icon = statusAppearance === 'denied' ? FileX : FileClock;
     return (
-      <div>
-        <div className={headerClass}>
-          {statusIcon}
-          <p className="text-sm font-light overflow-x-auto flex-1">{path}</p>
-        </div>
+      <div className="flex items-center gap-1.5 text-secondary-foreground">
+        <Icon className="h-3 w-3" />
+        <p className="text-sm font-light overflow-x-auto flex-1">{path}</p>
       </div>
     );
   }
 
-  // Edit: delegate to EditDiffRenderer for identical styling and behavior
   if (isEdit(change)) {
     return (
       <EditDiffRenderer
@@ -87,71 +82,40 @@ const FileChangeRenderer = ({
     );
   }
 
-  // Title row content and whether the row is expandable
-  const { titleNode, icon, expandable } = (() => {
-    if (isDelete(change)) {
-      return {
-        titleNode: path,
-        icon: <Trash2 className="h-3 w-3" />,
-        expandable: false,
-      };
-    }
-
-    if (isRename(change)) {
-      return {
-        titleNode: (
-          <>
-            Rename {path} to {change.new_path}
-          </>
-        ),
-        icon: <ArrowRight className="h-3 w-3" />,
-        expandable: false,
-      };
-    }
-
-    if (isWrite(change)) {
-      return {
-        titleNode: path,
-        icon: <FilePlus2 className="h-3 w-3" />,
-        expandable: true,
-      };
-    }
-
-    // No fallback: render nothing for unknown change types
-    return {
-      titleNode: null,
-      icon: null,
-      expandable: false,
-    };
-  })();
-
-  // nothing to display
-  if (!titleNode) {
-    return null;
+  if (isDelete(change)) {
+    return <FileChangePill path={path} action="delete" />;
   }
 
-  return (
-    <div>
-      <div className={headerClass}>
-        {icon}
-        <p
-          onClick={() => expandable && setExpanded()}
-          className="text-sm font-mono overflow-x-auto flex-1 cursor-pointer"
-        >
-          {titleNode}
-        </p>
-      </div>
+  if (isRename(change)) {
+    return (
+      <FileChangePill path={path} action="rename" newPath={change.new_path} />
+    );
+  }
 
-      {/* Body */}
-      {isWrite(change) && effectiveExpanded && (
-        <FileContentView
-          content={change.content}
-          lang={getHighLightLanguageFromPath(path)}
-          theme={theme}
+  if (isWrite(change)) {
+    return (
+      <div>
+        <FileChangePill
+          path={path}
+          action="write"
+          added={writeLineCount(change.content)}
+          selected={effectiveExpanded}
+          onClick={() => setExpanded()}
         />
-      )}
-    </div>
-  );
+        {effectiveExpanded && (
+          <div className="mt-2">
+            <FileContentView
+              content={change.content}
+              lang={getHighLightLanguageFromPath(path)}
+              theme={theme}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default FileChangeRenderer;

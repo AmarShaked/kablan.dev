@@ -51,6 +51,7 @@ type Props = {
   executionProcessId?: string;
   taskAttempt?: WorkspaceWithSession;
   task?: TaskWithAttemptStatus;
+  compact?: boolean;
 };
 
 type FileEditAction = Extract<ActionType, { action: 'file_edit' }>;
@@ -305,6 +306,7 @@ const CollapsibleEntry: React.FC<{
         <WYSIWYGEditor
           value={content}
           disabled
+          actionsPlacement={variant === 'system' ? 'none' : 'below'}
           className="whitespace-pre-wrap break-words"
           taskAttemptId={taskAttemptId}
         />
@@ -321,6 +323,7 @@ const CollapsibleEntry: React.FC<{
         <WYSIWYGEditor
           value={firstLine}
           disabled
+          actionsPlacement={variant === 'system' ? 'none' : 'below'}
           className="whitespace-pre-wrap break-words"
           taskAttemptId={taskAttemptId}
         />
@@ -724,6 +727,7 @@ function DisplayConversationEntry({
   executionProcessId,
   taskAttempt,
   task,
+  compact,
 }: Props) {
   const { t } = useTranslation('common');
   const isNormalizedEntry = (
@@ -817,7 +821,7 @@ function DisplayConversationEntry({
       if (isFileEdit(toolEntry.action_type)) {
         const fileEditAction = toolEntry.action_type as FileEditAction;
         return (
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             {fileEditAction.changes.map((change, idx) => (
               <FileChangeRenderer
                 key={idx}
@@ -882,7 +886,11 @@ function DisplayConversationEntry({
 
     const content = (
       <div
-        className={`px-4 py-2 text-sm space-y-3 ${greyed ? 'opacity-50 pointer-events-none' : ''}`}
+        className={cn(
+          'text-sm space-y-3',
+          compact ? 'px-0 py-0.5' : 'px-4 py-2',
+          greyed && 'opacity-50 pointer-events-none'
+        )}
       >
         {body}
       </div>
