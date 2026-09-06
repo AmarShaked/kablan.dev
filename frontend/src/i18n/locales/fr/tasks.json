@@ -73,7 +73,6 @@
   },
   "preview": {
     "title": "Aperçu",
-    "selectAttempt": "Sélectionnez une tentative pour voir l'aperçu",
     "troubleAlert": {
       "title": "Nous avons des difficultés à prévisualiser votre application :",
       "item1": "Le serveur de développement a-t-il démarré correctement ? Il peut y avoir un bug à résoudre, ou peut-être que les dépendances doivent être installées.",
@@ -190,10 +189,7 @@
     "closePanel": "Fermer le panneau"
   },
   "toolbar": {
-    "actions": "Actions",
-    "noAttempts": "Aucune tentative pour le moment",
-    "startFirstAttempt": "Démarrez votre première tentative pour commencer à travailler sur cette tâche",
-    "startAttempt": "Démarrer une tentative"
+    "actions": "Actions"
   },
   "followUp": {
     "stop": "Arrêter",
@@ -317,31 +313,15 @@
     "unableToRenderDiff": "Impossible d'afficher le diff."
   },
   "attempt": {
-    "actions": {
-      "openInIde": "Ouvrir dans l'IDE",
-      "openMenu": "Ouvrir le menu",
-      "startDevServer": "Démarrer le serveur de développement",
-      "stopDevServer": "Arrêter le serveur de développement"
-    },
     "labels": {
-      "attempt": "Tentative",
-      "agent": "Agent",
-      "branch": "Branche",
-      "diffs": "Diffs",
       "summaryAndActions": "Résumé et actions"
     },
-    "agent": "Agent",
-    "path": "Chemin",
     "openInEditor": "Voir les modifications dans {{editor}}",
     "copied": "Copié !",
     "clickToCopy": "Copier le chemin du worktree",
-    "stopDev": "Arrêter le développement",
     "pauseDev": "Mettre en pause",
     "startDev": "Démarrer le développement",
     "viewDevLogs": "Voir les logs du serveur de développement",
-    "stopping": "Arrêt en cours...",
-    "createSubtask": "Créer une sous-tâche",
-    "preview": "Aperçu",
     "diffs": "Diffs",
     "gitActions": "Actions Git",
     "runSetup": "Exécuter la configuration",
@@ -441,16 +421,6 @@
   "repoBranchSelector": {
     "label": "Branche de base"
   },
-  "attemptRepoSelector": {
-    "label": "Dépôts",
-    "addButton": "Ajouter",
-    "empty": "Aucun dépôt sélectionné. Ajoutez au moins un dépôt.",
-    "selectBranch": "Sélectionner une branche",
-    "addRepo": {
-      "title": "Sélectionner un dépôt Git",
-      "description": "Choisissez un dépôt git à ajouter à cette tentative"
-    }
-  },
   "viewProcessesDialog": {
     "title": "Processus d'exécution"
   },
@@ -465,13 +435,9 @@
     }
   },
   "attemptHeaderActions": {
-    "preview": "Aperçu",
-    "diffs": "Diffs",
-    "relatedTasks": "Tâches associées",
-    "tryNewUI": "essayer la nouvelle interface"
+    "diffs": "Diffs"
   },
   "actionsMenu": {
-    "openInIde": "Ouvrir la tentative dans l'IDE",
     "viewProcesses": "Voir les processus",
     "viewRelatedTasks": "Voir les tâches associées",
     "createSubtask": "Créer une sous-tâche",

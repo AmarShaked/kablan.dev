@@ -41,7 +41,7 @@ export function buildResolveConflictsInstructions(
   op?: ConflictOp | null,
   repoName?: string
 ): string {
-  const source = sourceBranch || 'current attempt branch';
+  const source = sourceBranch || 'current task branch';
   const base = baseBranch ?? 'base branch';
   const filesList = conflictedFiles.slice(0, 12);
   const filesBlock = filesList.length

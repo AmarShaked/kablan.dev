@@ -59,8 +59,7 @@
         "description": "Choisissez l'agent de codage par défaut pour les tâches.",
         "executor": {
           "label": "Configuration d'agent par défaut",
-          "placeholder": "Sélectionner un profil",
-          "helper": "Choisissez la configuration d'agent par défaut à utiliser lors de la création d'une tentative de tâche."
+          "placeholder": "Sélectionner un profil"
         },
         "variant": "PAR DÉFAUT",
         "defaultLabel": "Par défaut"
@@ -172,7 +171,6 @@
       },
       "commits": {
         "title": "Commits",
-        "description": "Configurez le comportement de commit pour les tentatives de tâches",
         "reminder": {
           "label": "Rappel de commit",
           "helper": "Demander aux agents compatibles de commiter les modifications avant de s'arrêter."
@@ -187,14 +185,12 @@
         "description": "Contrôlez quand et comment vous recevez des notifications.",
         "sound": {
           "label": "Notifications sonores",
-          "helper": "Jouer un son lorsque les tentatives de tâches sont terminées.",
           "fileLabel": "Son",
           "filePlaceholder": "Sélectionner un son",
           "fileHelper": "Choisissez le son à jouer lorsque les tâches sont terminées. Cliquez sur le bouton volume pour prévisualiser."
         },
         "push": {
-          "label": "Notifications push",
-          "helper": "Afficher les notifications système lorsque les tentatives de tâches sont terminées."
+          "label": "Notifications push"
         }
       },
       "messageInput": {
@@ -279,8 +275,7 @@
         "title": "Fonctionnalités bêta",
         "description": "Essayez les fonctionnalités expérimentales avant leur sortie.",
         "workspaces": {
-          "label": "Activer la bêta des espaces de travail",
-          "helper": "Utiliser la nouvelle interface des espaces de travail lors de la visualisation des tentatives de tâches. Les tâches s'ouvriront d'abord en vue tâche, et les tentatives s'ouvriront dans la nouvelle vue des espaces de travail."
+          "label": "Activer la bêta des espaces de travail"
         }
       }
     },

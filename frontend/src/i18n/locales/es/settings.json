@@ -59,8 +59,7 @@
         "description": "Elige el agente de código predeterminado para las tareas.",
         "executor": {
           "label": "Configuración predeterminada del Agente",
-          "placeholder": "Seleccionar perfil",
-          "helper": "Define la configuración predeterminada del agente que se usará al iniciar una tarea."
+          "placeholder": "Seleccionar perfil"
         },
         "variant": "PREDETERMINADO",
         "defaultLabel": "Predeterminado"
@@ -172,7 +171,6 @@
       },
       "commits": {
         "title": "Commits",
-        "description": "Configura el comportamiento de commits para los intentos de tareas",
         "reminder": {
           "label": "Recordatorio de commit",
           "helper": "Solicitar a los agentes compatibles que confirmen los cambios antes de detenerse."
@@ -187,14 +185,12 @@
         "description": "Controla cuándo y cómo recibes notificaciones.",
         "sound": {
           "label": "Notificaciones de Sonido",
-          "helper": "Reproduce un sonido cuando una tarea termina de ejecutarse.",
           "fileLabel": "Sonido",
           "filePlaceholder": "Seleccionar sonido",
           "fileHelper": "Elige el sonido que se reproducirá al completar las tareas. Haz clic en el botón de volumen para escucharlo."
         },
         "push": {
-          "label": "Notificaciones Push",
-          "helper": "Muestra notificaciones del sistema cuando las tareas terminan de ejecutarse."
+          "label": "Notificaciones Push"
         }
       },
       "messageInput": {
@@ -279,8 +275,7 @@
         "title": "Funciones Beta",
         "description": "Prueba funciones experimentales antes de su lanzamiento.",
         "workspaces": {
-          "label": "Habilitar Beta de Workspaces",
-          "helper": "Usa la nueva interfaz de workspaces al ver intentos de tareas. Las tareas se abrirán primero en la vista de tareas, y los intentos se abrirán en la nueva vista de workspaces."
+          "label": "Habilitar Beta de Workspaces"
         }
       }
     },

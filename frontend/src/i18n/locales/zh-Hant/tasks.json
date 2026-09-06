@@ -74,19 +74,8 @@
   "repoBranchSelector": {
     "label": "基底分支"
   },
-  "attemptRepoSelector": {
-    "label": "儲存庫",
-    "addButton": "新增",
-    "empty": "尚未選擇儲存庫。請至少新增一個儲存庫。",
-    "selectBranch": "選擇分支",
-    "addRepo": {
-      "title": "選擇 Git 儲存庫",
-      "description": "選擇要新增到此嘗試的 Git 儲存庫"
-    }
-  },
   "preview": {
     "title": "預覽",
-    "selectAttempt": "選擇嘗試以查看預覽",
     "troubleAlert": {
       "title": "我們在預覽您的應用程式時遇到問題：",
       "item1": "開發伺服器是否成功啟動？可能有錯誤需要處理，或需要安裝相依套件。",
@@ -203,10 +192,7 @@
     "closePanel": "關閉面板"
   },
   "toolbar": {
-    "actions": "操作",
-    "noAttempts": "尚無嘗試",
-    "startFirstAttempt": "開始第一次嘗試以開始處理此任務",
-    "startAttempt": "開始嘗試"
+    "actions": "操作"
   },
   "followUp": {
     "stop": "停止",
@@ -253,31 +239,15 @@
     }
   },
   "attempt": {
-    "actions": {
-      "openInIde": "在 IDE 中開啟",
-      "openMenu": "開啟選單",
-      "startDevServer": "啟動開發伺服器",
-      "stopDevServer": "停止開發伺服器"
-    },
     "labels": {
-      "attempt": "嘗試",
-      "agent": "代理",
-      "branch": "分支",
-      "diffs": "差異",
       "summaryAndActions": "摘要與操作"
     },
-    "agent": "代理",
-    "path": "路徑",
     "openInEditor": "在 {{editor}} 中查看變更",
     "copied": "已複製！",
     "clickToCopy": "複製工作樹路徑",
-    "stopDev": "停止開發",
     "pauseDev": "暫停開發",
     "startDev": "啟動開發",
     "viewDevLogs": "查看開發伺服器日誌",
-    "stopping": "停止中...",
-    "createSubtask": "建立子任務",
-    "preview": "預覽",
     "diffs": "差異",
     "gitActions": "Git 操作",
     "runSetup": "執行設定",
@@ -388,13 +358,9 @@
     }
   },
   "attemptHeaderActions": {
-    "preview": "預覽",
-    "diffs": "差異",
-    "relatedTasks": "相關任務",
-    "tryNewUI": "試用新界面"
+    "diffs": "差異"
   },
   "actionsMenu": {
-    "openInIde": "在 IDE 中開啟嘗試",
     "viewProcesses": "查看程序",
     "viewRelatedTasks": "查看相關任務",
     "createSubtask": "建立子任務",

@@ -86,7 +86,6 @@
   },
   "preview": {
     "title": "Preview",
-    "selectAttempt": "Select an attempt to see preview",
     "troubleAlert": {
       "title": "We're having trouble previewing your application:",
       "item1": "Did the dev server start successfully? There may be a bug you need to resolve, or perhaps dependencies need to be installed.",
@@ -224,10 +223,7 @@
   },
   "navigateToParent": "Navigate to parent task",
   "toolbar": {
-    "actions": "Actions",
-    "noAttempts": "No attempts yet",
-    "startFirstAttempt": "Start your first attempt to begin working on this task",
-    "startAttempt": "Start Attempt"
+    "actions": "Actions"
   },
   "followUp": {
     "stop": "Stop",
@@ -358,31 +354,15 @@
     "unableToRenderDiff": "Unable to render diff."
   },
   "attempt": {
-    "actions": {
-      "openInIde": "Open in IDE",
-      "openMenu": "Open menu",
-      "startDevServer": "Start dev server",
-      "stopDevServer": "Stop dev server"
-    },
     "labels": {
-      "attempt": "Attempt",
-      "agent": "Agent",
-      "branch": "Branch",
-      "diffs": "Diffs",
       "summaryAndActions": "Summary & Actions"
     },
-    "agent": "Agent",
-    "path": "Path",
     "openInEditor": "See changes in {{editor}}",
     "copied": "Copied!",
     "clickToCopy": "Copy worktree path",
-    "stopDev": "Stop Dev",
     "pauseDev": "Pause Dev",
     "startDev": "Start Dev",
     "viewDevLogs": "View dev server logs",
-    "stopping": "Stopping...",
-    "createSubtask": "Create Subtask",
-    "preview": "Preview",
     "diffs": "Diffs",
     "gitActions": "Git Actions",
     "tryAgain": "Retry in a new task",
@@ -485,16 +465,6 @@
   "repoBranchSelector": {
     "label": "Base branch"
   },
-  "attemptRepoSelector": {
-    "label": "Repositories",
-    "addButton": "Add",
-    "empty": "No repositories selected. Add at least one repository.",
-    "selectBranch": "Select branch",
-    "addRepo": {
-      "title": "Select Git Repository",
-      "description": "Choose a git repository to add to this attempt"
-    }
-  },
   "viewProcessesDialog": {
     "title": "Execution processes"
   },
@@ -510,13 +480,9 @@
     }
   },
   "attemptHeaderActions": {
-    "preview": "Preview",
-    "diffs": "Diffs",
-    "relatedTasks": "Related tasks",
-    "tryNewUI": "try the new UI"
+    "diffs": "Diffs"
   },
   "actionsMenu": {
-    "openInIde": "Open attempt in IDE",
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
     "createSubtask": "Create subtask",
@@ -618,7 +584,7 @@
       },
       "pullRequest": {
         "title": "Create PR from Task",
-        "description": "Merge your changes or create pull requests directly from task attempts. The PR dialog pre-fills title and description from your task details for streamlined workflows."
+        "description": "Merge your changes or create pull requests directly from a task. The PR dialog pre-fills title and description from your task details for streamlined workflows."
       },
       "tags": {
         "title": "Custom Prompt Tags",

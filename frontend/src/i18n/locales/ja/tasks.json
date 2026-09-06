@@ -26,7 +26,6 @@
     "duplicate": "Duplicate",
     "editBranchName": "ブランチ名を編集",
     "gitActions": "Gitアクション",
-    "openInIde": "Open attempt in IDE",
     "task": "Task",
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
@@ -53,32 +52,16 @@
     "newSession": "新しいセッション"
   },
   "attempt": {
-    "actions": {
-      "openInIde": "IDEで開く",
-      "openMenu": "メニューを開く",
-      "startDevServer": "開発サーバーを開始",
-      "stopDevServer": "開発サーバーを停止"
-    },
-    "agent": "Agent",
     "clickToCopy": "ワークツリーパスをコピー",
     "copied": "Copied!",
-    "createSubtask": "Create Subtask",
     "diffs": "Diffs",
     "gitActions": "Gitアクション",
     "labels": {
-      "agent": "エージェント",
-      "attempt": "試行",
-      "branch": "ブランチ",
-      "diffs": "差分",
       "summaryAndActions": "概要とアクション"
     },
     "openInEditor": "Open in {{editor}}",
-    "path": "Path",
     "pauseDev": "Dev を一時停止",
-    "preview": "Preview",
     "startDev": "Start Dev",
-    "stopDev": "Stop Dev",
-    "stopping": "Stopping...",
     "viewDevLogs": "View dev server logs",
     "runSetup": "セットアップを実行",
     "setupHelpText": "{{agent}}が正しく設定されていません。「セットアップを実行」をクリックしてインストールとログインを行ってください。",
@@ -139,10 +122,7 @@
     }
   },
   "attemptHeaderActions": {
-    "diffs": "Diffs",
-    "preview": "Preview",
-    "relatedTasks": "Related tasks",
-    "tryNewUI": "新しいUIを試す"
+    "diffs": "Diffs"
   },
   "branches": {
     "changeTarget": {
@@ -171,16 +151,6 @@
   },
   "repoBranchSelector": {
     "label": "ベースブランチ"
-  },
-  "attemptRepoSelector": {
-    "label": "リポジトリ",
-    "addButton": "追加",
-    "empty": "リポジトリが選択されていません。少なくとも1つのリポジトリを追加してください。",
-    "selectBranch": "ブランチを選択",
-    "addRepo": {
-      "title": "Gitリポジトリを選択",
-      "description": "この試行に追加するGitリポジトリを選択してください"
-    }
   },
   "diff": {
     "collapseAll": "Collapse all diffs",
@@ -359,7 +329,6 @@
       "editDevScript": "開発サーバースクリプトを編集",
       "learnMore": "アプリケーションのテストについてもっと詳しく"
     },
-    "selectAttempt": "Select an attempt to see preview",
     "title": "Preview",
     "toolbar": {
       "copyUrl": "URLをコピー",
@@ -460,10 +429,7 @@
     }
   },
   "toolbar": {
-    "actions": "Actions",
-    "noAttempts": "No attempts yet",
-    "startAttempt": "Start Attempt",
-    "startFirstAttempt": "Start your first attempt to begin working on this task"
+    "actions": "Actions"
   },
   "viewProcessesDialog": {
     "title": "Execution processes"

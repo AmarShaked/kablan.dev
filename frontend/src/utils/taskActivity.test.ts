@@ -100,7 +100,7 @@ describe('taskIsUnread', () => {
 });
 
 describe('taskNeedsAttention', () => {
-  it('flags a failed attempt: it needs a decision to retry or drop', () => {
+  it('flags a failed run: it needs a decision to retry or drop', () => {
     expect(taskNeedsAttention(task({ last_attempt_failed: true }))).toBe(true);
   });
 

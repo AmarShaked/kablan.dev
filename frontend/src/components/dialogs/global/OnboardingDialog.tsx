@@ -207,7 +207,7 @@ const OnboardingDialogImpl = NiceModal.create<NoProps>(() => {
             )}
 
             <p className="text-sm text-muted-foreground">
-              This editor will be used to open task attempts and project files.
+              This editor will be used to open task worktrees and project files.
             </p>
 
             {editorType === EditorType.CUSTOM && (

@@ -26,7 +26,6 @@
     "duplicate": "Duplicate",
     "editBranchName": "브랜치 이름 편집",
     "gitActions": "Git 작업",
-    "openInIde": "Open attempt in IDE",
     "task": "Task",
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
@@ -53,32 +52,16 @@
     "newSession": "새 세션"
   },
   "attempt": {
-    "actions": {
-      "openInIde": "IDE에서 열기",
-      "openMenu": "메뉴 열기",
-      "startDevServer": "개발 서버 시작",
-      "stopDevServer": "개발 서버 중지"
-    },
-    "agent": "Agent",
     "clickToCopy": "작업 트리 경로 복사",
     "copied": "Copied!",
-    "createSubtask": "Create Subtask",
     "diffs": "Diffs",
     "gitActions": "Git 작업",
     "labels": {
-      "agent": "에이전트",
-      "attempt": "시도",
-      "branch": "브랜치",
-      "diffs": "변경사항",
       "summaryAndActions": "요약 및 작업"
     },
     "openInEditor": "Open in {{editor}}",
-    "path": "Path",
     "pauseDev": "Dev 일시정지",
-    "preview": "Preview",
     "startDev": "Start Dev",
-    "stopDev": "Stop Dev",
-    "stopping": "Stopping...",
     "viewDevLogs": "View dev server logs",
     "runSetup": "설정 실행",
     "setupHelpText": "{{agent}}이(가) 올바르게 설정되지 않았습니다. '설정 실행'을 클릭하여 설치하고 로그인하세요.",
@@ -139,10 +122,7 @@
     }
   },
   "attemptHeaderActions": {
-    "diffs": "Diffs",
-    "preview": "Preview",
-    "relatedTasks": "Related tasks",
-    "tryNewUI": "새로운 UI 사용해보기"
+    "diffs": "Diffs"
   },
   "branches": {
     "changeTarget": {
@@ -171,16 +151,6 @@
   },
   "repoBranchSelector": {
     "label": "기본 브랜치"
-  },
-  "attemptRepoSelector": {
-    "label": "저장소",
-    "addButton": "추가",
-    "empty": "선택된 저장소가 없습니다. 최소한 하나의 저장소를 추가하세요.",
-    "selectBranch": "브랜치 선택",
-    "addRepo": {
-      "title": "Git 저장소 선택",
-      "description": "이 시도에 추가할 Git 저장소를 선택하세요"
-    }
   },
   "diff": {
     "collapseAll": "Collapse all diffs",
@@ -350,7 +320,6 @@
       "editDevScript": "개발 서버 스크립트 편집",
       "learnMore": "애플리케이션 테스트에 대해 자세히 알아보기"
     },
-    "selectAttempt": "Select an attempt to see preview",
     "title": "Preview",
     "toolbar": {
       "copyUrl": "URL 복사",
@@ -445,10 +414,7 @@
     "noTasks": "작업 없음"
   },
   "toolbar": {
-    "actions": "Actions",
-    "noAttempts": "No attempts yet",
-    "startAttempt": "Start Attempt",
-    "startFirstAttempt": "Start your first attempt to begin working on this task"
+    "actions": "Actions"
   },
   "viewProcessesDialog": {
     "title": "Execution processes"

@@ -59,8 +59,7 @@
         "description": "작업의 기본 코딩 에이전트를 선택하세요.",
         "executor": {
           "label": "기본 에이전트 구성",
-          "placeholder": "프로필 선택",
-          "helper": "작업 시도를 생성할 때 사용할 기본 에이전트 구성을 선택하세요."
+          "placeholder": "프로필 선택"
         },
         "variant": "DEFAULT",
         "defaultLabel": "기본"
@@ -172,7 +171,6 @@
       },
       "commits": {
         "title": "커밋",
-        "description": "작업 시도의 커밋 동작 구성",
         "reminder": {
           "label": "커밋 알림",
           "helper": "지원되는 에이전트에게 중지 전 변경사항 커밋을 요청합니다."
@@ -187,14 +185,12 @@
         "description": "알림을 받는 시기와 방법을 제어하세요.",
         "sound": {
           "label": "소리 알림",
-          "helper": "작업 시도가 완료되면 소리를 재생합니다.",
           "fileLabel": "소리",
           "filePlaceholder": "소리 선택",
           "fileHelper": "작업이 완료될 때 재생할 소리를 선택하세요. 볼륨 버튼을 클릭하여 미리 들을 수 있습니다."
         },
         "push": {
-          "label": "푸시 알림",
-          "helper": "작업 시도가 완료되면 시스템 알림을 표시합니다."
+          "label": "푸시 알림"
         }
       },
       "messageInput": {
@@ -279,8 +275,7 @@
         "title": "베타 기능",
         "description": "출시 전 실험적인 기능을 체험해보세요.",
         "workspaces": {
-          "label": "워크스페이스 베타 활성화",
-          "helper": "작업 시도를 볼 때 새로운 워크스페이스 인터페이스를 사용합니다. 작업은 먼저 작업 보기에서 열리고, 시도는 새로운 워크스페이스 보기에서 열립니다."
+          "label": "워크스페이스 베타 활성화"
         }
       }
     },
