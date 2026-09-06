@@ -466,20 +466,21 @@ const ToolCallCard: React.FC<{
       ? entry.entry_type
       : undefined;
 
-  // Compute defaults from entry
+  // Extract action details
+  const actionType = entryType?.action_type;
+  const isCommand = actionType?.action === 'command_run';
+  const isTool = actionType?.action === 'tool';
+  const taskResult =
+    actionType?.action === 'task_create' ? actionType.result : null;
+
   const linkifyUrls = entryType?.tool_name === 'Tool Install Script';
-  const defaultExpanded = linkifyUrls;
+  const defaultExpanded = linkifyUrls || Boolean(taskResult);
 
   const [expanded, toggle] = useExpandable(
     `tool-entry:${expansionKey}`,
     defaultExpanded
   );
   const effectiveExpanded = forceExpanded || expanded;
-
-  // Extract action details
-  const actionType = entryType?.action_type;
-  const isCommand = actionType?.action === 'command_run';
-  const isTool = actionType?.action === 'tool';
 
   // Label and content
   const label = isCommand ? 'Ran' : entryType?.tool_name || 'Tool';
@@ -501,7 +502,7 @@ const ToolCallCard: React.FC<{
 
   // Tool details
   const hasArgs = isTool && !!actionType.arguments;
-  const hasResult = isTool && !!actionType.result;
+  const hasResult = (isTool && !!actionType.result) || Boolean(taskResult);
 
   const hasExpandableDetails = isCommand
     ? Boolean(argsText) || Boolean(output)
@@ -590,6 +591,25 @@ const ToolCallCard: React.FC<{
                       )}
                     {actionType.result?.type.type === 'json' &&
                       renderJson(actionType.result.value)}
+                  </div>
+                </>
+              )}
+              {taskResult && (
+                <>
+                  <div className="font-normal uppercase bg-background border-b border-dashed px-2 py-1">
+                    {t('conversation.result')}
+                  </div>
+                  <div className="px-2 py-1">
+                    {taskResult.type.type === 'markdown' &&
+                      taskResult.value && (
+                        <WYSIWYGEditor
+                          value={taskResult.value?.toString()}
+                          disabled
+                          taskAttemptId={taskAttemptId}
+                        />
+                      )}
+                    {taskResult.type.type === 'json' &&
+                      renderJson(taskResult.value)}
                   </div>
                 </>
               )}

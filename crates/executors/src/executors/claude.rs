@@ -181,7 +181,7 @@ impl ClaudeCode {
                 "PreToolUse".to_string(),
                 serde_json::json!([
                     {
-                        "matcher": "^(?!(Glob|Grep|NotebookRead|Read|Task|TodoWrite)$).*",
+                        "matcher": "^(?!(Glob|Grep|NotebookRead|Read|Task|Agent|TodoWrite)$).*",
                         "hookCallbackIds": ["tool_approval"],
                     }
                 ]),
@@ -908,40 +908,27 @@ impl ClaudeLogProcessor {
                         // We'll send system initialized message with first assistant message that has a model field.
                     }
                     Some("status") => {
-                        if let Some(status) = status {
+                        // "requesting" is a turn-lifecycle ping, not something to show.
+                        if let Some(status) = status
+                            && status != "requesting"
+                        {
                             patches.push(add_system_message(status.clone(), entry_index_provider));
                         }
                     }
-                    Some("compact_boundary") => {}
-                    Some(subtype) => {
-                        let entry = NormalizedEntry {
-                            timestamp: None,
-                            entry_type: NormalizedEntryType::SystemMessage,
-                            content: format!("System: {subtype}"),
-                            metadata: Some(
-                                serde_json::to_value(claude_json)
-                                    .unwrap_or(serde_json::Value::Null),
-                            ),
-                        };
-                        let idx = entry_index_provider.next();
-                        patches.push(ConversationPatch::add_normalized_entry(idx, entry));
-                    }
-                    None => {
-                        let entry = NormalizedEntry {
-                            timestamp: None,
-                            entry_type: NormalizedEntryType::SystemMessage,
-                            content: "System message".to_string(),
-                            metadata: Some(
-                                serde_json::to_value(claude_json)
-                                    .unwrap_or(serde_json::Value::Null),
-                            ),
-                        };
-                        let idx = entry_index_provider.next();
-                        patches.push(ConversationPatch::add_normalized_entry(idx, entry));
-                    }
+                    // hook_started/progress/response, thinking_tokens, compact_boundary,
+                    // and any future bookkeeping subtype: keep out of the transcript.
+                    _ => {}
                 }
             }
-            ClaudeJson::Assistant { message, .. } => {
+            ClaudeJson::Assistant {
+                parent_tool_use_id,
+                message,
+                ..
+            } => {
+                // Nested Agent/Task transcripts belong on the tool result, not here.
+                if parent_tool_use_id.is_some() {
+                    return patches;
+                }
                 if let Some(patch) = extract_model_name(self, message, entry_index_provider) {
                     patches.push(patch);
                 }
@@ -1027,13 +1014,14 @@ impl ClaudeLogProcessor {
                 }
             }
             ClaudeJson::User {
+                parent_tool_use_id,
                 message,
                 is_synthetic,
                 is_replay,
                 ..
             } => {
                 // Skip replay messages entirely - they're historical context from resumed sessions
-                if *is_replay {
+                if *is_replay || parent_tool_use_id.is_some() {
                     return patches;
                 }
 
@@ -1291,8 +1279,12 @@ impl ClaudeLogProcessor {
                 // Add proper ToolResult support to NormalizedEntry when the type system supports it
             }
             ClaudeJson::StreamEvent {
+                parent_tool_use_id: Some(_),
+                ..
+            } => {}
+            ClaudeJson::StreamEvent {
                 event,
-                parent_tool_use_id,
+                parent_tool_use_id: None,
                 ..
             } => match event {
                 ClaudeStreamEvent::MessageStart { message } => {
@@ -1345,10 +1337,7 @@ impl ClaudeLogProcessor {
                 }
                 ClaudeStreamEvent::ContentBlockStop { .. } => {}
                 ClaudeStreamEvent::MessageDelta { usage, .. } => {
-                    // do not report context token usage for subagents
-                    if parent_tool_use_id.is_none()
-                        && let Some(usage) = usage
-                    {
+                    if let Some(usage) = usage {
                         let input_tokens = usage.input_tokens.unwrap_or(0)
                             + usage.cache_creation_input_tokens.unwrap_or(0)
                             + usage.cache_read_input_tokens.unwrap_or(0);
@@ -1787,6 +1776,8 @@ pub enum ClaudeJson {
         session_id: Option<String>,
         #[serde(default)]
         uuid: Option<String>,
+        #[serde(default)]
+        parent_tool_use_id: Option<String>,
     },
     User {
         message: ClaudeMessage,
@@ -1797,6 +1788,8 @@ pub enum ClaudeJson {
         is_synthetic: bool,
         #[serde(default, rename = "isReplay")]
         is_replay: bool,
+        #[serde(default)]
+        parent_tool_use_id: Option<String>,
     },
     ToolUse {
         tool_name: String,
@@ -2032,7 +2025,7 @@ pub enum ClaudeToolData {
     TodoWrite {
         todos: Vec<ClaudeTodoItem>,
     },
-    #[serde(rename = "Task", alias = "task")]
+    #[serde(rename = "Task", alias = "task", alias = "Agent", alias = "agent")]
     Task {
         subagent_type: Option<String>,
         description: Option<String>,
@@ -2301,6 +2294,135 @@ mod tests {
                 !matches!(parsed, ClaudeJson::Unknown { .. }),
                 "fell through to Unknown: {raw}"
             );
+        }
+    }
+
+    /// CLI 2.1.x streams hook and thinking bookkeeping as `system` subtypes.
+    /// Dumping the subtype name into the transcript is what made the chat noisy.
+    #[test]
+    fn cli_lifecycle_system_events_are_not_rendered() {
+        let cases = [
+            r#"{"type":"system","subtype":"hook_started"}"#,
+            r#"{"type":"system","subtype":"hook_progress"}"#,
+            r#"{"type":"system","subtype":"hook_response"}"#,
+            r#"{"type":"system","subtype":"thinking_tokens"}"#,
+            r#"{"type":"system","subtype":"status","status":"requesting"}"#,
+            r#"{"type":"system","subtype":"compact_boundary"}"#,
+        ];
+
+        for raw in cases {
+            let parsed: ClaudeJson = serde_json::from_str(raw).unwrap();
+            assert!(
+                !matches!(parsed, ClaudeJson::Unknown { .. }),
+                "fell through to Unknown: {raw}"
+            );
+            assert!(
+                normalize(&parsed, "").is_empty(),
+                "rendered an entry: {raw}"
+            );
+        }
+    }
+
+    /// Nested Agent/Task output is keyed by `parent_tool_use_id`. Mixing it into
+    /// the main transcript both floods the chat and can clobber the parent's
+    /// streaming answer.
+    #[test]
+    fn nested_agent_messages_are_not_rendered_in_main_transcript() {
+        let assistant = r#"{
+            "type":"assistant",
+            "parent_tool_use_id":"toolu_agent_1",
+            "message":{"role":"assistant","content":[{"type":"text","text":"subagent-only report"}]}
+        }"#;
+        let parsed: ClaudeJson = serde_json::from_str(assistant).unwrap();
+        assert!(normalize(&parsed, "").is_empty());
+
+        let stream_start = r#"{
+            "type":"stream_event",
+            "parent_tool_use_id":"toolu_agent_1",
+            "event":{"type":"message_start","message":{"id":"msg_nested","role":"assistant","content":[]}}
+        }"#;
+        let stream_delta = r#"{
+            "type":"stream_event",
+            "parent_tool_use_id":"toolu_agent_1",
+            "event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"nested tokens"}}
+        }"#;
+        let mut processor = ClaudeLogProcessor::new();
+        let provider = EntryIndexProvider::test_new();
+        for raw in [stream_start, stream_delta] {
+            let parsed: ClaudeJson = serde_json::from_str(raw).unwrap();
+            let patches = processor.normalize_entries(&parsed, "", &provider);
+            assert!(
+                patches_to_entries(&patches).is_empty(),
+                "nested stream event leaked: {raw}"
+            );
+        }
+    }
+
+    /// Newer CLIs spawn subagents with `Agent` instead of `Task`. The report
+    /// lives on the tool result, not in the parent's "I'll get back to you" text.
+    #[test]
+    fn agent_tool_is_task_and_keeps_its_result() {
+        let provider = EntryIndexProvider::test_new();
+        let mut processor = ClaudeLogProcessor::new();
+
+        let tool_use: ClaudeJson = serde_json::from_str(
+            r#"{
+                "type":"assistant",
+                "message":{"role":"assistant","content":[{
+                    "type":"tool_use",
+                    "id":"toolu_agent_1",
+                    "name":"Agent",
+                    "input":{
+                        "description":"Investigate FE-3382",
+                        "prompt":"Look at the Violations tab",
+                        "subagent_type":"Explore",
+                        "run_in_background":true
+                    }
+                }]}
+            }"#,
+        )
+        .unwrap();
+        let created = patches_to_entries(&processor.normalize_entries(&tool_use, "", &provider));
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].content, "Task: `Investigate FE-3382`");
+        assert!(matches!(
+            created[0].entry_type,
+            NormalizedEntryType::ToolUse {
+                action_type: ActionType::TaskCreate { result: None, .. },
+                ..
+            }
+        ));
+
+        let tool_result: ClaudeJson = serde_json::from_str(
+            r#"{
+                "type":"user",
+                "message":{"role":"user","content":[{
+                    "type":"tool_result",
+                    "tool_use_id":"toolu_agent_1",
+                    "content":"| ticket | status |\n| FE-3382 | open |"
+                }]}
+            }"#,
+        )
+        .unwrap();
+        let updated = patches_to_entries(&processor.normalize_entries(&tool_result, "", &provider));
+        assert_eq!(updated.len(), 1);
+        match &updated[0].entry_type {
+            NormalizedEntryType::ToolUse {
+                action_type:
+                    ActionType::TaskCreate {
+                        result: Some(result),
+                        ..
+                    },
+                status: ToolStatus::Success,
+                ..
+            } => {
+                assert!(
+                    result.value.to_string().contains("FE-3382"),
+                    "missing report: {}",
+                    result.value
+                );
+            }
+            other => panic!("expected TaskCreate with result, got {other:?}"),
         }
     }
 
