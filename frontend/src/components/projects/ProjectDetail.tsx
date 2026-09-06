@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { paths } from '@/lib/paths';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
@@ -117,7 +118,7 @@ export function ProjectDetail({ projectId, onBack }: ProjectDetailProps) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(`/projects/${projectId}/tasks`)}>
+          <Button onClick={() => navigate(paths.projectTasks(projectId))}>
             <CheckSquare className="mr-2 h-4 w-4" />
             View Tasks
           </Button>

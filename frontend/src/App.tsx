@@ -6,6 +6,7 @@ import { Projects } from '@/pages/Projects';
 import { ProjectTasks } from '@/pages/ProjectTasks';
 import { FullTaskLogsPage } from '@/pages/FullTaskLogs';
 import { LegacyAttemptRedirect } from '@/components/routing/LegacyAttemptRedirect';
+import { LegacyProjectsPrefixRedirect } from '@/components/routing/LegacyProjectsPrefixRedirect';
 import { Migration } from '@/pages/Migration';
 import { NormalLayout } from '@/components/layout/NormalLayout';
 import { useAuth } from '@/hooks';
@@ -166,6 +167,17 @@ function AppContent() {
               <Route
                 path="/local-projects/:projectId/tasks/:taskId/attempts/:attemptId"
                 element={<LegacyAttemptRedirect />}
+              />
+              {/* Links to the shorter prefix were built in a few places and shipped. */}
+              <Route
+                path="/projects/*"
+                element={<LegacyProjectsPrefixRedirect />}
+              />
+              {/* Without this, an unmatched route renders nothing and the app looks crashed.
+                  Any URL we cannot place lands on the projects list instead of a blank page. */}
+              <Route
+                path="*"
+                element={<Navigate to="/local-projects" replace />}
               />
             </Route>
           </Routes>
