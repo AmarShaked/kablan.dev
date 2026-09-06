@@ -15,6 +15,7 @@ export function useConfiguredAgents() {
   const availability = useConfiguredAgentsStore((s) => s.availability);
   const status = useConfiguredAgentsStore((s) => s.status);
   const ensureLoaded = useConfiguredAgentsStore((s) => s.ensureLoaded);
+  const refreshAgent = useConfiguredAgentsStore((s) => s.refreshAgent);
 
   const knownAgents = useMemo(
     () => (profiles ? (Object.keys(profiles).sort() as BaseCodingAgent[]) : []),
@@ -123,6 +124,7 @@ export function useConfiguredAgents() {
     isLoading: status !== 'ready',
     addAgent,
     removeAgent,
+    refreshAgent,
     isConnected: (agent: BaseCodingAgent) =>
       isAgentConnected(availability[agent]),
   };

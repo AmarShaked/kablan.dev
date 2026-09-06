@@ -29,6 +29,12 @@ import { useTask } from '@/hooks/useTask';
 import { useProject } from '@/contexts/ProjectContext';
 import { useSearch } from '@/contexts/SearchContext';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import {
+  ADD_AGENT_PATH,
+  isAgentsPath,
+  parseAgentParam,
+} from '@/lib/routes/agentRoutes';
+import { agentLabel } from '@/utils/agentLabels';
 
 /**
  * Where you are, what you're searching, and what you can do here.
@@ -60,6 +66,9 @@ export function ProjectHeader() {
   );
 
   const isSettings = location.pathname.startsWith('/settings');
+  const isAgents = isAgentsPath(location.pathname);
+  const isAddAgent = location.pathname === ADD_AGENT_PATH;
+  const headerAgent = parseAgentParam(location.pathname.split('/')[2]);
   const isAllTasks = location.pathname === '/tasks';
   // Settings is a destination of its own, not a page inside a project — its trail starts at
   // Settings and names the section, rather than claiming to sit under Projects.
@@ -109,6 +118,14 @@ export function ProjectHeader() {
                     {tSettings('settings.layout.nav.title')}
                   </BreadcrumbPage>
                 )
+              ) : isAgents ? (
+                isAddAgent || headerAgent ? (
+                  <BreadcrumbLink asChild>
+                    <Link to="/agents">Agents</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>Agents</BreadcrumbPage>
+                )
               ) : isAllTasks ? (
                 <BreadcrumbPage>Tasks</BreadcrumbPage>
               ) : projectId ? (
@@ -131,7 +148,20 @@ export function ProjectHeader() {
               </>
             )}
 
-            {!isSettings && project && (
+            {isAgents && (isAddAgent || headerAgent) && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>
+                    {isAddAgent
+                      ? 'Add agent'
+                      : agentLabel(headerAgent)}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+
+            {!isSettings && !isAgents && project && (
               <>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem className="min-w-0">

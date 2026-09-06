@@ -35,7 +35,7 @@ function WindowRow({ window: w }: { window: UsageWindow }) {
           {Math.round(w.percent)}% used
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
+      <div className="h-2 overflow-hidden rounded-full bg-foreground/10">
         <div
           className={cn(
             'h-full rounded-full transition-all duration-300',

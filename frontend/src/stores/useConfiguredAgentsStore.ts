@@ -8,6 +8,7 @@ type State = {
   availability: AvailabilityMap;
   status: 'idle' | 'loading' | 'ready';
   ensureLoaded: (agents: BaseCodingAgent[]) => Promise<void>;
+  refreshAgent: (agent: BaseCodingAgent) => Promise<AvailabilityInfo>;
 };
 
 let inFlight: Promise<void> | null = null;
@@ -43,5 +44,20 @@ export const useConfiguredAgentsStore = create<State>()((set, get) => ({
     });
 
     await inFlight;
+  },
+  refreshAgent: async (agent) => {
+    try {
+      const info = await configApi.checkAgentAvailability(agent);
+      set({
+        availability: { ...get().availability, [agent]: info },
+      });
+      return info;
+    } catch {
+      const info = { type: 'NOT_FOUND' } as AvailabilityInfo;
+      set({
+        availability: { ...get().availability, [agent]: info },
+      });
+      return info;
+    }
   },
 }));

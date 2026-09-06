@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
 
@@ -30,6 +30,14 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { projectKeys } from '@/lib/queryKeys';
+import { AgentIcon } from '@/components/agents/AgentIcon';
+import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
+import {
+  ADD_AGENT_PATH,
+  buildAgentPath,
+  parseAgentParam,
+} from '@/lib/routes/agentRoutes';
+import { agentLabel } from '@/utils/agentLabels';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -46,8 +54,11 @@ import { projectKeys } from '@/lib/queryKeys';
  */
 export function ProjectsSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { config, updateAndSaveConfig } = useUserSystem();
+  const { configuredAgents, isConnected } = useConfiguredAgents();
+  const activeAgent = parseAgentParam(location.pathname.split('/')[2]);
 
   // The same query the projects page uses, so the two share one fetch and one cache.
   const { data: projects = [] } = useQuery({
@@ -211,6 +222,53 @@ export function ProjectsSidebar() {
                         />
                       </SidebarMenuBadge>
                     )}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupAction
+            title="Add agent"
+            onClick={() => navigate(ADD_AGENT_PATH)}
+          >
+            <Plus />
+            <span className="sr-only">Add agent</span>
+          </SidebarGroupAction>
+
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {configuredAgents.map((agent) => {
+                const connected = isConnected(agent);
+                return (
+                  <SidebarMenuItem key={agent}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={activeAgent === agent}
+                      tooltip={agentLabel(agent)}
+                    >
+                      <Link to={buildAgentPath(agent)}>
+                        <AgentIcon agent={agent} className="h-4 w-4" />
+                        <span>{agentLabel(agent)}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                    <SidebarMenuBadge>
+                      <span
+                        className={cn(
+                          'h-2 w-2 rounded-full',
+                          connected
+                            ? 'bg-green-500'
+                            : 'bg-muted-foreground/40'
+                        )}
+                        aria-label={
+                          connected ? 'Connected' : 'Not connected'
+                        }
+                        role="img"
+                      />
+                    </SidebarMenuBadge>
                   </SidebarMenuItem>
                 );
               })}

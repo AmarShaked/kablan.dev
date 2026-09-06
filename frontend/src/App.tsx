@@ -14,14 +14,19 @@ import { usePreviousPath } from '@/hooks/usePreviousPath';
 import { useUiPreferencesScratch } from '@/hooks/useUiPreferencesScratch';
 
 import {
-  AgentSettings,
   GeneralSettings,
   McpSettings,
   ProjectSettings,
   ReposSettings,
   SettingsLayout,
-  UsageSettings,
 } from '@/pages/settings/';
+import { AgentPage } from '@/pages/agents/AgentPage';
+import { AddAgentPage } from '@/pages/agents/AddAgentPage';
+import { AgentsIndexRedirect } from '@/pages/agents/AgentsIndexRedirect';
+import {
+  SETTINGS_AGENTS_REDIRECT,
+  SETTINGS_USAGE_REDIRECT,
+} from '@/lib/routes/agentRoutes';
 import { UserSystemProvider } from '@/components/ConfigProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -152,14 +157,27 @@ function AppContent() {
                 <Route path="general" element={<GeneralSettings />} />
                 <Route path="projects" element={<ProjectSettings />} />
                 <Route path="repos" element={<ReposSettings />} />
-                <Route path="agents" element={<AgentSettings />} />
+                <Route
+                  path="agents"
+                  element={
+                    <Navigate to={SETTINGS_AGENTS_REDIRECT} replace />
+                  }
+                />
                 <Route path="mcp" element={<McpSettings />} />
-                <Route path="usage" element={<UsageSettings />} />
+                <Route
+                  path="usage"
+                  element={
+                    <Navigate to={SETTINGS_USAGE_REDIRECT} replace />
+                  }
+                />
               </Route>
               <Route
                 path="/mcp-servers"
                 element={<Navigate to="/settings/mcp" replace />}
               />
+              <Route path="/agents" element={<AgentsIndexRedirect />} />
+              <Route path="/agents/new" element={<AddAgentPage />} />
+              <Route path="/agents/:agent" element={<AgentPage />} />
               <Route
                 path="/local-projects/:projectId/tasks/:taskId"
                 element={<ProjectTasks />}

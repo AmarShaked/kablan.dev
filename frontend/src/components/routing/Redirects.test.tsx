@@ -44,6 +44,17 @@ function App() {
         element={<LegacyAttemptRedirect full />}
       />
       <Route path="/projects/*" element={<LegacyProjectsPrefixRedirect />} />
+      <Route path="/agents" element={<Landed />} />
+      <Route path="/agents/new" element={<Landed />} />
+      <Route path="/agents/:agent" element={<Landed />} />
+      <Route
+        path="/settings/agents"
+        element={<Navigate to="/agents" replace />}
+      />
+      <Route
+        path="/settings/usage"
+        element={<Navigate to="/agents/CLAUDE_CODE" replace />}
+      />
       <Route path="*" element={<Navigate to="/local-projects" replace />} />
     </Routes>
   );
@@ -105,5 +116,23 @@ describe('the /projects prefix', () => {
 describe('the catch-all', () => {
   it('lands an unknown URL on the projects list rather than rendering nothing', () => {
     expect(landOn('/nonsense/path')).toBe('/local-projects');
+  });
+});
+
+describe('agents routes', () => {
+  it('does not send /agents at the catch-all', () => {
+    expect(landOn('/agents')).toBe('/agents');
+  });
+
+  it('does not send an agent page at the catch-all', () => {
+    expect(landOn('/agents/CLAUDE_CODE')).toBe('/agents/CLAUDE_CODE');
+  });
+
+  it('sends the old Settings Agents tab at /agents', () => {
+    expect(landOn('/settings/agents')).toBe('/agents');
+  });
+
+  it('sends the old Usage tab at Claude’s agent page', () => {
+    expect(landOn('/settings/usage')).toBe('/agents/CLAUDE_CODE');
   });
 });
