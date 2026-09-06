@@ -19,6 +19,10 @@ export default defineConfig({
       'posthog-js/react': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
       'posthog-js': path.resolve(__dirname, './src/lib/noop/posthog.ts'),
       '@sentry/react': path.resolve(__dirname, './src/lib/noop/sentry.ts'),
+      'virtual:executor-schemas': path.resolve(
+        __dirname,
+        './src/lib/noop/executorSchemas.ts'
+      ),
     },
   },
   test: {

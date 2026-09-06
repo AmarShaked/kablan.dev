@@ -19,7 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export const ALL_STATUSES = 'all';
-/** In Progress and In Review together: the work that is actually in flight. */
+/** Everything that is not history: Todo, In Progress and In Review. */
 export const ACTIVE_STATUSES = 'active';
 
 export type StatusFilter =
@@ -42,8 +42,11 @@ export function matchesStatusFilter(
   filter: StatusFilter
 ): boolean {
   if (filter === ALL_STATUSES) return true;
+  // Done and Cancelled are the history this filter exists to hide. Todo belongs on the near
+  // side of that line: a task is created as `todo`, and the project list opens on this filter,
+  // so excluding it made a task invisible in its own project the moment it was created.
   if (filter === ACTIVE_STATUSES)
-    return status === 'inprogress' || status === 'inreview';
+    return status !== 'done' && status !== 'cancelled';
   return status === filter;
 }
 
@@ -117,7 +120,7 @@ export function TaskFilterMenu({
         ? 'Active'
         : statusLabels[value.status];
 
-  const activeCount = counts.inprogress + counts.inreview;
+  const activeCount = counts.todo + counts.inprogress + counts.inreview;
   const on = value.status === ACTIVE_STATUSES;
 
   return (
