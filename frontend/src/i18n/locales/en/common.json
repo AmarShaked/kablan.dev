@@ -12,6 +12,7 @@
     "connect": "Connect",
     "disconnect": "Disconnect",
     "close": "Close",
+    "back": "Back",
     "replay": "Replay",
     "discard": "Discard",
     "addItem": "Add Item",

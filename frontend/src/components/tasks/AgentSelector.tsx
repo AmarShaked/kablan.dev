@@ -9,6 +9,8 @@ import {
 import { Label } from '@/components/ui/label';
 import type { ExecutorProfileId, BaseCodingAgent } from 'shared/types';
 import { agentLabel } from '@/utils/agentLabels';
+import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
+import { filterConnectedProfiles } from '@/utils/configuredAgents';
 
 interface AgentSelectorProps {
   profiles: Record<string, Record<string, unknown>> | null;
@@ -27,12 +29,20 @@ export function AgentSelector({
   className = '',
   showLabel = false,
 }: AgentSelectorProps) {
-  const agents = profiles
-    ? (Object.keys(profiles).sort() as BaseCodingAgent[])
-    : [];
+  const { connectedAgents, isLoading } = useConfiguredAgents();
   const selectedAgent = selectedExecutorProfile?.executor;
+  const visibleProfiles = isLoading
+    ? filterConnectedProfiles(
+        profiles,
+        selectedAgent ? [selectedAgent as BaseCodingAgent] : [],
+        selectedAgent
+      )
+    : filterConnectedProfiles(profiles, connectedAgents, selectedAgent);
+  const agents = visibleProfiles
+    ? (Object.keys(visibleProfiles).sort() as BaseCodingAgent[])
+    : [];
 
-  if (!profiles) return null;
+  if (!visibleProfiles) return null;
 
   return (
     <div className="flex-1">
@@ -60,7 +70,7 @@ export function AgentSelector({
         <DropdownMenuContent className="w-60">
           {agents.length === 0 ? (
             <div className="p-2 text-sm text-muted-foreground text-center">
-              No agents available
+              No connected agents
             </div>
           ) : (
             agents.map((agent) => (

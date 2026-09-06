@@ -8,12 +8,10 @@ import {
 } from '@phosphor-icons/react';
 import { FolderPickerDialog } from '@/components/dialogs/shared/FolderPickerDialog';
 import {
-  type BaseCodingAgent,
+  type SendMessageShortcut,
   DEFAULT_COMMIT_REMINDER_PROMPT,
   DEFAULT_PR_DESCRIPTION_PROMPT,
   EditorType,
-  type ExecutorProfileId,
-  type SendMessageShortcut,
   SoundFile,
   ThemeMode,
   UiLanguage,
@@ -24,16 +22,8 @@ import { toPrettyCase } from '@/utils/string';
 import { useTheme } from '@/components/ThemeProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { TagManager } from '@/components/TagManager';
-import { cn } from '@/lib/utils';
 import { PrimaryButton } from '../../primitives/PrimaryButton';
 import { IconButton } from '../../primitives/IconButton';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuTriggerButton,
-} from '../../primitives/Dropdown';
 import {
   SettingsCard,
   SettingsCheckbox,
@@ -55,7 +45,7 @@ export function GeneralSettingsSection() {
       defaultValue: 'Browser Default',
     })
   );
-  const { config, loading, updateAndSaveConfig, profiles } = useUserSystem();
+  const { config, loading, updateAndSaveConfig } = useUserSystem();
 
   const [draft, setDraft] = useState(() => (config ? cloneDeep(config) : null));
   const [dirty, setDirty] = useState(false);
@@ -66,18 +56,6 @@ export function GeneralSettingsSection() {
     null
   );
   const { setTheme } = useTheme();
-
-  // Executor options for the default coding agent dropdown
-  const executorOptions = profiles
-    ? Object.keys(profiles)
-        .sort()
-        .map((key) => ({ value: key, label: toPrettyCase(key) }))
-    : [];
-
-  const selectedAgentProfile =
-    profiles?.[draft?.executor_profile?.executor || ''];
-  const hasVariants =
-    selectedAgentProfile && Object.keys(selectedAgentProfile).length > 0;
 
   const validateBranchPrefix = useCallback(
     (prefix: string): string | null => {
@@ -375,100 +353,6 @@ export function GeneralSettingsSection() {
             )}
           </>
         )}
-      </SettingsCard>
-
-      {/* Default Coding Agent */}
-      <SettingsCard
-        title={t('settings.general.taskExecution.title')}
-        description={t('settings.general.taskExecution.description')}
-      >
-        <SettingsField
-          label={t('settings.general.taskExecution.executor.label')}
-          description={t('settings.general.taskExecution.executor.helper')}
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <DropdownMenuTriggerButton
-                  label={
-                    draft?.executor_profile?.executor
-                      ? toPrettyCase(draft.executor_profile.executor)
-                      : t('settings.agents.selectAgent')
-                  }
-                  className="w-full justify-between"
-                  disabled={!profiles}
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
-                {executorOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onClick={() => {
-                      const variants = profiles?.[option.value];
-                      const keepCurrentVariant =
-                        variants &&
-                        draft?.executor_profile?.variant &&
-                        variants[draft.executor_profile.variant];
-
-                      const newProfile: ExecutorProfileId = {
-                        executor: option.value as BaseCodingAgent,
-                        variant: keepCurrentVariant
-                          ? draft!.executor_profile!.variant
-                          : null,
-                      };
-                      updateDraft({ executor_profile: newProfile });
-                    }}
-                  >
-                    {option.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {hasVariants ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <DropdownMenuTriggerButton
-                    label={
-                      draft?.executor_profile?.variant
-                        ? toPrettyCase(draft.executor_profile.variant)
-                        : t('settings.general.taskExecution.defaultLabel')
-                    }
-                    className="w-full justify-between"
-                  />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
-                  {Object.keys(selectedAgentProfile).map((variantLabel) => (
-                    <DropdownMenuItem
-                      key={variantLabel}
-                      onClick={() => {
-                        const newProfile: ExecutorProfileId = {
-                          executor: draft!.executor_profile!.executor,
-                          variant: variantLabel,
-                        };
-                        updateDraft({ executor_profile: newProfile });
-                      }}
-                    >
-                      {toPrettyCase(variantLabel)}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : selectedAgentProfile ? (
-              <button
-                disabled
-                className={cn(
-                  'flex items-center justify-between w-full px-base py-half rounded-sm border border-border bg-secondary',
-                  'text-base text-low opacity-50 cursor-not-allowed'
-                )}
-              >
-                <span className="truncate">
-                  {t('settings.general.taskExecution.defaultLabel')}
-                </span>
-              </button>
-            ) : null}
-          </div>
-        </SettingsField>
       </SettingsCard>
 
       {/* Git */}

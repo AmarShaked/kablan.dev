@@ -4,10 +4,11 @@ import { PlusIcon } from '@phosphor-icons/react';
 import type { BaseCodingAgent, ExecutorConfig } from 'shared/types';
 import { McpConfig } from 'shared/types';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
+import { agentLabel } from '@/utils/agentLabels';
 import { mcpServersApi } from '@/lib/api';
 import { McpConfigStrategyGeneral } from '@/lib/mcpStrategies';
 import { cn } from '@/lib/utils';
-import { toPrettyCase } from '@/utils/string';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ export function McpSettingsSection() {
   const { t } = useTranslation('settings');
   const { setDirty: setContextDirty } = useSettingsDirty();
   const { config, profiles } = useUserSystem();
+  const { configuredAgents } = useConfiguredAgents();
   const [mcpServers, setMcpServers] = useState('{}');
   const [originalMcpServers, setOriginalMcpServers] = useState('{}');
   const [mcpConfig, setMcpConfig] = useState<McpConfig | null>(null);
@@ -47,17 +49,20 @@ export function McpSettingsSection() {
     return () => setContextDirty('mcp', false);
   }, [isDirty, setContextDirty]);
 
-  // Initialize selected profile when config loads
+  // Initialize selected profile when configured agents load
   useEffect(() => {
-    if (config?.executor_profile && profiles && !selectedProfile) {
-      const currentProfile = profiles[config.executor_profile.executor];
-      if (currentProfile) {
-        setSelectedProfile(currentProfile);
-      } else if (Object.keys(profiles).length > 0) {
-        setSelectedProfile(Object.values(profiles)[0]);
-      }
+    if (selectedProfile || !profiles || configuredAgents.length === 0) {
+      return;
     }
-  }, [config?.executor_profile, profiles, selectedProfile]);
+    const preferred = config?.executor_profile?.executor;
+    const initial =
+      preferred && configuredAgents.includes(preferred)
+        ? preferred
+        : configuredAgents[0];
+    if (initial && profiles[initial]) {
+      setSelectedProfile(profiles[initial]);
+    }
+  }, [config?.executor_profile, profiles, selectedProfile, configuredAgents]);
 
   // Load MCP configuration when selected profile changes
   useEffect(() => {
@@ -223,11 +228,10 @@ export function McpSettingsSection() {
   ) as Record<string, unknown>;
   const getMetaFor = (key: string) => meta[key] || {};
 
-  const profileOptions = profiles
-    ? Object.keys(profiles)
-        .sort()
-        .map((key) => ({ value: key, label: toPrettyCase(key) }))
-    : [];
+  const profileOptions = configuredAgents.map((key) => ({
+    value: key,
+    label: agentLabel(key),
+  }));
 
   const selectedProfileKey = selectedProfile
     ? Object.keys(profiles || {}).find(
@@ -274,7 +278,7 @@ export function McpSettingsSection() {
               <DropdownMenuTriggerButton
                 label={
                   selectedProfileKey
-                    ? toPrettyCase(selectedProfileKey)
+                    ? agentLabel(selectedProfileKey)
                     : t('settings.mcp.labels.agentPlaceholder')
                 }
                 className="w-full justify-between"

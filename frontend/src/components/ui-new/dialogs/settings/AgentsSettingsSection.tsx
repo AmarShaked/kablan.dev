@@ -18,27 +18,37 @@ import { useProfiles } from '@/hooks/useProfiles';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { CreateConfigurationDialog } from '@/components/dialogs/settings/CreateConfigurationDialog';
 import { DeleteConfigurationDialog } from '@/components/dialogs/settings/DeleteConfigurationDialog';
+import { AddAgentWizardDialog } from '@/components/dialogs/settings/AddAgentWizardDialog';
+import { ConfirmDialog } from '@/components/dialogs';
 import type { BaseCodingAgent, ExecutorConfigs } from 'shared/types';
 import { cn } from '@/lib/utils';
 import { toPrettyCase } from '@/utils/string';
+import { agentLabel } from '@/utils/agentLabels';
 import {
   SettingsSaveBar,
-  TwoColumnPicker,
-  TwoColumnPickerColumn,
-  TwoColumnPickerItem,
+  SettingsSelect,
   TwoColumnPickerBadge,
-  TwoColumnPickerEmpty,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import { AgentIcon } from '@/components/agents/AgentIcon';
+import { PrimaryButton } from '../../primitives/PrimaryButton';
+import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
 
 type ExecutorsMap = Record<string, Record<string, Record<string, unknown>>>;
 
 export function AgentsSettingsSection() {
   const { t } = useTranslation(['settings', 'common']);
   const { setDirty: setContextDirty } = useSettingsDirty();
+  const {
+    configuredAgents,
+    unconfiguredAgents,
+    availability,
+    isLoading: agentsLoading,
+    addAgent,
+    removeAgent,
+    isConnected,
+  } = useConfiguredAgents();
 
-  // Profiles hook for server state
   const {
     profilesContent: serverProfilesContent,
     isLoading: profilesLoading,
@@ -49,11 +59,8 @@ export function AgentsSettingsSection() {
 
   const { config, updateAndSaveConfig, reloadSystem } = useUserSystem();
 
-  // Local editor state
   const [profilesSuccess, setProfilesSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Form-based editor state
   const [selectedExecutorType, setSelectedExecutorType] =
     useState<BaseCodingAgent | null>(null);
   const [selectedConfiguration, setSelectedConfiguration] = useState<
@@ -63,15 +70,18 @@ export function AgentsSettingsSection() {
     useState<ExecutorConfigs | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Initialize selection with default executor when config loads
   useEffect(() => {
-    if (config?.executor_profile && !selectedExecutorType) {
+    if (selectedExecutorType) return;
+    if (config?.executor_profile?.executor) {
       setSelectedExecutorType(config.executor_profile.executor);
       setSelectedConfiguration(config.executor_profile.variant || 'DEFAULT');
+      return;
     }
-  }, [config?.executor_profile, selectedExecutorType]);
+    if (configuredAgents[0]) {
+      setSelectedExecutorType(configuredAgents[0]);
+    }
+  }, [config?.executor_profile, selectedExecutorType, configuredAgents]);
 
-  // Sync server state to local state when not dirty
   useEffect(() => {
     if (!isDirty && serverProfilesContent) {
       try {
@@ -84,7 +94,6 @@ export function AgentsSettingsSection() {
     }
   }, [serverProfilesContent, isDirty]);
 
-  // Sync dirty state to context for unsaved changes confirmation
   useEffect(() => {
     setContextDirty('agents', isDirty);
     return () => setContextDirty('agents', false);
@@ -106,6 +115,22 @@ export function AgentsSettingsSection() {
 
       if (result.action === 'created' && result.configName) {
         createConfiguration(executor, result.configName, result.cloneFrom);
+      }
+    } catch {
+      // User cancelled
+    }
+  };
+
+  const handleAddAgent = async () => {
+    try {
+      const result = await AddAgentWizardDialog.show({
+        candidates: unconfiguredAgents,
+        availability,
+      });
+      if (result.action === 'added' && result.agent) {
+        addAgent(result.agent);
+        setSelectedExecutorType(result.agent);
+        setSelectedConfiguration('DEFAULT');
       }
     } catch {
       // User cancelled
@@ -202,7 +227,6 @@ export function AgentsSettingsSection() {
         setLocalParsedProfiles(updatedProfiles);
         setIsDirty(false);
 
-        // Select another config if we deleted the selected one
         if (
           selectedExecutorType === executorType &&
           selectedConfiguration === configToDelete
@@ -223,17 +247,40 @@ export function AgentsSettingsSection() {
     }
   };
 
-  const handleMakeDefault = async (executor: string, config: string) => {
+  const handleMakeDefault = async (executor: string, configName: string) => {
     try {
       await updateAndSaveConfig({
         executor_profile: {
           executor: executor as BaseCodingAgent,
-          variant: config,
+          variant: configName,
         },
       });
       reloadSystem();
     } catch (err) {
       console.error('Error setting default:', err);
+    }
+  };
+
+  const handleRemoveAgent = async (executor: BaseCodingAgent) => {
+    try {
+      const result = await ConfirmDialog.show({
+        title: t('settings.agents.removeConfirm.title', {
+          agent: agentLabel(executor),
+        }),
+        message: t('settings.agents.removeConfirm.message'),
+        confirmText: t('settings.agents.removeAgent'),
+        cancelText: t('common:buttons.cancel'),
+        variant: 'destructive',
+      });
+      if (result !== 'confirmed') return;
+    } catch {
+      return;
+    }
+    removeAgent(executor);
+    if (selectedExecutorType === executor) {
+      const remaining = configuredAgents.filter((agent) => agent !== executor);
+      setSelectedExecutorType(remaining[0] ?? null);
+      setSelectedConfiguration('DEFAULT');
     }
   };
 
@@ -300,7 +347,6 @@ export function AgentsSettingsSection() {
     }
   };
 
-  // Save handler for agent configuration
   const handleSave = async () => {
     if (
       isDirty &&
@@ -320,7 +366,6 @@ export function AgentsSettingsSection() {
     }
   };
 
-  // Discard handler for agent configuration
   const handleDiscard = () => {
     if (isDirty && serverProfilesContent) {
       setIsDirty(false);
@@ -333,7 +378,7 @@ export function AgentsSettingsSection() {
     }
   };
 
-  if (profilesLoading) {
+  if (profilesLoading || agentsLoading) {
     return (
       <div className="flex items-center justify-center py-8 gap-2">
         <SpinnerIcon
@@ -347,10 +392,12 @@ export function AgentsSettingsSection() {
 
   const executorsMap =
     localParsedProfiles?.executors as unknown as ExecutorsMap;
+  const selectedConfigs = selectedExecutorType
+    ? Object.keys(localParsedProfiles?.executors?.[selectedExecutorType] || {})
+    : [];
 
   return (
     <>
-      {/* Status messages */}
       {!!profilesError && (
         <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error mb-4">
           {profilesError instanceof Error
@@ -371,140 +418,158 @@ export function AgentsSettingsSection() {
         </div>
       )}
 
-      {localParsedProfiles?.executors ? (
-        /* Two-column layout: agents and variants on top, config form below */
+      {configuredAgents.length > 0 ? (
         <div className="space-y-4">
-          {/* Two-column selector - Finder-like style, stacked on mobile */}
-          <TwoColumnPicker>
-            {/* Agents column */}
-            <TwoColumnPickerColumn
-              label={t('settings.agents.editor.agentLabel')}
-              isFirst
+          <p className="text-sm text-low">{t('settings.agents.description')}</p>
+          <div className="flex items-end gap-2 border-b border-border">
+            <div
+              role="tablist"
+              aria-label={t('settings.agents.title')}
+              className="flex min-w-0 flex-1 flex-wrap items-stretch gap-1"
             >
-              {Object.keys(localParsedProfiles.executors).map((executor) => {
-                const isDefault =
-                  config?.executor_profile?.executor === executor;
+              {configuredAgents.map((executor) => {
+                const selected = selectedExecutorType === executor;
+                const connected = isConnected(executor);
                 return (
-                  <TwoColumnPickerItem
+                  <button
                     key={executor}
-                    selected={selectedExecutorType === executor}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    className={cn(
+                      'flex items-center gap-half shrink-0 px-base py-half text-sm border-b-2 -mb-px transition-colors',
+                      selected
+                        ? 'border-brand text-high font-medium'
+                        : 'border-transparent text-low hover:text-normal'
+                    )}
                     onClick={() => {
-                      setSelectedExecutorType(executor as BaseCodingAgent);
-                      // Select first config for this executor
+                      setSelectedExecutorType(executor);
                       const configs = Object.keys(
-                        localParsedProfiles.executors[
-                          executor as BaseCodingAgent
-                        ] || {}
+                        localParsedProfiles?.executors?.[executor] || {}
                       );
-                      if (configs.length > 0) {
-                        setSelectedConfiguration(configs[0]);
-                      }
+                      setSelectedConfiguration(configs[0] || 'DEFAULT');
                     }}
-                    leading={
-                      <AgentIcon
-                        agent={executor as BaseCodingAgent}
-                        className="size-icon-sm shrink-0"
-                      />
-                    }
-                    trailing={
-                      isDefault && (
-                        <TwoColumnPickerBadge variant="brand">
-                          {t('settings.agents.editor.isDefault')}
-                        </TwoColumnPickerBadge>
-                      )
-                    }
                   >
-                    {toPrettyCase(executor)}
-                  </TwoColumnPickerItem>
+                    <AgentIcon
+                      agent={executor}
+                      className="size-icon-sm shrink-0"
+                    />
+                    <span className="truncate">{agentLabel(executor)}</span>
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full shrink-0',
+                        connected ? 'bg-success' : 'bg-low/40'
+                      )}
+                    />
+                  </button>
                 );
               })}
-            </TwoColumnPickerColumn>
+            </div>
+            <PrimaryButton
+              variant="tertiary"
+              value={t('settings.agents.addAgent')}
+              actionIcon={PlusIcon}
+              onClick={handleAddAgent}
+              className="mb-1.5 shrink-0"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-low">{t('settings.agents.description')}</p>
+          <div className="border border-border rounded-sm px-base py-plusfifty text-sm text-low text-center">
+            {t('settings.agents.empty')}
+          </div>
+          <PrimaryButton
+            value={t('settings.agents.addAgent')}
+            actionIcon={PlusIcon}
+            onClick={handleAddAgent}
+          />
+        </div>
+      )}
 
-            {/* Variants column */}
-            <TwoColumnPickerColumn
-              label={t('settings.agents.editor.configLabel')}
-              headerAction={
-                selectedExecutorType && (
-                  <button
-                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
-                    onClick={() => handleCreateConfig(selectedExecutorType)}
-                    disabled={profilesSaving}
-                    title={t('settings.agents.editor.createNew')}
-                  >
-                    <PlusIcon className="size-icon-2xs" weight="bold" />
-                  </button>
-                )
-              }
-            >
-              {selectedExecutorType &&
-              localParsedProfiles.executors[selectedExecutorType] ? (
-                Object.keys(
-                  localParsedProfiles.executors[selectedExecutorType]
-                ).map((configName) => {
-                  const isDefault =
-                    config?.executor_profile?.executor ===
-                      selectedExecutorType &&
-                    config?.executor_profile?.variant === configName;
-                  const configCount = Object.keys(
-                    localParsedProfiles.executors[selectedExecutorType] || {}
-                  ).length;
-                  return (
-                    <TwoColumnPickerItem
-                      key={configName}
-                      selected={selectedConfiguration === configName}
-                      onClick={() => setSelectedConfiguration(configName)}
-                      trailing={
-                        <>
-                          {isDefault && (
-                            <TwoColumnPickerBadge variant="brand">
-                              {t('settings.agents.editor.isDefault')}
-                            </TwoColumnPickerBadge>
-                          )}
-                          <ConfigActionsDropdown
-                            executorType={selectedExecutorType}
-                            configName={configName}
-                            isDefault={isDefault}
-                            configCount={configCount}
-                            onMakeDefault={handleMakeDefault}
-                            onDelete={handleDeleteConfig}
-                          />
-                        </>
-                      }
-                    >
-                      {toPrettyCase(configName)}
-                    </TwoColumnPickerItem>
-                  );
-                })
-              ) : (
-                <TwoColumnPickerEmpty>
-                  {t('settings.agents.selectAgent')}
-                </TwoColumnPickerEmpty>
+      {selectedExecutorType && selectedConfigs.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-half text-xs text-low">
+              <span>
+                {isConnected(selectedExecutorType)
+                  ? t('settings.agents.connected')
+                  : t('settings.agents.notConnected')}
+              </span>
+              {config?.executor_profile?.executor === selectedExecutorType && (
+                <TwoColumnPickerBadge variant="brand">
+                  {t('settings.agents.editor.isDefault')}
+                </TwoColumnPickerBadge>
               )}
-            </TwoColumnPickerColumn>
-          </TwoColumnPicker>
-
-          {/* Config form */}
-          {selectedExecutorType && selectedConfiguration && (
-            <div className="bg-secondary/50 border border-border rounded-sm p-4">
-              <ExecutorConfigForm
-                key={`${selectedExecutorType}-${selectedConfiguration}`}
-                executor={selectedExecutorType}
-                value={
-                  (executorsMap?.[selectedExecutorType]?.[
-                    selectedConfiguration
-                  ]?.[selectedExecutorType] as Record<string, unknown>) || {}
-                }
-                onChange={(formData) =>
-                  handleExecutorConfigChange(
-                    selectedExecutorType,
-                    selectedConfiguration,
-                    formData
-                  )
-                }
-                disabled={profilesSaving}
+            </div>
+            <AgentActionsDropdown
+              executorType={selectedExecutorType}
+              isDefault={
+                config?.executor_profile?.executor === selectedExecutorType
+              }
+              canRemove={configuredAgents.length > 1}
+              defaultConfig={
+                config?.executor_profile?.executor === selectedExecutorType
+                  ? (config?.executor_profile?.variant ?? 'DEFAULT')
+                  : 'DEFAULT'
+              }
+              onMakeDefault={handleMakeDefault}
+              onRemove={handleRemoveAgent}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <SettingsSelect
+                value={selectedConfiguration ?? 'DEFAULT'}
+                options={selectedConfigs.map((configName) => ({
+                  value: configName,
+                  label: toPrettyCase(configName),
+                }))}
+                onChange={setSelectedConfiguration}
               />
             </div>
-          )}
+            <button
+              className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+              onClick={() => handleCreateConfig(selectedExecutorType)}
+              disabled={profilesSaving}
+              title={t('settings.agents.editor.createNew')}
+            >
+              <PlusIcon className="size-icon-2xs" weight="bold" />
+            </button>
+            <ConfigActionsDropdown
+              executorType={selectedExecutorType}
+              configName={selectedConfiguration ?? 'DEFAULT'}
+              isDefault={
+                config?.executor_profile?.executor === selectedExecutorType &&
+                (config?.executor_profile?.variant ?? 'DEFAULT') ===
+                  (selectedConfiguration ?? 'DEFAULT')
+              }
+              configCount={selectedConfigs.length}
+              onMakeDefault={handleMakeDefault}
+              onDelete={handleDeleteConfig}
+            />
+          </div>
+
+          <div className="bg-secondary/50 border border-border rounded-sm p-4">
+            <ExecutorConfigForm
+              key={`${selectedExecutorType}-${selectedConfiguration}`}
+              executor={selectedExecutorType}
+              value={
+                (executorsMap?.[selectedExecutorType]?.[
+                  selectedConfiguration ?? 'DEFAULT'
+                ]?.[selectedExecutorType] as Record<string, unknown>) || {}
+              }
+              onChange={(formData) =>
+                handleExecutorConfigChange(
+                  selectedExecutorType,
+                  selectedConfiguration ?? 'DEFAULT',
+                  formData
+                )
+              }
+              disabled={profilesSaving}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -520,7 +585,66 @@ export function AgentsSettingsSection() {
   );
 }
 
-// Helper component for config actions dropdown
+function AgentActionsDropdown({
+  executorType,
+  isDefault,
+  canRemove,
+  defaultConfig,
+  onMakeDefault,
+  onRemove,
+}: {
+  executorType: BaseCodingAgent;
+  isDefault: boolean;
+  canRemove: boolean;
+  defaultConfig: string;
+  onMakeDefault: (executor: string, config: string) => void;
+  onRemove: (executor: BaseCodingAgent) => void;
+}) {
+  const { t } = useTranslation(['settings']);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            'p-half rounded-sm hover:bg-panel text-low hover:text-normal'
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DotsThreeIcon className="size-icon-xs" weight="bold" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            onMakeDefault(executorType, defaultConfig);
+          }}
+          disabled={isDefault}
+        >
+          <div className="flex items-center gap-half w-full">
+            <StarIcon className="size-icon-xs mr-base" />
+            {t('settings.agents.editor.makeDefault')}
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(executorType);
+          }}
+          disabled={!canRemove}
+          className="text-error focus:text-error"
+        >
+          <div className="flex items-center gap-half w-full">
+            <TrashIcon className="size-icon-xs mr-base" />
+            {t('settings.agents.removeAgent')}
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ConfigActionsDropdown({
   executorType,
   configName,
@@ -542,10 +666,7 @@ function ConfigActionsDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className={cn(
-            'p-half rounded-sm hover:bg-panel text-low hover:text-normal',
-            'opacity-0 group-hover:opacity-100 transition-opacity'
-          )}
+          className="p-half rounded-sm hover:bg-panel text-low hover:text-normal"
           onClick={(e) => e.stopPropagation()}
         >
           <DotsThreeIcon className="size-icon-xs" weight="bold" />
@@ -582,5 +703,4 @@ function ConfigActionsDropdown({
   );
 }
 
-// Alias for backwards compatibility
 export { AgentsSettingsSection as AgentsSettingsSectionContent };

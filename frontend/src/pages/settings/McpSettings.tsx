@@ -29,12 +29,15 @@ import { Loader2 } from 'lucide-react';
 import type { BaseCodingAgent, ExecutorConfig } from 'shared/types';
 import { McpConfig } from 'shared/types';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
+import { agentLabel } from '@/utils/agentLabels';
 import { mcpServersApi } from '@/lib/api';
 import { McpConfigStrategyGeneral } from '@/lib/mcpStrategies';
 
 export function McpSettings() {
   const { t } = useTranslation('settings');
   const { config, profiles } = useUserSystem();
+  const { configuredAgents } = useConfiguredAgents();
   const [mcpServers, setMcpServers] = useState('{}');
   const [mcpConfig, setMcpConfig] = useState<McpConfig | null>(null);
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -46,19 +49,19 @@ export function McpSettings() {
   const [mcpConfigPath, setMcpConfigPath] = useState<string>('');
   const [success, setSuccess] = useState(false);
 
-  // Initialize selected profile when config loads
   useEffect(() => {
-    if (config?.executor_profile && profiles && !selectedProfile) {
-      // Find the current profile
-      const currentProfile = profiles[config.executor_profile.executor];
-      if (currentProfile) {
-        setSelectedProfile(currentProfile);
-      } else if (Object.keys(profiles).length > 0) {
-        // Default to first profile if current profile not found
-        setSelectedProfile(Object.values(profiles)[0]);
-      }
+    if (selectedProfile || !profiles || configuredAgents.length === 0) {
+      return;
     }
-  }, [config?.executor_profile, profiles, selectedProfile]);
+    const preferred = config?.executor_profile?.executor;
+    const initial =
+      preferred && configuredAgents.includes(preferred)
+        ? preferred
+        : configuredAgents[0];
+    if (initial && profiles[initial]) {
+      setSelectedProfile(profiles[initial]);
+    }
+  }, [config?.executor_profile, profiles, selectedProfile, configuredAgents]);
 
   // Load existing MCP configuration when selected profile changes
   useEffect(() => {
@@ -288,14 +291,11 @@ export function McpSettings() {
                 />
               </SelectTrigger>
               <SelectContent>
-                {profiles &&
-                  Object.entries(profiles)
-                    .sort((a, b) => a[0].localeCompare(b[0]))
-                    .map(([profileKey]) => (
-                      <SelectItem key={profileKey} value={profileKey}>
-                        {profileKey}
-                      </SelectItem>
-                    ))}
+                {configuredAgents.map((profileKey) => (
+                  <SelectItem key={profileKey} value={profileKey}>
+                    {agentLabel(profileKey)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">

@@ -34,6 +34,10 @@ pub struct Config {
     pub config_version: String,
     pub theme: ThemeMode,
     pub executor_profile: ExecutorProfileId,
+    /// Agents the user has added in Settings. None means not yet chosen — the app
+    /// seeds from connected agents plus the current default on first load.
+    #[serde(default)]
+    pub enabled_agents: Option<Vec<BaseCodingAgent>>,
     pub disclaimer_acknowledged: bool,
     pub onboarding_acknowledged: bool,
     pub notifications: NotificationConfig,
@@ -82,6 +86,7 @@ impl Config {
             config_version: "v8".to_string(),
             theme: old_config.theme,
             executor_profile: old_config.executor_profile,
+            enabled_agents: None,
             disclaimer_acknowledged: old_config.disclaimer_acknowledged,
             onboarding_acknowledged: old_config.onboarding_acknowledged,
             notifications: old_config.notifications,
@@ -176,6 +181,7 @@ impl Default for Config {
             config_version: "v8".to_string(),
             theme: ThemeMode::System,
             executor_profile: ExecutorProfileId::new(BaseCodingAgent::ClaudeCode),
+            enabled_agents: None,
             disclaimer_acknowledged: false,
             onboarding_acknowledged: false,
             notifications: NotificationConfig::default(),
@@ -195,5 +201,21 @@ impl Default for Config {
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_enabled_agents_deserializes_as_none() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value
+            .as_object_mut()
+            .expect("config json is an object")
+            .remove("enabled_agents");
+        let config: Config = serde_json::from_value(value).unwrap();
+        assert_eq!(config.enabled_agents, None);
     }
 }

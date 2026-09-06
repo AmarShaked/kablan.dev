@@ -5,7 +5,6 @@ import { RJSFValidationError } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { shadcnTheme } from './rjsf';
@@ -115,40 +114,36 @@ export function ExecutorConfigForm({
 
   return (
     <div className="space-y-8">
-      <Card>
-        <CardContent className="p-0">
-          <Form
-            schema={schema}
-            uiSchema={uiSchema}
-            formData={formData}
-            formContext={formContext}
-            onChange={handleChange}
-            onSubmit={handleSubmit}
-            onError={handleError}
-            validator={validator}
-            disabled={disabled}
-            liveValidate
-            showErrorList={false}
-            widgets={shadcnTheme.widgets}
-            templates={shadcnTheme.templates}
-            fields={shadcnTheme.fields}
-          >
-            {onSave && (
-              <div className="flex justify-end pt-4">
-                <Button
-                  type="submit"
-                  disabled={!isDirty || validationErrors.length > 0 || isSaving}
-                >
-                  {isSaving && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save Configuration
-                </Button>
-              </div>
-            )}
-          </Form>
-        </CardContent>
-      </Card>
+      <Form
+        schema={schema}
+        uiSchema={uiSchema}
+        formData={formData}
+        formContext={formContext}
+        onChange={handleChange}
+        onSubmit={handleSubmit}
+        onError={handleError}
+        validator={validator}
+        disabled={disabled}
+        liveValidate
+        showErrorList={false}
+        widgets={shadcnTheme.widgets}
+        templates={shadcnTheme.templates}
+        fields={shadcnTheme.fields}
+      >
+        {onSave && (
+          <div className="flex justify-end pt-4">
+            <Button
+              type="submit"
+              disabled={!isDirty || validationErrors.length > 0 || isSaving}
+            >
+              {isSaving && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Save Configuration
+            </Button>
+          </div>
+        )}
+      </Form>
 
       {validationErrors.length > 0 && (
         <Alert variant="destructive">

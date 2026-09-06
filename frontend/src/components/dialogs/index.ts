@@ -95,6 +95,11 @@ export {
   type CreateConfigurationResult,
 } from './settings/CreateConfigurationDialog';
 export {
+  AddAgentWizardDialog,
+  type AddAgentWizardDialogProps,
+  type AddAgentWizardResult,
+} from './settings/AddAgentWizardDialog';
+export {
   DeleteConfigurationDialog,
   type DeleteConfigurationDialogProps,
   type DeleteConfigurationResult,

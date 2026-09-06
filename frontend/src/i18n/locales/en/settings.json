@@ -286,9 +286,29 @@
     },
     "agents": {
       "title": "Coding Agent Configurations",
-      "description": "Customize the behavior of coding agents with different configurations.",
+      "description": "Agents you've set up. Only connected agents appear when starting a task.",
       "loading": "Loading agent configurations...",
       "selectAgent": "Select agent",
+      "addAgent": "Add agent",
+      "empty": "No agents configured yet. Add one to start using it in tasks.",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "notConnectedHint": "Won't appear in the agent picker until it's installed or signed in.",
+      "configurationsCount_one": "{{count}} configuration",
+      "configurationsCount_other": "{{count}} configurations",
+      "removeAgent": "Remove",
+      "removeConfirm": {
+        "title": "Remove {{agent}}?",
+        "message": "It will leave your list. You can add it again later. Existing tasks are unaffected."
+      },
+      "wizard": {
+        "title": "Add agent",
+        "chooseHint": "Pick the coding agent you want to add.",
+        "connectHint": "We'll check whether this agent is installed on your machine.",
+        "allConfigured": "Every available agent is already in your list.",
+        "ready": "This agent is connected and will show up in the task picker.",
+        "notFound": "We couldn't find this agent locally. You can still add it here and finish setup later — it won't appear in the task picker until it's connected."
+      },
       "save": {
         "button": "Save Agent Configurations",
         "success": "✓ Executor configurations saved successfully!",
