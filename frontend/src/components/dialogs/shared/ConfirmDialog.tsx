@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react';
 import { defineModal, type ConfirmResult } from '@/lib/modals';
@@ -18,6 +21,8 @@ export interface ConfirmDialogProps {
   cancelText?: string;
   variant?: 'default' | 'destructive' | 'info' | 'success';
   icon?: boolean;
+  /** Confirm stays disabled until the user types this value exactly. */
+  typedValue?: string;
 }
 
 const ConfirmDialogImpl = NiceModal.create<ConfirmDialogProps>((props) => {
@@ -29,12 +34,21 @@ const ConfirmDialogImpl = NiceModal.create<ConfirmDialogProps>((props) => {
     cancelText = 'Cancel',
     variant = 'default',
     icon = true,
+    typedValue,
   } = props;
+  const [typed, setTyped] = useState('');
+
+  useEffect(() => {
+    if (modal.visible) setTyped('');
+  }, [modal.visible]);
+
+  const canConfirm = !typedValue || typed === typedValue;
 
   // resolve settles the promise the caller is awaiting; hide is what actually takes the dialog
   // off the screen. Without both, every answer leaves the dialog sitting there — and no caller
   // hides it, because a dialog closing itself is the only sane contract.
   const handleConfirm = () => {
+    if (typedValue && typed !== typedValue) return;
     modal.resolve('confirmed' as ConfirmResult);
     modal.hide();
   };
@@ -75,11 +89,36 @@ const ConfirmDialogImpl = NiceModal.create<ConfirmDialogProps>((props) => {
             {message}
           </DialogDescription>
         </DialogHeader>
+        {typedValue ? (
+          <div className="space-y-2">
+            <Label htmlFor="confirm-typed-value">
+              Type{' '}
+              <span className="font-mono font-medium text-foreground">
+                {typedValue}
+              </span>{' '}
+              to confirm
+            </Label>
+            <Input
+              id="confirm-typed-value"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canConfirm) handleConfirm();
+              }}
+            />
+          </div>
+        ) : null}
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={handleCancel}>
             {cancelText}
           </Button>
-          <Button variant={getConfirmButtonVariant()} onClick={handleConfirm}>
+          <Button
+            variant={getConfirmButtonVariant()}
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+          >
             {confirmText}
           </Button>
         </DialogFooter>

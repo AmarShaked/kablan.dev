@@ -34,6 +34,7 @@ import {
   isAgentsPath,
   parseAgentParam,
 } from '@/lib/routes/agentRoutes';
+import { isProjectSettingsPath } from '@/lib/routes/projectRoutes';
 import { agentLabel } from '@/utils/agentLabels';
 
 /**
@@ -67,6 +68,7 @@ export function ProjectHeader() {
 
   const isSettings = location.pathname.startsWith('/settings');
   const isAgents = isAgentsPath(location.pathname);
+  const isProjectSettings = isProjectSettingsPath(location.pathname);
   const isAddAgent = location.pathname === ADD_AGENT_PATH;
   const headerAgent = parseAgentParam(location.pathname.split('/')[2]);
   const isAllTasks = location.pathname === '/tasks';
@@ -165,7 +167,7 @@ export function ProjectHeader() {
               <>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem className="min-w-0">
-                  {taskId ? (
+                  {taskId || isProjectSettings ? (
                     <BreadcrumbLink asChild>
                       <Link
                         to={`/local-projects/${project.id}/tasks`}
@@ -179,6 +181,15 @@ export function ProjectHeader() {
                       {project.name}
                     </BreadcrumbPage>
                   )}
+                </BreadcrumbItem>
+              </>
+            )}
+
+            {isProjectSettings && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>Settings</BreadcrumbPage>
                 </BreadcrumbItem>
               </>
             )}

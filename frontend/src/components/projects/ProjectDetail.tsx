@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { paths } from '@/lib/paths';
+import { buildProjectSettingsPath } from '@/lib/routes/projectRoutes';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,7 @@ export function ProjectDetail({ projectId, onBack }: ProjectDetailProps) {
   };
 
   const handleEditClick = () => {
-    navigate(`/settings/projects?projectId=${projectId}`);
+    navigate(buildProjectSettingsPath(projectId));
   };
 
   if (isLoading) {

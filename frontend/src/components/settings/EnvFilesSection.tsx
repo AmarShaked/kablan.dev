@@ -127,7 +127,7 @@ export function EnvFilesSection({ repoId }: { repoId: string }) {
         }}
         rows={12}
         placeholder={`KEY=value\n# ${selected} is gitignored — it never leaves this machine.`}
-        className="font-ibm-plex-mono w-full resize-y border border-input bg-transparent p-3 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="font-ibm-plex-mono w-full resize-y rounded-md border border-input bg-background p-3 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
       {error && <p className="text-sm text-destructive">{error}</p>}

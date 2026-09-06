@@ -16,13 +16,14 @@ import { useUiPreferencesScratch } from '@/hooks/useUiPreferencesScratch';
 import {
   GeneralSettings,
   McpSettings,
-  ProjectSettings,
-  ReposSettings,
   SettingsLayout,
 } from '@/pages/settings/';
 import { AgentPage } from '@/pages/agents/AgentPage';
 import { AddAgentPage } from '@/pages/agents/AddAgentPage';
 import { AgentsIndexRedirect } from '@/pages/agents/AgentsIndexRedirect';
+import { ProjectSettingsPage } from '@/pages/projects/ProjectSettingsPage';
+import { SettingsProjectsRedirect } from '@/components/routing/SettingsProjectsRedirect';
+import { SettingsReposRedirect } from '@/components/routing/SettingsReposRedirect';
 import {
   SETTINGS_AGENTS_REDIRECT,
   SETTINGS_USAGE_REDIRECT,
@@ -152,11 +153,18 @@ function AppContent() {
                 path="/local-projects/:projectId/tasks"
                 element={<ProjectTasks />}
               />
+              <Route
+                path="/local-projects/:projectId/settings"
+                element={<ProjectSettingsPage />}
+              />
               <Route path="/settings/*" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="general" replace />} />
                 <Route path="general" element={<GeneralSettings />} />
-                <Route path="projects" element={<ProjectSettings />} />
-                <Route path="repos" element={<ReposSettings />} />
+                <Route
+                  path="projects"
+                  element={<SettingsProjectsRedirect />}
+                />
+                <Route path="repos" element={<SettingsReposRedirect />} />
                 <Route
                   path="agents"
                   element={

@@ -13,6 +13,7 @@ import { useKeyCreate, Scope } from '@/keyboard';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectStatsApi, projectsApi } from '@/lib/api';
 import { projectKeys } from '@/lib/queryKeys';
+import { buildProjectSettingsPath } from '@/lib/routes/projectRoutes';
 
 export function ProjectList() {
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ export function ProjectList() {
   useKeyCreate(handleCreateProject, { scope: Scope.PROJECTS });
 
   const handleEditProject = (project: Project) => {
-    navigate(`/settings/projects?projectId=${project.id}`);
+    navigate(buildProjectSettingsPath(project.id));
   };
 
   return (

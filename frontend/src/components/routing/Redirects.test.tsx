@@ -9,6 +9,8 @@ import {
 } from 'react-router-dom';
 import { LegacyAttemptRedirect } from './LegacyAttemptRedirect';
 import { LegacyProjectsPrefixRedirect } from './LegacyProjectsPrefixRedirect';
+import { SettingsProjectsRedirect } from './SettingsProjectsRedirect';
+import { SettingsReposRedirect } from './SettingsReposRedirect';
 
 /** Renders the URL the router settled on, so a test can assert where a link landed. */
 function Landed() {
@@ -48,6 +50,10 @@ function App() {
       <Route path="/agents/new" element={<Landed />} />
       <Route path="/agents/:agent" element={<Landed />} />
       <Route
+        path="/local-projects/:projectId/settings"
+        element={<Landed />}
+      />
+      <Route
         path="/settings/agents"
         element={<Navigate to="/agents" replace />}
       />
@@ -55,6 +61,11 @@ function App() {
         path="/settings/usage"
         element={<Navigate to="/agents/CLAUDE_CODE" replace />}
       />
+      <Route
+        path="/settings/projects"
+        element={<SettingsProjectsRedirect />}
+      />
+      <Route path="/settings/repos" element={<SettingsReposRedirect />} />
       <Route path="*" element={<Navigate to="/local-projects" replace />} />
     </Routes>
   );
@@ -134,5 +145,27 @@ describe('agents routes', () => {
 
   it('sends the old Usage tab at Claude’s agent page', () => {
     expect(landOn('/settings/usage')).toBe('/agents/CLAUDE_CODE');
+  });
+});
+
+describe('project settings routes', () => {
+  it('does not send a project settings page at the catch-all', () => {
+    expect(landOn(`/local-projects/${P}/settings`)).toBe(
+      `/local-projects/${P}/settings`
+    );
+  });
+
+  it('sends the old Settings Projects tab at that project', () => {
+    expect(landOn(`/settings/projects?projectId=${P}`)).toBe(
+      `/local-projects/${P}/settings`
+    );
+  });
+
+  it('sends a bare Projects tab at the projects list', () => {
+    expect(landOn('/settings/projects')).toBe('/local-projects');
+  });
+
+  it('sends the old Settings Repositories tab at the projects list', () => {
+    expect(landOn('/settings/repos')).toBe('/local-projects');
   });
 });

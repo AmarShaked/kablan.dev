@@ -20,11 +20,9 @@ import type { WorkspaceEnvFile } from 'shared/types';
 /**
  * A task's own environment files, editable without leaving the app.
  *
- * Settings already edits the .env files in a repository's main checkout, but those are shared:
- * every worktree copies from them, so changing one to try something for a single task changes it
- * for the checkout you work in too. A worktree is a separate directory with its own copy, so it
- * can hold a different value — a staging key, a flag turned on for one experiment — and that is
- * what this pane edits. Nothing written here touches the repository the worktree came from.
+ * A worktree is a separate directory with its own copy of gitignored env files, so it can hold a
+ * different value — a staging key, a flag turned on for one experiment — without changing the
+ * checkout the worktree came from. Nothing written here touches that repository.
  */
 
 /** Unsaved text, keyed by repository and filename, so switching tabs doesn't discard an edit. */

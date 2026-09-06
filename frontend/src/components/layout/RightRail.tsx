@@ -1,4 +1,5 @@
-import { Plus } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjectRepos } from '@/hooks';
@@ -6,6 +7,10 @@ import { useOpenProjectInEditor } from '@/hooks/useOpenProjectInEditor';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { IdeIcon, getIdeName } from '@/components/ide/IdeIcon';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import {
+  buildProjectSettingsPath,
+  isProjectSettingsPath,
+} from '@/lib/routes/projectRoutes';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -17,24 +22,23 @@ import {
 /**
  * The actions you take *on* the project, as a column down the right edge.
  *
- * These two were homeless. Creating a task sat in the task list's own toolbar, in a row otherwise
- * made of view controls — filter, sort, grouping — where it was the one button that changed data
- * rather than what you were looking at. Opening the IDE sat at the far end of the header, beside
- * a breadcrumb and a search box that describe where you are. Neither belonged to its neighbours.
- *
- * A rail gives them somewhere to be: always in the same place whatever the middle of the screen
- * is doing, and away from the controls that only change the view. It is a column of icons, so
- * each one says what it is on hover rather than in a label.
+ * Creating a task sat in the task list's own toolbar, opening the IDE sat at the far
+ * end of the header, and project settings lived in the app Settings tab — none of
+ * those belonged to their neighbours. A rail gives them somewhere to be: always in
+ * the same place whatever the middle of the screen is doing. It is a column of icons,
+ * so each one says what it is on hover rather than in a label.
  */
 
 /** One rail button. Plain, not the shared Button: its size variants add padding a rail does not want. */
 function RailButton({
   label,
   onClick,
+  active,
   children,
 }: {
   label: string;
   onClick: () => void;
+  active?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -44,11 +48,13 @@ function RailButton({
           type="button"
           onClick={onClick}
           aria-label={label}
+          aria-current={active ? 'page' : undefined}
           className={cn(
             'inline-flex h-9 w-9 items-center justify-center rounded-lg',
             'border border-border bg-background text-muted-foreground',
             'transition-colors hover:bg-accent hover:text-foreground',
-            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            active && 'bg-accent text-foreground'
           )}
         >
           {children}
@@ -64,6 +70,8 @@ export function RightRail() {
   const { data: repos } = useProjectRepos(projectId);
   const openInEditor = useOpenProjectInEditor(project || null);
   const { config } = useUserSystem();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Nothing here is about the app, only about a project — so with no project open there is
   // nothing to show, and an empty rail would just be a stripe.
@@ -90,6 +98,14 @@ export function RightRail() {
             />
           </RailButton>
         )}
+
+        <RailButton
+          label="Project settings"
+          active={isProjectSettingsPath(location.pathname)}
+          onClick={() => navigate(buildProjectSettingsPath(projectId))}
+        >
+          <Settings className="h-4 w-4" />
+        </RailButton>
 
         <RailButton
           label="New task"

@@ -291,13 +291,7 @@ export function ProjectsSidebar() {
               isActive={location.pathname.startsWith('/settings')}
               tooltip="Settings"
             >
-              <Link
-                to={
-                  activeId
-                    ? `/settings/projects?projectId=${activeId}`
-                    : '/settings'
-                }
-              >
+              <Link to="/settings">
                 <Settings />
                 <span>Settings</span>
               </Link>
