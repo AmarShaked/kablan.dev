@@ -95,7 +95,7 @@ export function CollapsedEntryGroup({
     : toolIcons(group.entries);
 
   return (
-    <div className="px-4 py-1">
+    <div className="px-4 py-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

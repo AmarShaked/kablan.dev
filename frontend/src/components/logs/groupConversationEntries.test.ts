@@ -109,6 +109,38 @@ describe('groupConversationEntries', () => {
     expect(isAggregatedGroup(grouped[2])).toBe(true);
   });
 
+  it('does not let thinking split a tool run or take a row', () => {
+    seq += 1;
+    const thinking: PatchTypeWithKey = {
+      type: 'NORMALIZED_ENTRY',
+      content: {
+        timestamp: null,
+        content: 'I should grep next',
+        entry_type: { type: 'thinking' },
+      },
+      patchKey: `p${seq}`,
+      executionProcessId: 'proc-1',
+    };
+    const entries = [read('a.ts'), thinking, search('foo'), command('git status')];
+    const grouped = groupConversationEntries(entries);
+    expect(grouped).toHaveLength(1);
+    expect(isAggregatedGroup(grouped[0])).toBe(true);
+    if (!isAggregatedGroup(grouped[0])) return;
+    expect(grouped[0].entries).toHaveLength(3);
+  });
+
+  it('does not let a blank assistant message split a tool run', () => {
+    const entries = [
+      read('a.ts'),
+      assistant('   '),
+      search('foo'),
+      command('git status'),
+    ];
+    const grouped = groupConversationEntries(entries);
+    expect(grouped).toHaveLength(1);
+    expect(isAggregatedGroup(grouped[0])).toBe(true);
+  });
+
   it('still groups tools that have not reported a status yet', () => {
     const bare = (path: string, key: string): PatchTypeWithKey =>
       ({

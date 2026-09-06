@@ -306,7 +306,7 @@ const CollapsibleEntry: React.FC<{
         <WYSIWYGEditor
           value={content}
           disabled
-          actionsPlacement={variant === 'system' ? 'none' : 'below'}
+          actionsPlacement={variant === 'error' ? 'below' : 'none'}
           className="whitespace-pre-wrap break-words"
           taskAttemptId={taskAttemptId}
         />
@@ -323,7 +323,7 @@ const CollapsibleEntry: React.FC<{
         <WYSIWYGEditor
           value={firstLine}
           disabled
-          actionsPlacement={variant === 'system' ? 'none' : 'below'}
+          actionsPlacement={variant === 'error' ? 'below' : 'none'}
           className="whitespace-pre-wrap break-words"
           taskAttemptId={taskAttemptId}
         />
@@ -531,7 +531,7 @@ const ToolCallCard: React.FC<{
   );
 
   return (
-    <div className="inline-block w-full flex flex-col gap-4">
+    <div className="inline-block w-full flex flex-col gap-1.5">
       <HeaderWrapper {...headerProps} className={headerClassName}>
         <span className=" min-w-0 flex items-center gap-1.5">
           <span>
@@ -761,11 +761,12 @@ function DisplayConversationEntry({
   const isUserMessage = entryType.type === 'user_message';
   const isUserFeedback = entryType.type === 'user_feedback';
   const isLoading = entryType.type === 'loading';
+  const isThinking = entryType.type === 'thinking';
   const isTokenUsage = entryType.type === 'token_usage_info';
   const isFileEdit = (a: ActionType): a is FileEditAction =>
     a.action === 'file_edit';
 
-  if (isTokenUsage) {
+  if (isTokenUsage || isThinking) {
     return null;
   }
 
@@ -888,7 +889,7 @@ function DisplayConversationEntry({
       <div
         className={cn(
           'text-sm space-y-3',
-          compact ? 'px-0 py-0.5' : 'px-4 py-2',
+          compact ? 'px-0 py-0' : 'px-4 py-0.5',
           greyed && 'opacity-50 pointer-events-none'
         )}
       >
@@ -917,7 +918,7 @@ function DisplayConversationEntry({
   if (isSystem || isError) {
     return (
       <div
-        className={`px-4 py-2 text-sm ${greyed ? 'opacity-50 pointer-events-none' : ''}`}
+        className={`px-4 py-1 text-sm ${greyed ? 'opacity-50 pointer-events-none' : ''}`}
       >
         <CollapsibleEntry
           content={isNormalizedEntry(entry) ? entry.content : ''}
@@ -962,6 +963,9 @@ function DisplayConversationEntry({
           <WYSIWYGEditor
             value={isNormalizedEntry(entry) ? entry.content : ''}
             disabled
+            actionsPlacement={
+              entryType.type === 'assistant_message' ? 'below' : 'none'
+            }
             className="whitespace-pre-wrap break-words flex flex-col gap-1 font-normal"
             taskAttemptId={taskAttempt?.id}
           />
