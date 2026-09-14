@@ -253,6 +253,29 @@ describe('TaskFormDialog opened from the sidebar (no project yet)', () => {
     expect(screen.getByLabelText('description')).toHaveValue('Details here');
   });
 
+  it('pre-fills title and description from a Linear ticket', async () => {
+    renderApp();
+    TaskFormDialog.show({
+      mode: 'create',
+      initialTitle: 'ENG-214 Fix login redirect after SSO',
+      initialDescription:
+        'After SSO, users land on / instead of the return URL.',
+      source: {
+        provider: 'linear',
+        id: 'eng-214',
+        identifier: 'ENG-214',
+        url: 'https://linear.app/kablan/issue/ENG-214',
+      },
+    });
+
+    expect(await titleInput()).toHaveValue(
+      'ENG-214 Fix login redirect after SSO'
+    );
+    expect(screen.getByLabelText('description')).toHaveValue(
+      'After SSO, users land on / instead of the return URL.'
+    );
+  });
+
   it('starts the task with the chosen project and its branch', async () => {
     renderApp();
     TaskFormDialog.show({ mode: 'create' });

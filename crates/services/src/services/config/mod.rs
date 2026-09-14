@@ -42,6 +42,8 @@ pub type UiLanguage = versions::v8::UiLanguage;
 pub type ShowcaseState = versions::v8::ShowcaseState;
 pub type SendMessageShortcut = versions::v8::SendMessageShortcut;
 pub type TimeFormat = versions::v8::TimeFormat;
+pub type IntegrationProvider = versions::v8::IntegrationProvider;
+pub type LinearConfig = versions::v8::LinearConfig;
 
 /// Will always return config, trying old schemas or eventually returning default
 pub async fn load_config_from_file(config_path: &PathBuf) -> Config {

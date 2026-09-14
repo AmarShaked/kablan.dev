@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", archived_at as \"archived_at: DateTime<Utc>\", created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM tasks\n               ORDER BY created_at ASC",
+  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", archived_at as \"archived_at: DateTime<Utc>\", created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\", source_provider, source_id, source_identifier, source_url\n               FROM tasks\n               WHERE rowid = $1",
   "describe": {
     "columns": [
       {
@@ -47,10 +47,30 @@
         "name": "updated_at!: DateTime<Utc>",
         "ordinal": 8,
         "type_info": "Text"
+      },
+      {
+        "name": "source_provider",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_id",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_identifier",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_url",
+        "ordinal": 12,
+        "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       true,
@@ -61,8 +81,12 @@
       true,
       true,
       false,
-      false
+      false,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "bd5f4abec69ac9ab1ab60edbf3999d3ec99dde0600524433b855e5eb057defef"
+  "hash": "f47d745317bb451b1eb792fd43f7d8a5e3996bf666cd775cd57302e52a054d34"
 }

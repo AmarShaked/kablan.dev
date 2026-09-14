@@ -58,7 +58,18 @@ interface Task {
 export type TaskFormDialogProps =
   /** `projectId` is optional here alone: opened from the sidebar there is no project yet, and
    *  the form asks for one. Everywhere else the project is where you already are. */
-  | { mode: 'create'; projectId?: string }
+  | {
+      mode: 'create';
+      projectId?: string;
+      initialTitle?: string;
+      initialDescription?: string;
+      source?: {
+        provider: string;
+        id: string;
+        identifier: string;
+        url: string;
+      };
+    }
   | { mode: 'edit'; projectId: string; task: Task }
   | { mode: 'duplicate'; projectId: string; initialTask: Task }
   | {
@@ -150,11 +161,21 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
         };
 
       case 'subtask':
-      case 'create':
-      default:
         return {
           title: '',
           description: '',
+          status: 'todo',
+          executorProfileId: baseProfile,
+          repoBranches: defaultRepoBranches,
+          autoStart: true,
+        };
+
+      case 'create':
+      default:
+        return {
+          title: mode === 'create' ? (props.initialTitle ?? '') : '',
+          description:
+            mode === 'create' ? (props.initialDescription ?? '') : '',
           status: 'todo',
           executorProfileId: baseProfile,
           repoBranches: defaultRepoBranches,
@@ -182,6 +203,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
     } else {
       const imageIds =
         newlyUploadedImageIds.length > 0 ? newlyUploadedImageIds : null;
+      const source = mode === 'create' ? props.source : undefined;
       const task = {
         project_id: projectId,
         title: value.title,
@@ -191,6 +213,10 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           mode === 'subtask' ? props.parentTaskAttemptId : null,
         image_ids: imageIds,
         shared_task_id: null,
+        source_provider: source?.provider ?? null,
+        source_id: source?.id ?? null,
+        source_identifier: source?.identifier ?? null,
+        source_url: source?.url ?? null,
       };
       const shouldAutoStart = value.autoStart && !forceCreateOnlyRef.current;
       if (shouldAutoStart) {

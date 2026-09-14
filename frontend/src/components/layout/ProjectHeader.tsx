@@ -34,8 +34,15 @@ import {
   isAgentsPath,
   parseAgentParam,
 } from '@/lib/routes/agentRoutes';
+import {
+  ADD_INTEGRATION_PATH,
+  isIntegrationsPath,
+  parseIntegrationParam,
+} from '@/lib/routes/integrationRoutes';
 import { isProjectSettingsPath } from '@/lib/routes/projectRoutes';
 import { agentLabel } from '@/utils/agentLabels';
+import { integrationLabel } from '@/lib/integrations/catalog';
+import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
 
 /**
  * Where you are, what you're searching, and what you can do here.
@@ -68,9 +75,14 @@ export function ProjectHeader() {
 
   const isSettings = location.pathname.startsWith('/settings');
   const isAgents = isAgentsPath(location.pathname);
+  const isIntegrations = isIntegrationsPath(location.pathname);
   const isProjectSettings = isProjectSettingsPath(location.pathname);
   const isAddAgent = location.pathname === ADD_AGENT_PATH;
+  const isAddIntegration = location.pathname === ADD_INTEGRATION_PATH;
   const headerAgent = parseAgentParam(location.pathname.split('/')[2]);
+  const headerIntegration = parseIntegrationParam(
+    location.pathname.split('/')[2]
+  );
   const isAllTasks = location.pathname === '/tasks';
   // Settings is a destination of its own, not a page inside a project — its trail starts at
   // Settings and names the section, rather than claiming to sit under Projects.
@@ -128,6 +140,14 @@ export function ProjectHeader() {
                 ) : (
                   <BreadcrumbPage>Agents</BreadcrumbPage>
                 )
+              ) : isIntegrations ? (
+                isAddIntegration || headerIntegration ? (
+                  <BreadcrumbLink asChild>
+                    <Link to="/integrations">Integrations</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>Integrations</BreadcrumbPage>
+                )
               ) : isAllTasks ? (
                 <BreadcrumbPage>Tasks</BreadcrumbPage>
               ) : projectId ? (
@@ -155,15 +175,28 @@ export function ProjectHeader() {
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
                   <BreadcrumbPage>
-                    {isAddAgent
-                      ? 'Add agent'
-                      : agentLabel(headerAgent)}
+                    {isAddAgent ? 'Add agent' : agentLabel(headerAgent)}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </>
             )}
 
-            {!isSettings && !isAgents && project && (
+            {isIntegrations && (isAddIntegration || headerIntegration) && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>
+                    {isAddIntegration
+                      ? 'Add integration'
+                      : headerIntegration
+                        ? integrationLabel(headerIntegration)
+                        : ''}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+
+            {!isSettings && !isAgents && !isIntegrations && project && (
               <>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem className="min-w-0">
@@ -200,8 +233,9 @@ export function ProjectHeader() {
               <>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem className="min-w-0">
-                  <BreadcrumbPage className="truncate">
-                    {task.title}
+                  <BreadcrumbPage className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{task.title}</span>
+                    <TaskSourceBadge task={task} />
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </>

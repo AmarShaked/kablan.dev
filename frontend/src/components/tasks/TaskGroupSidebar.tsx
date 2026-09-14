@@ -31,6 +31,7 @@ import {
   TaskStatusControl,
 } from '@/components/tasks/TaskStatusControl';
 import { TaskStatePills } from '@/components/tasks/TaskStatePills';
+import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -257,6 +258,7 @@ function TaskRow({
             >
               {activity ?? "Agent hasn't started yet"}
             </span>
+            <TaskSourceBadge task={task} />
             <TaskStatePills task={task} />
           </div>
         </div>

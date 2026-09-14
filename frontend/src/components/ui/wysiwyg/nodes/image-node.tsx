@@ -97,6 +97,53 @@ function ImageComponent({
     [editor, nodeKey]
   );
 
+  const isRemoteUrl = /^https?:\/\//i.test(src);
+
+  // Remote URLs (e.g. Linear uploads) render as real images, not path chips.
+  if (!isVibeImage && isRemoteUrl) {
+    const openRemotePreview = (event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      ImagePreviewDialog.show({
+        imageUrl: src,
+        altText,
+        fileName: altText || undefined,
+      });
+    };
+
+    return (
+      <span
+        className="group relative my-2 block max-w-full"
+        onDoubleClick={onDoubleClickEdit}
+      >
+        <button
+          type="button"
+          className="block max-w-full cursor-zoom-in rounded-md border bg-muted/20 p-0 text-left"
+          onClick={openRemotePreview}
+          aria-label={altText ? `Preview ${altText}` : 'Preview image'}
+        >
+          <img
+            src={src}
+            alt={altText}
+            className="max-h-[480px] max-w-full rounded-[5px] object-contain"
+            loading="lazy"
+            draggable={false}
+          />
+        </button>
+        {editor.isEditable() && (
+          <button
+            onClick={handleDelete}
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-sm hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100"
+            aria-label="Remove image"
+            type="button"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </span>
+    );
+  }
+
   // Determine what to show as thumbnail
   let thumbnailContent: React.ReactNode;
   let displayName: string;

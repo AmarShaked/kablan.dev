@@ -18,6 +18,7 @@ import { statusLabels, statusColorVars } from '@/utils/statusLabels';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
 import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import { TaskActivityBadge } from '@/components/tasks/TaskActivityBadge';
+import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
 import { taskAccentClass } from '@/utils/taskAccent';
 
 const COLLAPSE_KEY = 'kablan.listView.groupCollapse';
@@ -205,6 +206,7 @@ function TaskRow({
           )}
         </div>
 
+        <TaskSourceBadge task={task} />
         <TaskActivityBadge task={task} />
 
         <span

@@ -5,6 +5,7 @@ import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
 import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import { TaskActivityBadge } from '@/components/tasks/TaskActivityBadge';
+import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
 import { Button } from '@/components/ui/button';
 import { useNavigateWithSearch } from '@/hooks';
 import { paths } from '@/lib/paths';
@@ -95,6 +96,7 @@ export function TaskCard({
           right={
             <>
               <TaskActivityBadge task={task} />
+              <TaskSourceBadge task={task} />
               {task.parent_workspace_id && (
                 <Button
                   variant="icon"

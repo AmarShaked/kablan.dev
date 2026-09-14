@@ -21,6 +21,9 @@ import {
 import { AgentPage } from '@/pages/agents/AgentPage';
 import { AddAgentPage } from '@/pages/agents/AddAgentPage';
 import { AgentsIndexRedirect } from '@/pages/agents/AgentsIndexRedirect';
+import { IntegrationPage } from '@/pages/integrations/IntegrationPage';
+import { AddIntegrationPage } from '@/pages/integrations/AddIntegrationPage';
+import { IntegrationsIndexRedirect } from '@/pages/integrations/IntegrationsIndexRedirect';
 import { ProjectSettingsPage } from '@/pages/projects/ProjectSettingsPage';
 import { SettingsProjectsRedirect } from '@/components/routing/SettingsProjectsRedirect';
 import { SettingsReposRedirect } from '@/components/routing/SettingsReposRedirect';
@@ -160,23 +163,16 @@ function AppContent() {
               <Route path="/settings/*" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="general" replace />} />
                 <Route path="general" element={<GeneralSettings />} />
-                <Route
-                  path="projects"
-                  element={<SettingsProjectsRedirect />}
-                />
+                <Route path="projects" element={<SettingsProjectsRedirect />} />
                 <Route path="repos" element={<SettingsReposRedirect />} />
                 <Route
                   path="agents"
-                  element={
-                    <Navigate to={SETTINGS_AGENTS_REDIRECT} replace />
-                  }
+                  element={<Navigate to={SETTINGS_AGENTS_REDIRECT} replace />}
                 />
                 <Route path="mcp" element={<McpSettings />} />
                 <Route
                   path="usage"
-                  element={
-                    <Navigate to={SETTINGS_USAGE_REDIRECT} replace />
-                  }
+                  element={<Navigate to={SETTINGS_USAGE_REDIRECT} replace />}
                 />
               </Route>
               <Route
@@ -186,6 +182,18 @@ function AppContent() {
               <Route path="/agents" element={<AgentsIndexRedirect />} />
               <Route path="/agents/new" element={<AddAgentPage />} />
               <Route path="/agents/:agent" element={<AgentPage />} />
+              <Route
+                path="/integrations"
+                element={<IntegrationsIndexRedirect />}
+              />
+              <Route
+                path="/integrations/new"
+                element={<AddIntegrationPage />}
+              />
+              <Route
+                path="/integrations/:provider"
+                element={<IntegrationPage />}
+              />
               <Route
                 path="/local-projects/:projectId/tasks/:taskId"
                 element={<ProjectTasks />}

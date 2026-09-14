@@ -89,7 +89,11 @@ export type Task = { id: string, project_id: string, title: string, description:
 /**
  * When this task was archived, or None while it is still in the views.
  */
-archived_at: string | null, created_at: string, updated_at: string, };
+archived_at: string | null, created_at: string, updated_at: string, 
+/**
+ * Task-management provider this was started from, e.g. "linear".
+ */
+source_provider: string | null, source_id: string | null, source_identifier: string | null, source_url: string | null, };
 
 export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, 
 /**
@@ -111,11 +115,15 @@ last_turn_summary: string | null, last_turn_prompt: string | null, executor: str
 /**
  * When this task was archived, or None while it is still in the views.
  */
-archived_at: string | null, created_at: string, updated_at: string, };
+archived_at: string | null, created_at: string, updated_at: string, 
+/**
+ * Task-management provider this was started from, e.g. "linear".
+ */
+source_provider: string | null, source_id: string | null, source_identifier: string | null, source_url: string | null, };
 
 export type TaskRelationships = { parent_task: Task | null, current_workspace: Workspace, children: Array<Task>, };
 
-export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
+export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, source_provider: string | null, source_id: string | null, source_identifier: string | null, source_url: string | null, };
 
 export type UpdateTask = { title: string | null, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
 
@@ -560,7 +568,11 @@ export type Config = { config_version: string, theme: ThemeMode, executor_profil
  * Agents the user has added in Settings. None means not yet chosen — the app
  * seeds from connected agents plus the current default on first load.
  */
-enabled_agents: Array<BaseCodingAgent> | null, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
+enabled_agents: Array<BaseCodingAgent> | null, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, 
+/**
+ * Linear personal API key for the Integrations inbox.
+ */
+linear: LinearConfig, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
 /**
  * Days a task stays in the views after it is done or cancelled, before it is archived out of
  * them. None turns automatic archiving off; archiving by hand still works.
@@ -573,7 +585,15 @@ archive_tasks_after_days: number | null,
  * 12- or 24-hour clock for times in lists. Defaulted rather than versioned so a config
  * written before this existed keeps the 12-hour display it already had.
  */
-time_format: TimeFormat, };
+time_format: TimeFormat, 
+/**
+ * Integrations the user added to the sidebar. Empty until they pick one.
+ */
+enabled_integrations: Array<IntegrationProvider>, 
+/**
+ * Subset of `enabled_integrations` that finished their connect steps.
+ */
+connected_integrations: Array<IntegrationProvider>, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 
@@ -596,6 +616,30 @@ export type ShowcaseState = { seen_features: Array<string>, };
 export type SendMessageShortcut = "ModifierEnter" | "Enter";
 
 export enum TimeFormat { HOUR12 = "HOUR12", HOUR24 = "HOUR24" }
+
+export enum IntegrationProvider { LINEAR = "LINEAR", JIRA = "JIRA", GITHUB_ISSUES = "GITHUB_ISSUES", MONDAY = "MONDAY" }
+
+export type LinearConfig = { api_key: string | null, };
+
+export type LinearIssue = { id: string, identifier: string, title: string, description: string, status: string, status_type: string | null, status_color: string | null, team: string, assignee: string | null, labels: Array<string>, priority: string, project: string | null, cycle: string | null, estimate: number | null, due_date: string | null, url: string, created_at: string, updated_at: string, comments: Array<LinearComment>, };
+
+export type LinearComment = { id: string, body: string, author: string | null, created_at: string, };
+
+export type LinearViewer = { id: string, name: string, email: string | null, };
+
+export type LinearPageInfo = { has_next_page: boolean, end_cursor: string | null, };
+
+export type LinearIssuesResponse = { viewer: LinearViewer, issues: Array<LinearIssue>, page_info: LinearPageInfo, total_count: number, };
+
+export type LinearIdName = { id: string, name: string, };
+
+export type LinearWorkflowState = { id: string, name: string, type_name: string, color: string, team_id: string | null, };
+
+export type LinearMetaResponse = { viewer: LinearViewer, teams: Array<LinearIdName>, users: Array<LinearIdName>, states: Array<LinearWorkflowState>, };
+
+export type ConnectLinearBody = { api_key: string, };
+
+export type ConnectLinearResponse = { viewer: LinearViewer, };
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 

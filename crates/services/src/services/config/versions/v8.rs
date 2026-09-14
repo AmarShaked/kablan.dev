@@ -38,6 +38,29 @@ pub enum TimeFormat {
     Hour24,
 }
 
+/// Task-management services that can appear in the sidebar Integrations group.
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq, Hash)]
+#[ts(use_ts_enum)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum IntegrationProvider {
+    Linear,
+    Jira,
+    GithubIssues,
+    Monday,
+}
+
+/// Linear personal API key, stored like `github.pat` in local `config.json`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct LinearConfig {
+    pub api_key: Option<String>,
+}
+
+impl Default for LinearConfig {
+    fn default() -> Self {
+        Self { api_key: None }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct Config {
     pub config_version: String,
@@ -52,6 +75,9 @@ pub struct Config {
     pub notifications: NotificationConfig,
     pub editor: EditorConfig,
     pub github: GitHubConfig,
+    /// Linear personal API key for the Integrations inbox.
+    #[serde(default)]
+    pub linear: LinearConfig,
     pub workspace_dir: Option<String>,
     pub last_app_version: Option<String>,
     pub show_release_notes: bool,
@@ -86,6 +112,12 @@ pub struct Config {
     /// written before this existed keeps the 12-hour display it already had.
     #[serde(default)]
     pub time_format: TimeFormat,
+    /// Integrations the user added to the sidebar. Empty until they pick one.
+    #[serde(default)]
+    pub enabled_integrations: Vec<IntegrationProvider>,
+    /// Subset of `enabled_integrations` that finished their connect steps.
+    #[serde(default)]
+    pub connected_integrations: Vec<IntegrationProvider>,
 }
 
 fn default_archive_tasks_after_days() -> Option<u32> {
@@ -105,6 +137,7 @@ impl Config {
             notifications: old_config.notifications,
             editor: old_config.editor,
             github: old_config.github,
+            linear: LinearConfig::default(),
             workspace_dir: old_config.workspace_dir,
             last_app_version: old_config.last_app_version,
             show_release_notes: old_config.show_release_notes,
@@ -119,6 +152,8 @@ impl Config {
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
             time_format: TimeFormat::default(),
+            enabled_integrations: Vec::new(),
+            connected_integrations: Vec::new(),
         }
     }
 
@@ -201,6 +236,7 @@ impl Default for Config {
             notifications: NotificationConfig::default(),
             editor: EditorConfig::default(),
             github: GitHubConfig::default(),
+            linear: LinearConfig::default(),
             workspace_dir: None,
             last_app_version: None,
             show_release_notes: false,
@@ -215,6 +251,8 @@ impl Default for Config {
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
             time_format: TimeFormat::default(),
+            enabled_integrations: Vec::new(),
+            connected_integrations: Vec::new(),
         }
     }
 }
@@ -243,5 +281,27 @@ mod tests {
             .remove("time_format");
         let config: Config = serde_json::from_value(value).unwrap();
         assert_eq!(config.time_format, TimeFormat::Hour12);
+    }
+
+    #[test]
+    fn missing_integrations_deserializes_as_empty() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        let object = value.as_object_mut().expect("config json is an object");
+        object.remove("enabled_integrations");
+        object.remove("connected_integrations");
+        let config: Config = serde_json::from_value(value).unwrap();
+        assert!(config.enabled_integrations.is_empty());
+        assert!(config.connected_integrations.is_empty());
+    }
+
+    #[test]
+    fn missing_linear_deserializes_as_empty() {
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value
+            .as_object_mut()
+            .expect("config json is an object")
+            .remove("linear");
+        let config: Config = serde_json::from_value(value).unwrap();
+        assert!(config.linear.api_key.is_none());
     }
 }

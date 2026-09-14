@@ -18,6 +18,7 @@ import {
   TaskStatusControl,
 } from '@/components/tasks/TaskStatusControl';
 import { TaskStatePills } from '@/components/tasks/TaskStatePills';
+import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
 import { projectIcon } from '@/components/projects/projectIcons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -161,6 +162,7 @@ function Row({
           >
             {activity ?? "Agent hasn't started yet"}
           </span>
+          <TaskSourceBadge task={task} />
           <TaskStatePills task={task} />
         </div>
       </button>

@@ -103,6 +103,10 @@ import {
   CreateFromPrError,
   MigrationRequest,
   MigrationResponse,
+  ConnectLinearBody,
+  ConnectLinearResponse,
+  LinearIssuesResponse,
+  LinearMetaResponse,
 } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
@@ -1610,5 +1614,51 @@ export const systemApi = {
       throw new Error(body.message ?? 'Could not start the update.');
     }
     return body.data;
+  },
+};
+
+export type LinearIssueListParams = {
+  status?: string;
+  assignee?: string;
+  team?: string;
+  q?: string;
+  after?: string;
+  first?: number;
+};
+
+export const linearApi = {
+  connect: async (apiKey: string): Promise<ConnectLinearResponse> => {
+    const body: ConnectLinearBody = { api_key: apiKey };
+    const response = await makeRequest('/api/integrations/linear/connect', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return handleApiResponse<ConnectLinearResponse>(response);
+  },
+  listIssues: async (
+    params: LinearIssueListParams = {}
+  ): Promise<LinearIssuesResponse> => {
+    const search = new URLSearchParams();
+    if (params.status) search.set('status', params.status);
+    if (params.assignee) search.set('assignee', params.assignee);
+    if (params.team) search.set('team', params.team);
+    if (params.q) search.set('q', params.q);
+    if (params.after) search.set('after', params.after);
+    if (params.first != null) search.set('first', String(params.first));
+    const qs = search.toString();
+    const response = await makeRequest(
+      `/api/integrations/linear/issues${qs ? `?${qs}` : ''}`
+    );
+    return handleApiResponse<LinearIssuesResponse>(response);
+  },
+  meta: async (): Promise<LinearMetaResponse> => {
+    const response = await makeRequest('/api/integrations/linear/meta');
+    return handleApiResponse<LinearMetaResponse>(response);
+  },
+  disconnect: async (): Promise<void> => {
+    const response = await makeRequest('/api/integrations/linear', {
+      method: 'DELETE',
+    });
+    await handleApiResponse<null>(response);
   },
 };

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "UPDATE tasks\n               SET title = $3, description = $4, status = $5, parent_workspace_id = $6,\n                   -- Same rule as update_status: a task moved off done or cancelled comes back.\n                   archived_at = CASE WHEN $5 IN ('done', 'cancelled') THEN archived_at ELSE NULL END\n               WHERE id = $1 AND project_id = $2\n               RETURNING id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", archived_at as \"archived_at: DateTime<Utc>\", created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"",
+  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", archived_at as \"archived_at: DateTime<Utc>\", created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\", source_provider, source_id, source_identifier, source_url\n               FROM tasks\n               WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -47,10 +47,30 @@
         "name": "updated_at!: DateTime<Utc>",
         "ordinal": 8,
         "type_info": "Text"
+      },
+      {
+        "name": "source_provider",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_id",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_identifier",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_url",
+        "ordinal": 12,
+        "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 6
+      "Right": 1
     },
     "nullable": [
       true,
@@ -61,8 +81,12 @@
       true,
       true,
       false,
-      false
+      false,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "67d6745788da6bea2ca8edac2d30ad3781085489037209dd4bba8f311e4fe267"
+  "hash": "cddb154b18377e02f793203244525f29c4de9b045eff5cd6fb026aa7b6cb52f1"
 }

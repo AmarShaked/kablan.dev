@@ -37,7 +37,15 @@ import {
   buildAgentPath,
   parseAgentParam,
 } from '@/lib/routes/agentRoutes';
+import {
+  ADD_INTEGRATION_PATH,
+  buildIntegrationPath,
+  parseIntegrationParam,
+} from '@/lib/routes/integrationRoutes';
 import { agentLabel } from '@/utils/agentLabels';
+import { IntegrationIcon } from '@/components/integrations/IntegrationIcon';
+import { useConfiguredIntegrations } from '@/hooks/useConfiguredIntegrations';
+import { integrationLabel } from '@/lib/integrations/catalog';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -58,7 +66,12 @@ export function ProjectsSidebar() {
   const { theme, setTheme } = useTheme();
   const { config, updateAndSaveConfig } = useUserSystem();
   const { configuredAgents, isConnected } = useConfiguredAgents();
+  const { enabledIntegrations, isConnected: isIntegrationConnected } =
+    useConfiguredIntegrations();
   const activeAgent = parseAgentParam(location.pathname.split('/')[2]);
+  const activeIntegration = parseIntegrationParam(
+    location.pathname.split('/')[2]
+  );
 
   // The same query the projects page uses, so the two share one fetch and one cache.
   const { data: projects = [] } = useQuery({
@@ -251,7 +264,7 @@ export function ProjectsSidebar() {
                       tooltip={agentLabel(agent)}
                     >
                       <Link to={buildAgentPath(agent)}>
-                        <AgentIcon agent={agent} className="h-4 w-4" />
+                        <AgentIcon agent={agent} />
                         <span>{agentLabel(agent)}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -259,19 +272,61 @@ export function ProjectsSidebar() {
                       <span
                         className={cn(
                           'h-2 w-2 rounded-full',
-                          connected
-                            ? 'bg-green-500'
-                            : 'bg-muted-foreground/40'
+                          connected ? 'bg-green-500' : 'bg-muted-foreground/40'
                         )}
-                        aria-label={
-                          connected ? 'Connected' : 'Not connected'
-                        }
+                        aria-label={connected ? 'Connected' : 'Not connected'}
                         role="img"
                       />
                     </SidebarMenuBadge>
                   </SidebarMenuItem>
                 );
               })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Integrations</SidebarGroupLabel>
+          <SidebarGroupAction
+            title="Add integration"
+            onClick={() => navigate(ADD_INTEGRATION_PATH)}
+          >
+            <Plus />
+            <span className="sr-only">Add integration</span>
+          </SidebarGroupAction>
+
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {enabledIntegrations.map((provider) => (
+                <SidebarMenuItem key={provider}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activeIntegration === provider}
+                    tooltip={integrationLabel(provider)}
+                  >
+                    <Link to={buildIntegrationPath(provider)}>
+                      <IntegrationIcon provider={provider} />
+                      <span>{integrationLabel(provider)}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                  <SidebarMenuBadge>
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        isIntegrationConnected(provider)
+                          ? 'bg-green-500'
+                          : 'bg-muted-foreground/40'
+                      )}
+                      aria-label={
+                        isIntegrationConnected(provider)
+                          ? 'Connected'
+                          : 'Not connected'
+                      }
+                      role="img"
+                    />
+                  </SidebarMenuBadge>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

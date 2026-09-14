@@ -262,7 +262,7 @@ pub async fn create_task_attempt(
     let attempt_id = Uuid::new_v4();
     let git_branch_name = deployment
         .container()
-        .git_branch_from_workspace(&attempt_id, &task.title)
+        .git_branch_from_workspace(&attempt_id, &task.title, task.source_identifier.as_deref())
         .await;
 
     let workspace = Workspace::create(

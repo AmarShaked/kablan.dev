@@ -668,6 +668,10 @@ pub async fn create_workspace_from_pr(
         status: Some(TaskStatus::InProgress),
         parent_workspace_id: None,
         image_ids: None,
+        source_provider: None,
+        source_id: None,
+        source_identifier: None,
+        source_url: None,
     };
     let task = Task::create(pool, &create_task, task_id).await?;
 

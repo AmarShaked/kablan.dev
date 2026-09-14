@@ -45,11 +45,7 @@ use json_patch::Patch;
 use sqlx::Error as SqlxError;
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle};
-use utils::{
-    log_msg::LogMsg,
-    msg_store::MsgStore,
-    text::{git_branch_id, short_uuid},
-};
+use utils::{log_msg::LogMsg, msg_store::MsgStore, text::git_workspace_branch};
 use uuid::Uuid;
 
 use crate::services::{
@@ -783,15 +779,18 @@ pub trait ContainerService {
 
     async fn git_branch_prefix(&self) -> String;
 
-    async fn git_branch_from_workspace(&self, workspace_id: &Uuid, task_title: &str) -> String {
-        let task_title_id = git_branch_id(task_title);
-        let prefix = self.git_branch_prefix().await;
-
-        if prefix.is_empty() {
-            format!("{}-{}", short_uuid(workspace_id), task_title_id)
-        } else {
-            format!("{}/{}-{}", prefix, short_uuid(workspace_id), task_title_id)
-        }
+    async fn git_branch_from_workspace(
+        &self,
+        workspace_id: &Uuid,
+        task_title: &str,
+        source_identifier: Option<&str>,
+    ) -> String {
+        git_workspace_branch(
+            &self.git_branch_prefix().await,
+            workspace_id,
+            task_title,
+            source_identifier,
+        )
     }
 
     async fn stream_raw_logs(
