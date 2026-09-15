@@ -23,9 +23,9 @@ export function AddIntegrationPage() {
       ? picked
       : available[0]?.provider) ?? null;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!selected) return;
-    addIntegration(selected);
+    await addIntegration(selected);
     navigate(buildIntegrationPath(selected));
   };
 

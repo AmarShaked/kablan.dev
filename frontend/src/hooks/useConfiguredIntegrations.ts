@@ -28,9 +28,9 @@ export function useConfiguredIntegrations() {
     [enabledIntegrations]
   );
 
-  const addIntegration = (provider: IntegrationProvider) => {
+  const addIntegration = async (provider: IntegrationProvider) => {
     if (enabledIntegrations.includes(provider)) return;
-    void updateAndSaveConfig({
+    await updateAndSaveConfig({
       enabled_integrations: [...enabledIntegrations, provider],
     });
   };
@@ -79,8 +79,7 @@ export function useConfiguredIntegrations() {
     isConnected: (provider: IntegrationProvider) => {
       if (provider === IntegrationProvider.LINEAR) {
         return (
-          connectedIntegrations.includes(provider) &&
-          !!config?.linear?.api_key
+          connectedIntegrations.includes(provider) && !!config?.linear?.api_key
         );
       }
       return connectedIntegrations.includes(provider);

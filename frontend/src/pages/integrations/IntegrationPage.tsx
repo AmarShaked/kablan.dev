@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
+import {
+  Group,
+  Panel,
+  useDefaultLayout,
+  type PanelSize,
+} from 'react-resizable-panels';
 import { ArrowUpRight, Loader2, Search, X } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/dialogs';
@@ -34,26 +40,26 @@ import {
 import { integrationLabel } from '@/lib/integrations/catalog';
 import {
   ADD_INTEGRATION_PATH,
-  firstIntegrationPath,
   parseIntegrationParam,
 } from '@/lib/routes/integrationRoutes';
 import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
 import { relativeDay, usesHour12 } from '@/utils/relativeDay';
+import {
+  COLLAPSED_SIZE,
+  MIN_PANEL_SIZE,
+  PanelResizeHandle,
+} from '@/components/layout/PanelResizeHandle';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { IntegrationProvider } from 'shared/types';
 
 export function IntegrationPage() {
   const { provider: raw } = useParams<{ provider: string }>();
   const provider = parseIntegrationParam(raw);
-  const { enabledIntegrations, isConnected } = useConfiguredIntegrations();
+  const { isConnected } = useConfiguredIntegrations();
 
   if (!provider) {
     return <Navigate to={ADD_INTEGRATION_PATH} replace />;
-  }
-
-  if (!enabledIntegrations.includes(provider)) {
-    return <Navigate to={firstIntegrationPath(enabledIntegrations)} replace />;
   }
 
   if (provider !== IntegrationProvider.LINEAR) {
@@ -214,6 +220,11 @@ function Step({ n, active }: { n: string; active?: boolean }) {
 }
 
 function LinearInbox() {
+  const { defaultLayout, onLayoutChange } = useDefaultLayout({
+    groupId: 'linearInbox-detail',
+    storage: localStorage,
+  });
+  const [isInboxCollapsed, setIsInboxCollapsed] = useState(false);
   const [filters, setFilters] = useState<LinearFilters>(DEFAULT_LINEAR_FILTERS);
   const [searchInput, setSearchInput] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -232,8 +243,10 @@ function LinearInbox() {
   }, [searchInput]);
 
   const issues = issuesQuery.data?.issues ?? [];
-  const viewerName = issuesQuery.data?.viewer?.name ?? metaQuery.data?.viewer.name ?? null;
-  const viewerId = metaQuery.data?.viewer.id ?? issuesQuery.data?.viewer?.id ?? null;
+  const viewerName =
+    issuesQuery.data?.viewer?.name ?? metaQuery.data?.viewer.name ?? null;
+  const viewerId =
+    metaQuery.data?.viewer.id ?? issuesQuery.data?.viewer?.id ?? null;
   const states = metaQuery.data?.states ?? [];
   const teams = metaQuery.data?.teams ?? [];
   const users = metaQuery.data?.users ?? [];
@@ -307,133 +320,167 @@ function LinearInbox() {
       ? issuesQuery.data.totalCount
       : issues.length;
 
+  const handleInboxResize = (size: PanelSize) => {
+    setIsInboxCollapsed(size.asPercentage === COLLAPSED_SIZE);
+  };
+
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[min(100%,22rem)] shrink-0 flex-col border-r">
-        <div className="flex items-center gap-2 border-b px-4 py-3">
-          <IntegrationIcon
-            provider={IntegrationProvider.LINEAR}
-            className="h-4 w-4"
-          />
-          <h1 className="text-sm font-semibold">Linear</h1>
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {assigneeFilterLabel(filters.assignee, users)}
-          </span>
-          <LinearFilterMenu
-            value={filters}
-            onChange={setFilters}
-            states={states}
-            teams={teams}
-            users={users}
-            viewerId={viewerId}
-          />
-        </div>
-        <div className="border-b px-3 py-2">
-          <label className="relative flex items-center">
-            <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search issues…"
-              className="h-8 pl-8 pr-8 text-sm"
-              aria-label="Search Linear issues"
+    <Group
+      orientation="horizontal"
+      className="h-full min-h-0"
+      defaultLayout={defaultLayout}
+      onLayoutChange={onLayoutChange}
+    >
+      <Panel
+        id="inbox"
+        defaultSize={40}
+        minSize={MIN_PANEL_SIZE}
+        collapsible
+        collapsedSize={COLLAPSED_SIZE}
+        onResize={handleInboxResize}
+        className="min-w-0 min-h-0 overflow-hidden"
+        role="region"
+        aria-label="Linear inbox"
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <IntegrationIcon
+              provider={IntegrationProvider.LINEAR}
+              className="h-4 w-4"
             />
-            {(searchInput || searching) && (
-              <button
-                type="button"
-                className="absolute right-2 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                aria-label={searching ? 'Searching' : 'Clear search'}
-                onClick={() => {
-                  if (searching && !searchInput) return;
-                  setSearchInput('');
-                  setFilters((prev) =>
-                    prev.q ? { ...prev, q: '' } : prev
-                  );
-                }}
-              >
-                {searching ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <X className="h-3.5 w-3.5" />
-                )}
-              </button>
-            )}
-          </label>
-        </div>
-        <div className="flex items-center gap-2 border-b px-4 py-2">
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {loading
-              ? 'Loading…'
-              : `${taskCount} ${taskCount === 1 ? 'task' : 'tasks'}`}
-          </span>
-          <LinearFilterChips
-            value={filters}
-            onChange={(next) => {
-              setFilters(next);
-              if (next.q !== filters.q) setSearchInput(next.q);
-            }}
-            teams={teams}
-            users={users}
-          />
-        </div>
-        <ul ref={listRef} className="min-h-0 flex-1 overflow-auto p-2">
-          {loadError ? (
-            <li className="px-2 py-6 text-center text-sm text-destructive">
-              {loadError}
-            </li>
-          ) : loading ? (
-            <li className="flex items-center justify-center gap-2 px-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Fetching issues…
-            </li>
-          ) : issues.length === 0 ? (
-            <li className="px-2 py-6 text-center text-sm text-muted-foreground">
-              No tickets match these filters.
-            </li>
-          ) : (
-            <>
-              {issues.map((issue) => (
-                <IssueRow
-                  key={issue.id}
-                  issue={issue}
-                  selected={issue.id === selectedId}
-                  hour12={hour12}
-                  viewerName={viewerName}
-                  onSelect={() => setSelectedId(issue.id)}
-                />
-              ))}
-              <li ref={sentinelRef} className="h-4" aria-hidden />
-              {issuesQuery.isFetchingNextPage && (
-                <li className="flex items-center justify-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Loading more…
-                </li>
-              )}
-            </>
-          )}
-        </ul>
-      </div>
-      <div className="flex min-w-0 flex-1 min-h-0">
-        <div className="min-w-0 flex-1 overflow-auto p-6">
-          {selected ? (
-            <IssueDetail
-              issue={selected}
-              existingTask={existing}
-              hour12={hour12}
+            <h1 className="text-sm font-semibold">Linear</h1>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {assigneeFilterLabel(filters.assignee, users)}
+            </span>
+            <LinearFilterMenu
+              value={filters}
+              onChange={setFilters}
+              states={states}
+              teams={teams}
+              users={users}
+              viewerId={viewerId}
             />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {loading ? 'Loading…' : 'Pick a ticket.'}
-            </p>
-          )}
-        </div>
-        {selected && (
-          <div className="hidden w-[min(100%,18rem)] shrink-0 md:block">
-            <LinearIssueDetailsPanel issue={selected} hour12={hour12} />
           </div>
-        )}
-      </div>
-    </div>
+          <div className="border-b px-3 py-2">
+            <label className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search issues…"
+                className="h-8 pl-8 pr-8 text-sm"
+                aria-label="Search Linear issues"
+              />
+              {(searchInput || searching) && (
+                <button
+                  type="button"
+                  className="absolute right-2 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  aria-label={searching ? 'Searching' : 'Clear search'}
+                  onClick={() => {
+                    if (searching && !searchInput) return;
+                    setSearchInput('');
+                    setFilters((prev) => (prev.q ? { ...prev, q: '' } : prev));
+                  }}
+                >
+                  {searching ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
+            </label>
+          </div>
+          <div className="flex items-center gap-2 border-b px-4 py-2">
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {loading
+                ? 'Loading…'
+                : `${taskCount} ${taskCount === 1 ? 'task' : 'tasks'}`}
+            </span>
+            <LinearFilterChips
+              value={filters}
+              onChange={(next) => {
+                setFilters(next);
+                if (next.q !== filters.q) setSearchInput(next.q);
+              }}
+              teams={teams}
+              users={users}
+            />
+          </div>
+          <ul ref={listRef} className="min-h-0 flex-1 overflow-auto p-2">
+            {loadError ? (
+              <li className="px-2 py-6 text-center text-sm text-destructive">
+                {loadError}
+              </li>
+            ) : loading ? (
+              <li className="flex items-center justify-center gap-2 px-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Fetching issues…
+              </li>
+            ) : issues.length === 0 ? (
+              <li className="px-2 py-6 text-center text-sm text-muted-foreground">
+                No tickets match these filters.
+              </li>
+            ) : (
+              <>
+                {issues.map((issue) => (
+                  <IssueRow
+                    key={issue.id}
+                    issue={issue}
+                    selected={issue.id === selectedId}
+                    hour12={hour12}
+                    viewerName={viewerName}
+                    onSelect={() => setSelectedId(issue.id)}
+                  />
+                ))}
+                <li ref={sentinelRef} className="h-4" aria-hidden />
+                {issuesQuery.isFetchingNextPage && (
+                  <li className="flex items-center justify-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading more…
+                  </li>
+                )}
+              </>
+            )}
+          </ul>
+        </div>
+      </Panel>
+
+      <PanelResizeHandle
+        id="handle-linear-inbox"
+        collapsed={isInboxCollapsed}
+      />
+
+      <Panel
+        id="detail"
+        defaultSize={60}
+        minSize={MIN_PANEL_SIZE}
+        className="min-w-0 min-h-0 overflow-hidden"
+        role="region"
+        aria-label="Ticket"
+      >
+        <div className="flex h-full min-w-0 min-h-0">
+          <div className="min-w-0 flex-1 overflow-auto p-6">
+            {selected ? (
+              <IssueDetail
+                issue={selected}
+                existingTask={existing}
+                hour12={hour12}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {loading ? 'Loading…' : 'Pick a ticket.'}
+              </p>
+            )}
+          </div>
+          {selected && (
+            <div className="hidden w-[min(100%,18rem)] shrink-0 md:block">
+              <LinearIssueDetailsPanel issue={selected} hour12={hour12} />
+            </div>
+          )}
+        </div>
+      </Panel>
+    </Group>
   );
 }
 
@@ -564,7 +611,10 @@ function IssueDetail({
           </h3>
           <ul className="space-y-4">
             {issue.comments.map((comment) => (
-              <li key={comment.id} className="space-y-1.5 rounded-lg border p-3">
+              <li
+                key={comment.id}
+                className="space-y-1.5 rounded-lg border p-3"
+              >
                 <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
                   <span className="font-medium text-foreground">
                     {comment.author ?? 'Unknown'}

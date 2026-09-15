@@ -44,6 +44,16 @@
       "stdio"
     ]
   },
+  "headroom": {
+    "command": "uvx",
+    "args": [
+      "--from",
+      "headroom-ai[mcp]",
+      "headroom",
+      "mcp",
+      "serve"
+    ]
+  },
   "meta": {
     "kablan": {
       "name": "Kablan",
@@ -80,6 +90,12 @@
       "description": "Launch and manage multiple dev servers in parallel with automatic port allocation",
       "url": "https://github.com/BloopAI/dev-manager-mcp",
       "icon": "mcp/dev_manager_logo.svg"
+    },
+    "headroom": {
+      "name": "Headroom",
+      "description": "Compress tool outputs and retrieve originals to save tokens",
+      "url": "https://github.com/headroomlabs-ai/headroom",
+      "icon": "mcp/headroom_logo.svg"
     }
   }
 }

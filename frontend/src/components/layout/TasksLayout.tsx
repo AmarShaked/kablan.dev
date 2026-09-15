@@ -2,12 +2,15 @@ import { ReactNode, useState } from 'react';
 import {
   Group,
   Panel,
-  Separator,
   useDefaultLayout,
   type PanelSize,
 } from 'react-resizable-panels';
 import { AnimatePresence, motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import {
+  COLLAPSED_SIZE,
+  MIN_PANEL_SIZE,
+  PanelResizeHandle,
+} from '@/components/layout/PanelResizeHandle';
 
 export type LayoutMode = 'details' | 'diffs' | 'logs' | 'env' | null;
 
@@ -22,9 +25,6 @@ interface TasksLayoutProps {
   isMobile?: boolean;
   rightHeader?: ReactNode;
 }
-
-const MIN_PANEL_SIZE = 20; // percentage (0-100)
-const COLLAPSED_SIZE = 0; // percentage (0-100)
 
 /**
  * AuxRouter - Handles nested AnimatePresence for preview/diffs transitions.
@@ -104,24 +104,7 @@ function RightWorkArea({
               {attempt}
             </Panel>
 
-            <Separator
-              id="handle-aa"
-              className={cn(
-                'relative z-30 bg-border cursor-col-resize group touch-none',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
-                'focus-visible:ring-offset-1 focus-visible:ring-offset-background',
-                'transition-all',
-                isAttemptCollapsed ? 'w-6' : 'w-1'
-              )}
-              aria-label="Resize panels"
-            >
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border" />
-              <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 bg-muted/90 border border-border rounded-full px-1.5 py-3 opacity-70 group-hover:opacity-100 group-focus:opacity-100 transition-opacity shadow-sm">
-                <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-              </div>
-            </Separator>
+            <PanelResizeHandle id="handle-aa" collapsed={isAttemptCollapsed} />
 
             <Panel
               id="aux"
@@ -197,24 +180,7 @@ function DesktopSimple({
         {kanban}
       </Panel>
 
-      <Separator
-        id="handle-kr"
-        className={cn(
-          'relative z-30 bg-border cursor-col-resize group touch-none',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
-          'focus-visible:ring-offset-1 focus-visible:ring-offset-background',
-          'transition-all',
-          isKanbanCollapsed ? 'w-6' : 'w-1'
-        )}
-        aria-label="Resize panels"
-      >
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border" />
-        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 bg-muted/90 border border-border rounded-full px-1.5 py-3 opacity-70 group-hover:opacity-100 group-focus:opacity-100 transition-opacity shadow-sm">
-          <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-          <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-          <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-        </div>
-      </Separator>
+      <PanelResizeHandle id="handle-kr" collapsed={isKanbanCollapsed} />
 
       <Panel
         id="right"

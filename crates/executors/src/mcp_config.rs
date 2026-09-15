@@ -415,3 +415,32 @@ impl CodingAgent {
         apply_adapter(adapter, canonical)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preconfigured_servers_include_headroom() {
+        let servers = &*PRECONFIGURED_MCP_SERVERS;
+        let headroom = servers
+            .get("headroom")
+            .expect("headroom should be in the MCP catalog");
+        assert_eq!(headroom["command"], "uvx");
+        assert_eq!(
+            headroom["args"],
+            serde_json::json!(["--from", "headroom-ai[mcp]", "headroom", "mcp", "serve"])
+        );
+
+        let meta = servers["meta"]["headroom"]
+            .as_object()
+            .expect("headroom meta");
+        assert_eq!(meta["name"], "Headroom");
+        assert_eq!(
+            meta["description"],
+            "Compress tool outputs and retrieve originals to save tokens"
+        );
+        assert_eq!(meta["url"], "https://github.com/headroomlabs-ai/headroom");
+        assert_eq!(meta["icon"], "mcp/headroom_logo.svg");
+    }
+}
