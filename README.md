@@ -1,14 +1,53 @@
 # Kablan
 
-Run coding agents — Claude Code, Codex, Gemini CLI, Amp and others — against your repositories
-from a board, and watch them work.
+Come in, start a task, and let the coding agent you already pay for — Claude Code, Codex,
+Gemini, Cursor, and others — work against your own repositories.
 
-Each task gets its own git worktree and its own branch, so several agents can run at once without
-standing on each other. You follow the conversation, review the diff, start the project's dev
-server, and merge or open a PR when it looks right.
+Each task gets its own git worktree and its own branch, so several agents can run at once
+without standing on each other. You follow the conversation, review the diff, start the
+project's dev server, and merge or open a PR when it looks right.
+
+<p align="center">
+  <img src="landing/images/task-view.png" alt="Kablan task view: the project’s tasks on the left, the agent conversation in the middle, and attempt details on the right" />
+</p>
 
 Kablan is a fork of [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) by Bloop AI, Apache-2.0.
 See [NOTICE](NOTICE) for what this fork changes.
+
+## What you get
+
+- **A worktree per task.** Every attempt is checked out onto its own branch. Agents never share
+  a working copy, so one rewriting a file cannot break another mid-edit.
+- **The agent you already pay for.** Kablan launches each agent's own CLI — Claude Code, Codex,
+  Gemini, Amp, OpenCode, Cursor Agent, Copilot, Qwen, Droid, Claude Code Router — so
+  authentication, models and limits stay whatever you have configured. Switch between them per
+  task.
+- **A three-column task view.** Tasks and what they are doing on the left, the conversation in
+  the middle, the attempt — branch, worktree, dev server, diffs, merge and PR — on the right.
+- **Attempts, not one shot.** Unhappy with a run? Start another attempt on a fresh branch and
+  compare. The earlier one stays exactly where it was.
+- **Run it before you merge.** Start the project's dev server from the task, edit `.env` files,
+  read the logs, and open it in a real browser.
+- **Review in place.** Line-by-line diffs, comments back to the agent, then merge, rebase, push
+  or open a GitHub pull request — with the ahead/behind count in view.
+- **Board or list, one project or all of them.** A kanban board when you want columns; a dense
+  list when there is too much on. The Tasks view looks across every project.
+- **Tickets to tasks.** Connect Linear and start any issue assigned to you as a Kablan task,
+  without leaving the board.
+- **Tools for the agent.** One-click MCP servers — Playwright, Exa, Context7, Chrome DevTools,
+  Headroom, Dev Manager, and Kablan itself — so the agent can browse, search, and create more
+  tasks.
+- **The rest of the work.** Subtasks, reusable `@` tags, search, keyboard shortcuts, Open in
+  IDE (including a remote SSH worktree), light and dark themes. No account, and nothing phones
+  home.
+
+<p align="center">
+  <img src="landing/images/diffs.png" alt="Reviewing an agent’s diff in the right-hand column of a Kablan task" />
+</p>
+
+<p align="center">
+  <img src="landing/images/linear.png" alt="Linear inbox in Kablan: issues assigned to you, ready to start as tasks" />
+</p>
 
 ## Install
 
@@ -35,17 +74,6 @@ Update with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.
 
 Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
 not hold your model credentials.
-
-## The task view
-
-Opening a task gives you three columns:
-
-- **left** — every task in the project, with what each one is doing right now
-- **centre** — the agent's conversation, and the box you reply in
-- **right** — the attempt: which attempt of how many, its branch and base, the worktree path,
-  Open in IDE, the dev server, the diff totals, and the git actions
-
-Each of those lives in exactly one place. Diffs take over the right column when you ask for them.
 
 ## Development
 
