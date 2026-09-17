@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { taskActivity, taskIsUnread, taskNeedsAttention } from './taskActivity';
+import {
+  firstLine,
+  taskActivity,
+  taskIsUnread,
+  taskNeedsAttention,
+} from './taskActivity';
 import type { TaskWithAttemptStatus } from 'shared/types';
 
 /** A task with nothing going on; each test turns on the one thing it is about. */
@@ -27,6 +32,22 @@ function task(
     ...over,
   } as TaskWithAttemptStatus;
 }
+
+describe('firstLine', () => {
+  it('returns the first non-empty plain line', () => {
+    expect(firstLine('## Done\n\n**1,034 packages** installed')).toBe('Done');
+  });
+
+  it('truncates long lines to 160 characters', () => {
+    expect(firstLine('x'.repeat(200))).toBe(`${'x'.repeat(159)}…`);
+  });
+
+  it('returns undefined for empty input', () => {
+    expect(firstLine(null)).toBeUndefined();
+    expect(firstLine('')).toBeUndefined();
+    expect(firstLine('   \n  ')).toBeUndefined();
+  });
+});
 
 describe('taskActivity', () => {
   it('reports the run in flight before anything it has said', () => {

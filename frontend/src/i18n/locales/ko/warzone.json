@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "모든 프로젝트",
+  "needsYou_one": "{{count}}개 작업이 대기 중",
+  "needsYou_other": "{{count}}개 작업이 대기 중",
+  "moreNotShown": "+{{count}}개 더 숨김",
+  "loading": "로딩 중…",
+  "starting": "시작 중…",
+  "emptyNothingNeedsYou": "지금 처리할 항목이 없습니다",
+  "selectTask": "포커스할 작업을 선택하세요",
+  "taskNotFound": "작업을 찾을 수 없습니다",
+  "notStarted": "이 작업은 아직 시작되지 않았습니다.",
+  "addSlot": "+",
+  "create": {
+    "title": "새 작업",
+    "slot": "슬롯 {{slot}}",
+    "project": "프로젝트",
+    "chooseProject": "프로젝트 선택",
+    "titleLabel": "제목",
+    "titlePlaceholder": "에이전트가 무엇을 해야 하나요?",
+    "prompt": "프롬프트",
+    "promptPlaceholder": "선택적 세부 정보",
+    "noRepos": "이 프로젝트에는 구성된 저장소가 없습니다.",
+    "start": "시작",
+    "starting": "시작 중…",
+    "failed": "작업 시작에 실패했습니다"
+  },
+  "tile": {
+    "you": "나 › {{text}}",
+    "agentWorking": "에이전트 › 작업 중…",
+    "agentFailed": "에이전트 › 실행 실패",
+    "agentSummary": "에이전트 › {{text}}"
+  },
+  "openTask": "작업 열기",
+  "openTaskHint": "타일을 더블클릭하거나 중앙에서 작업 열기",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

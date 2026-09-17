@@ -43,6 +43,7 @@ import type {
   TaskStatus,
   ExecutorProfileId,
   ImageResponse,
+  TaskWithAttemptStatus,
 } from 'shared/types';
 
 interface Task {
@@ -63,6 +64,9 @@ export type TaskFormDialogProps =
       projectId?: string;
       initialTitle?: string;
       initialDescription?: string;
+      /** Stay on current page after create (e.g. Warzone). */
+      preventNavigate?: boolean;
+      onCreateSuccess?: (task: Task | TaskWithAttemptStatus) => void;
       source?: {
         provider: string;
         id: string;
@@ -97,10 +101,13 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   const [projectId, setProjectId] = useState(props.projectId ?? '');
   const choosingProject = mode === 'create' && !props.projectId;
   const editMode = mode === 'edit';
+  const preventNavigate = mode === 'create' && !!props.preventNavigate;
   const modal = useModal();
   const { t } = useTranslation(['tasks', 'common']);
-  const { createTask, createAndStart, updateTask } =
-    useTaskMutations(projectId);
+  const { createTask, createAndStart, updateTask } = useTaskMutations(
+    projectId,
+    { navigateOnSuccess: preventNavigate ? false : undefined }
+  );
   const { system, profiles, loading: userSystemLoading } = useUserSystem();
   const { projects } = useProjects();
   const { upload, uploadForTask } = useImageUpload();
@@ -230,10 +237,20 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
             executor_profile_id: value.executorProfileId!,
             repos,
           },
-          { onSuccess: () => modal.remove() }
+          {
+            onSuccess: (created) => {
+              if (mode === 'create') props.onCreateSuccess?.(created);
+              modal.remove();
+            },
+          }
         );
       } else {
-        await createTask.mutateAsync(task, { onSuccess: () => modal.remove() });
+        await createTask.mutateAsync(task, {
+          onSuccess: (created) => {
+            if (mode === 'create') props.onCreateSuccess?.(created);
+            modal.remove();
+          },
+        });
       }
     }
   };

@@ -1,7 +1,7 @@
 import type { TaskWithAttemptStatus } from 'shared/types';
 
 /** Whatever the row can fit: one line, no markdown, no runaway summary. */
-function firstLine(text?: string | null): string | undefined {
+export function firstLine(text?: string | null): string | undefined {
   const line = text
     ?.split('\n')
     .map((l) =>

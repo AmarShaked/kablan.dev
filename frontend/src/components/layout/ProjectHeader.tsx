@@ -25,7 +25,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { SearchBar } from '@/components/SearchBar';
+import { WarzoneToolbar } from '@/components/warzone/WarzoneToolbar';
 import { useTask } from '@/hooks/useTask';
+import { useWarzoneChrome } from '@/hooks/useWarzoneChrome';
 import { useProject } from '@/contexts/ProjectContext';
 import { useSearch } from '@/contexts/SearchContext';
 import { useUserSystem } from '@/contexts/UserSystemContext';
@@ -40,9 +42,16 @@ import {
   parseIntegrationParam,
 } from '@/lib/routes/integrationRoutes';
 import { isProjectSettingsPath } from '@/lib/routes/projectRoutes';
+import { paths } from '@/lib/paths';
+import { cn } from '@/lib/utils';
 import { agentLabel } from '@/utils/agentLabels';
 import { integrationLabel } from '@/lib/integrations/catalog';
 import { TaskSourceBadge } from '@/components/tasks/TaskSourceBadge';
+
+function WarzoneHeaderChrome() {
+  const chrome = useWarzoneChrome();
+  return <WarzoneToolbar {...chrome} />;
+}
 
 /**
  * Where you are, what you're searching, and what you can do here.
@@ -84,6 +93,7 @@ export function ProjectHeader() {
     location.pathname.split('/')[2]
   );
   const isAllTasks = location.pathname === '/tasks';
+  const isWarzone = location.pathname === paths.warzone();
   // Settings is a destination of its own, not a page inside a project — its trail starts at
   // Settings and names the section, rather than claiming to sit under Projects.
   const settingsSection = isSettings
@@ -112,11 +122,22 @@ export function ProjectHeader() {
   return (
     // Three equal-width tracks rather than a flex row: the search is centred on the header, not
     // on whatever space the breadcrumb happens to leave, so it stays put as the breadcrumb grows.
-    <header className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border px-3">
-      <div className="flex min-w-0 items-center gap-2">
+    // Warzone replaces the breadcrumb + search with its own chrome row.
+    <header
+      className={cn(
+        'flex h-12 shrink-0 items-center gap-2 border-b border-border px-3',
+        !isWarzone && 'grid grid-cols-[1fr_auto_1fr]'
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <SidebarTrigger className="-ml-1 h-6 w-6 shrink-0 [&_svg]:size-3.5" />
         <Separator orientation="vertical" className="mr-1 h-4 shrink-0" />
 
+        {isWarzone ? (
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <WarzoneHeaderChrome />
+          </div>
+        ) : (
         <Breadcrumb className="min-w-0">
           <BreadcrumbList className="flex-nowrap">
             <BreadcrumbItem>
@@ -242,39 +263,44 @@ export function ProjectHeader() {
             )}
           </BreadcrumbList>
         </Breadcrumb>
-      </div>
-
-      <div className="hidden justify-self-center sm:flex">
-        <SearchBar
-          ref={setSearchBarRef}
-          value={query}
-          onChange={setQuery}
-          disabled={!active}
-          onClear={clear}
-          project={project || null}
-        />
-      </div>
-
-      <div className="flex shrink-0 items-center justify-end gap-2">
-        {shouldShowSharedToggle && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <Switch
-                    checked={showSharedTasks}
-                    onCheckedChange={handleSharedToggle}
-                    aria-label={t('tasks:filters.sharedToggleAria')}
-                  />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('tasks:filters.sharedToggleTooltip')}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         )}
       </div>
+
+      {!isWarzone && (
+        <div className="hidden justify-self-center sm:flex">
+          <SearchBar
+            ref={setSearchBarRef}
+            value={query}
+            onChange={setQuery}
+            disabled={!active}
+            onClear={clear}
+            project={project || null}
+          />
+        </div>
+      )}
+
+      {!isWarzone && (
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          {shouldShowSharedToggle && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Switch
+                      checked={showSharedTasks}
+                      onCheckedChange={handleSharedToggle}
+                      aria-label={t('tasks:filters.sharedToggleAria')}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t('tasks:filters.sharedToggleTooltip')}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      )}
     </header>
   );
 }

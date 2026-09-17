@@ -9,4 +9,5 @@ export const paths = {
     `/local-projects/${projectId}/tasks/${taskId}`,
   taskFull: (projectId: string, taskId: string) =>
     `/local-projects/${projectId}/tasks/${taskId}/full`,
+  warzone: () => '/warzone',
 };

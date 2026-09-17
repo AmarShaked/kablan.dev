@@ -87,5 +87,10 @@ vibe-kanban-cloud/
 .jj
 .sisyphus/
 
+# Brainstorm visual companion mockups
+.superpowers/
+
 # Kablan fork: local build/test scratch
 /target
+
+.worktrees/

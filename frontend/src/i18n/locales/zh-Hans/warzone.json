@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "全部项目",
+  "needsYou_one": "{{count}} 项需要你处理",
+  "needsYou_other": "{{count}} 项需要你处理",
+  "moreNotShown": "+{{count}} 项未显示",
+  "loading": "加载中…",
+  "starting": "正在启动…",
+  "emptyNothingNeedsYou": "当前没有需要你处理的事项",
+  "selectTask": "选择要聚焦的任务",
+  "taskNotFound": "未找到任务",
+  "notStarted": "此任务尚未启动。",
+  "addSlot": "+",
+  "create": {
+    "title": "新任务",
+    "slot": "槽位 {{slot}}",
+    "project": "项目",
+    "chooseProject": "选择项目",
+    "titleLabel": "标题",
+    "titlePlaceholder": "代理应该做什么？",
+    "prompt": "提示词",
+    "promptPlaceholder": "可选详情",
+    "noRepos": "此项目尚未配置仓库。",
+    "start": "开始",
+    "starting": "正在启动…",
+    "failed": "启动任务失败"
+  },
+  "tile": {
+    "you": "你 › {{text}}",
+    "agentWorking": "代理 › 工作中…",
+    "agentFailed": "代理 › 运行失败",
+    "agentSummary": "代理 › {{text}}"
+  },
+  "openTask": "打开任务",
+  "openTaskHint": "双击方块，或使用中央的“打开任务”",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

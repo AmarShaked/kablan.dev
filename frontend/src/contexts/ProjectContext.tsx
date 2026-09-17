@@ -21,16 +21,25 @@ const ProjectContext = createContext<ProjectContextValue | null>(null);
 
 interface ProjectProviderProps {
   children: ReactNode;
+  /**
+   * Override the project for nested trees (e.g. Warzone focus). When omitted,
+   * the id comes from `/local-projects/:id` as before.
+   */
+  projectId?: string;
 }
 
-export function ProjectProvider({ children }: ProjectProviderProps) {
+export function ProjectProvider({
+  children,
+  projectId: projectIdProp,
+}: ProjectProviderProps) {
   const location = useLocation();
 
-  // Extract projectId from current route path
-  const projectId = useMemo(() => {
+  const routeProjectId = useMemo(() => {
     const match = location.pathname.match(/^\/local-projects\/([^/]+)/);
     return match ? match[1] : undefined;
   }, [location.pathname]);
+
+  const projectId = projectIdProp ?? routeProjectId;
 
   const { projectsById, isLoading, error } = useProjects();
   const project = projectId ? projectsById[projectId] : undefined;
@@ -46,14 +55,15 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     [projectId, project, isLoading, error]
   );
 
-  // Centralized page title management
+  // Route-owned title only — nested overrides must not fight the shell provider.
   useEffect(() => {
+    if (projectIdProp !== undefined) return;
     if (project) {
       document.title = `${project.name} | Kablan`;
     } else {
       document.title = 'Kablan';
     }
-  }, [project]);
+  }, [project, projectIdProp]);
 
   return (
     <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>

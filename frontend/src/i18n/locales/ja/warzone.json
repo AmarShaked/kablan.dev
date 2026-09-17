@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "すべてのプロジェクト",
+  "needsYou_one": "{{count}} 件が対応待ち",
+  "needsYou_other": "{{count}} 件が対応待ち",
+  "moreNotShown": "+{{count}} 件は非表示",
+  "loading": "読み込み中…",
+  "starting": "開始中…",
+  "emptyNothingNeedsYou": "今すぐ対応が必要なものはありません",
+  "selectTask": "フォーカスするタスクを選択",
+  "taskNotFound": "タスクが見つかりません",
+  "notStarted": "このタスクはまだ開始されていません。",
+  "addSlot": "+",
+  "create": {
+    "title": "新しいタスク",
+    "slot": "スロット {{slot}}",
+    "project": "プロジェクト",
+    "chooseProject": "プロジェクトを選択",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "エージェントに何をさせますか？",
+    "prompt": "プロンプト",
+    "promptPlaceholder": "任意の詳細",
+    "noRepos": "このプロジェクトにはリポジトリが設定されていません。",
+    "start": "開始",
+    "starting": "開始中…",
+    "failed": "タスクの開始に失敗しました"
+  },
+  "tile": {
+    "you": "あなた › {{text}}",
+    "agentWorking": "エージェント › 作業中…",
+    "agentFailed": "エージェント › 実行失敗",
+    "agentSummary": "エージェント › {{text}}"
+  },
+  "openTask": "タスクを開く",
+  "openTaskHint": "タイルをダブルクリック、または中央の「タスクを開く」",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "All projects",
+  "needsYou_one": "{{count}} needs you",
+  "needsYou_other": "{{count}} need you",
+  "moreNotShown": "+{{count}} more not shown",
+  "loading": "Loading…",
+  "starting": "Starting…",
+  "emptyNothingNeedsYou": "Nothing needs you right now",
+  "selectTask": "Select a task to focus",
+  "taskNotFound": "Task not found",
+  "notStarted": "This task has not been started yet.",
+  "addSlot": "+",
+  "create": {
+    "title": "New task",
+    "slot": "Slot {{slot}}",
+    "project": "Project",
+    "chooseProject": "Choose a project",
+    "titleLabel": "Title",
+    "titlePlaceholder": "What should the agent do?",
+    "prompt": "Prompt",
+    "promptPlaceholder": "Optional details",
+    "noRepos": "This project has no repositories configured.",
+    "start": "Start",
+    "starting": "Starting…",
+    "failed": "Failed to start task"
+  },
+  "tile": {
+    "you": "you › {{text}}",
+    "agentWorking": "agent › working…",
+    "agentFailed": "agent › run failed",
+    "agentSummary": "agent › {{text}}"
+  },
+  "openTask": "Open task",
+  "openTaskHint": "Double-click a tile, or use Open task in the centre",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

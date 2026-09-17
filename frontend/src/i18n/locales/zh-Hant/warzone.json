@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "全部專案",
+  "needsYou_one": "{{count}} 項需要你處理",
+  "needsYou_other": "{{count}} 項需要你處理",
+  "moreNotShown": "+{{count}} 項未顯示",
+  "loading": "載入中…",
+  "starting": "正在啟動…",
+  "emptyNothingNeedsYou": "目前沒有需要你處理的事項",
+  "selectTask": "選擇要聚焦的任務",
+  "taskNotFound": "找不到任務",
+  "notStarted": "此任務尚未啟動。",
+  "addSlot": "+",
+  "create": {
+    "title": "新任務",
+    "slot": "槽位 {{slot}}",
+    "project": "專案",
+    "chooseProject": "選擇專案",
+    "titleLabel": "標題",
+    "titlePlaceholder": "代理應該做什麼？",
+    "prompt": "提示詞",
+    "promptPlaceholder": "選填詳細資訊",
+    "noRepos": "此專案尚未設定存放庫。",
+    "start": "開始",
+    "starting": "正在啟動…",
+    "failed": "啟動任務失敗"
+  },
+  "tile": {
+    "you": "你 › {{text}}",
+    "agentWorking": "代理 › 工作中…",
+    "agentFailed": "代理 › 執行失敗",
+    "agentSummary": "代理 › {{text}}"
+  },
+  "openTask": "開啟任務",
+  "openTaskHint": "雙擊方塊，或使用中央的「開啟任務」",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

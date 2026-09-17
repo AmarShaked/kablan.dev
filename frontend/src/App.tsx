@@ -49,6 +49,7 @@ import { ClickedElementsProvider } from './contexts/ClickedElementsProvider';
 
 // Design scope components
 import { AllTasks } from '@/pages/AllTasks';
+import { Warzone } from '@/pages/Warzone';
 import { LegacyDesignScope } from '@/components/legacy-design/LegacyDesignScope';
 
 function AppContent() {
@@ -149,6 +150,7 @@ function AppContent() {
             >
               <Route path="/" element={<Projects />} />
               <Route path="/tasks" element={<AllTasks />} />
+              <Route path="/warzone" element={<Warzone />} />
               <Route path="/local-projects" element={<Projects />} />
               <Route path="/local-projects/:projectId" element={<Projects />} />
               <Route path="/migration" element={<Migration />} />

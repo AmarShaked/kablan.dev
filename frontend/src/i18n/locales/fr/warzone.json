@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "Tous les projets",
+  "needsYou_one": "{{count}} vous attend",
+  "needsYou_other": "{{count}} vous attendent",
+  "moreNotShown": "+{{count}} de plus non affichés",
+  "loading": "Chargement…",
+  "starting": "Démarrage…",
+  "emptyNothingNeedsYou": "Rien ne vous attend pour le moment",
+  "selectTask": "Sélectionnez une tâche à focaliser",
+  "taskNotFound": "Tâche introuvable",
+  "notStarted": "Cette tâche n'a pas encore été démarrée.",
+  "addSlot": "+",
+  "create": {
+    "title": "Nouvelle tâche",
+    "slot": "Emplacement {{slot}}",
+    "project": "Projet",
+    "chooseProject": "Choisir un projet",
+    "titleLabel": "Titre",
+    "titlePlaceholder": "Que doit faire l'agent ?",
+    "prompt": "Prompt",
+    "promptPlaceholder": "Détails facultatifs",
+    "noRepos": "Ce projet n'a aucun dépôt configuré.",
+    "start": "Démarrer",
+    "starting": "Démarrage…",
+    "failed": "Échec du démarrage de la tâche"
+  },
+  "tile": {
+    "you": "vous › {{text}}",
+    "agentWorking": "agent › en cours…",
+    "agentFailed": "agent › exécution échouée",
+    "agentSummary": "agent › {{text}}"
+  },
+  "openTask": "Ouvrir la tâche",
+  "openTaskHint": "Double-cliquez une tuile, ou Ouvrir la tâche au centre",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "title": "Warzone",
+  "allProjects": "Todos los proyectos",
+  "needsYou_one": "{{count}} te necesita",
+  "needsYou_other": "{{count}} te necesitan",
+  "moreNotShown": "+{{count}} más no mostrados",
+  "loading": "Cargando…",
+  "starting": "Iniciando…",
+  "emptyNothingNeedsYou": "Nada te necesita ahora mismo",
+  "selectTask": "Selecciona una tarea para enfocar",
+  "taskNotFound": "Tarea no encontrada",
+  "notStarted": "Esta tarea aún no se ha iniciado.",
+  "addSlot": "+",
+  "create": {
+    "title": "Nueva tarea",
+    "slot": "Ranura {{slot}}",
+    "project": "Proyecto",
+    "chooseProject": "Elegir un proyecto",
+    "titleLabel": "Título",
+    "titlePlaceholder": "¿Qué debe hacer el agente?",
+    "prompt": "Prompt",
+    "promptPlaceholder": "Detalles opcionales",
+    "noRepos": "Este proyecto no tiene repositorios configurados.",
+    "start": "Iniciar",
+    "starting": "Iniciando…",
+    "failed": "Error al iniciar la tarea"
+  },
+  "tile": {
+    "you": "tú › {{text}}",
+    "agentWorking": "agente › trabajando…",
+    "agentFailed": "agente › ejecución fallida",
+    "agentSummary": "agente › {{text}}"
+  },
+  "openTask": "Abrir tarea",
+  "openTaskHint": "Doble clic en un mosaico, o Abrir tarea en el centro",
+  "layout": {
+    "16": "Ring · 16 slots",
+    "10": "Split · 10 slots",
+    "5": "Focus · 5 slots"
+  }
+}

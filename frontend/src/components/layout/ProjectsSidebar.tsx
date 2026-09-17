@@ -1,6 +1,15 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import {
+  Archive,
+  LayoutGrid,
+  ListChecks,
+  Moon,
+  Plus,
+  Settings,
+  Sun,
+} from 'lucide-react';
 
 import { ThemeMode } from 'shared/types';
 import { projectStatsApi } from '@/lib/api';
@@ -28,6 +37,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { projectKeys } from '@/lib/queryKeys';
 import { AgentIcon } from '@/components/agents/AgentIcon';
@@ -61,6 +71,7 @@ import { integrationLabel } from '@/lib/integrations/catalog';
  * icons instead of disappearing: the point is to keep the switch available, not the names.
  */
 export function ProjectsSidebar() {
+  const { t } = useTranslation('warzone');
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
@@ -155,6 +166,29 @@ export function ProjectsSidebar() {
             </Button>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* First after the CTA: the live deck of agents that need you. Own group + separator so
+            it reads as the primary view, not another peer of Tasks/Archive. */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === '/warzone'}
+                  tooltip={t('title')}
+                >
+                  <Link to="/warzone">
+                    <LayoutGrid />
+                    <span>{t('title')}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
 
         {/* Above the projects, because these are the views you take when you do not yet know
             which project the work is in. */}
