@@ -2,6 +2,8 @@ import type { TaskWithAttemptStatus } from 'shared/types';
 import { taskNeedsAttention } from '@/utils/taskActivity';
 
 export function isWarzoneEligible(task: TaskWithAttemptStatus): boolean {
+  // Terminal statuses leave the ring — Cancelled / Done is how you clear a slot.
+  if (task.status === 'cancelled' || task.status === 'done') return false;
   if (task.has_in_progress_attempt) return true;
   if (taskNeedsAttention(task)) return true;
   if (task.status === 'inreview') return true;

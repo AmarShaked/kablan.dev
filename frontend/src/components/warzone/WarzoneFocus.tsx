@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import type { Task, TaskWithAttemptStatus } from 'shared/types';
 
 import TaskRunPanel from '@/components/panels/TaskRunPanel';
+import { TaskStatusControl } from '@/components/tasks/TaskStatusControl';
 import { ClickedElementsProvider } from '@/contexts/ClickedElementsProvider';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { GitOperationsProvider } from '@/contexts/GitOperationsContext';
@@ -19,7 +20,6 @@ import {
 } from '@/lib/warzone/mockTasks';
 import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
-import { statusLabels } from '@/utils/statusLabels';
 
 type WarzoneFocusProps = {
   focusedTaskId: string | null;
@@ -29,33 +29,36 @@ type WarzoneFocusProps = {
 };
 
 function FocusChrome({
-  title,
+  task,
   subtitle,
-  projectId,
-  taskId,
   mock,
 }: {
-  title: string;
+  task: TaskWithAttemptStatus;
   subtitle?: string;
-  projectId: string;
-  taskId: string;
   mock?: boolean;
 }) {
   const { t } = useTranslation('warzone');
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-      <div className="min-w-0">
-        <div className="truncate font-medium text-foreground">{title}</div>
-        {subtitle && (
-          <div className="truncate text-xs text-muted-foreground">
-            {subtitle}
-          </div>
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-[#212121] px-3 py-2 text-white">
+      <div className="flex min-w-0 items-center gap-1.5">
+        {!mock && (
+          <TaskStatusControl
+            task={task}
+            projectId={task.project_id}
+            className="hover:bg-white/10"
+          />
         )}
+        <div className="min-w-0">
+          <div className="truncate font-medium text-white">{task.title}</div>
+          {subtitle && (
+            <div className="truncate text-xs text-white/60">{subtitle}</div>
+          )}
+        </div>
       </div>
       {!mock && (
         <Link
-          to={paths.task(projectId, taskId)}
-          className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          to={paths.task(task.project_id, task.id)}
+          className="inline-flex shrink-0 items-center gap-1 text-xs text-white/60 hover:text-white"
         >
           {t('openTask')}
           <ExternalLink className="h-3 w-3" />
@@ -126,10 +129,8 @@ export function WarzoneFocus({
     return (
       <div className="flex h-full min-h-0 flex-col bg-muted/25">
         <FocusChrome
-          title={task.title}
-          subtitle={`${across?.projectName ?? 'mock'} · ${statusLabels[task.status]} · mock`}
-          projectId={task.project_id}
-          taskId={task.id}
+          task={task}
+          subtitle={`${across?.projectName ?? 'mock'} · mock`}
           mock
         />
         <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3 font-mono text-xs leading-relaxed">
@@ -162,11 +163,7 @@ export function WarzoneFocus({
   if (!isWorkspaceLoading && !attempt) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-muted/25">
-        <FocusChrome
-          title={task.title}
-          projectId={task.project_id}
-          taskId={task.id}
-        />
+        <FocusChrome task={task} />
         <div className="flex flex-1 items-center justify-center p-4 text-center text-sm text-muted-foreground">
           {t('notStarted')}
         </div>
@@ -184,11 +181,7 @@ export function WarzoneFocus({
               sessionId={attempt?.session?.id}
             >
               <div className="flex h-full min-h-0 flex-col bg-muted/25">
-                <FocusChrome
-                  title={task.title}
-                  projectId={task.project_id}
-                  taskId={task.id}
-                />
+                <FocusChrome task={task} />
                 <TaskRunPanel workspace={attempt} task={task}>
                   {({ logs, followUp }) => (
                     <div className="flex min-h-0 flex-1 flex-col">

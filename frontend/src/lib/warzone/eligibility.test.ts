@@ -55,6 +55,31 @@ describe('isWarzoneEligible', () => {
   it('excludes plain todo', () => {
     expect(isWarzoneEligible(task({ id: '1', status: 'todo' }))).toBe(false);
   });
+
+  it('excludes cancelled even when still running or needing attention', () => {
+    expect(
+      isWarzoneEligible(
+        task({
+          id: '1',
+          status: 'cancelled',
+          has_in_progress_attempt: true,
+        })
+      )
+    ).toBe(false);
+    expect(
+      isWarzoneEligible(
+        task({ id: '2', status: 'cancelled', has_unseen_turns: true })
+      )
+    ).toBe(false);
+  });
+
+  it('excludes done', () => {
+    expect(
+      isWarzoneEligible(
+        task({ id: '1', status: 'done', has_unseen_turns: true })
+      )
+    ).toBe(false);
+  });
 });
 
 describe('sortWarzoneTasks', () => {
