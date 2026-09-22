@@ -17,6 +17,7 @@ import {
 } from '@/lib/warzone/slots';
 import {
   applyWarzoneTaskParam,
+  resolveWarzoneFocusTaskId,
   shouldDropReservedForProjectFilter,
 } from '@/lib/warzone/toolbarStatus';
 import { TaskFormDialog } from '@/components/dialogs/tasks/TaskFormDialog';
@@ -119,16 +120,32 @@ export function Warzone() {
     [eligible]
   );
 
-  // Auto-focus first needs-you (else first eligible) when nothing focused / creating.
+  // Keep focus on an eligible task; replace when closed or filtered out of the tab.
   useEffect(() => {
     if (userClearedFocusRef.current) return;
-    if (focusedTaskId || createSlot != null || eligible.length === 0) return;
-    const first = eligible.find((t) => taskNeedsAttention(t)) ?? eligible[0];
-    setParams((prev) => applyWarzoneTaskParam(prev, first.id), {
+    if (createSlot != null) return;
+
+    const needsYouIds = eligible
+      .filter((t) => taskNeedsAttention(t))
+      .map((t) => t.id);
+    const nextFocus = resolveWarzoneFocusTaskId({
+      focusedTaskId,
+      eligibleIds,
+      needsYouIds,
+    });
+
+    if (nextFocus === focusedTaskId) return;
+    setParams((prev) => applyWarzoneTaskParam(prev, nextFocus), {
       replace: true,
     });
-    // Keyed by id membership so task field churn does not re-autofocus.
-  }, [eligibleIdsKey, focusedTaskId, createSlot, setParams, eligible]);
+  }, [
+    eligibleIdsKey,
+    focusedTaskId,
+    createSlot,
+    setParams,
+    eligible,
+    eligibleIds,
+  ]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

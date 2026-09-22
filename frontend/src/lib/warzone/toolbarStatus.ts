@@ -31,6 +31,26 @@ export function applyWarzoneTaskParam(
   return next;
 }
 
+/**
+ * Keep focus when still eligible; otherwise pick needs-you first, else first eligible,
+ * else clear. Used when a task is closed or the project tab filters it out.
+ */
+export function resolveWarzoneFocusTaskId(args: {
+  focusedTaskId: string | null;
+  eligibleIds: readonly string[];
+  needsYouIds?: readonly string[];
+}): string | null {
+  const { focusedTaskId, eligibleIds, needsYouIds = [] } = args;
+  if (focusedTaskId && eligibleIds.includes(focusedTaskId)) {
+    return focusedTaskId;
+  }
+  if (needsYouIds.length > 0) {
+    const hit = needsYouIds.find((id) => eligibleIds.includes(id));
+    if (hit) return hit;
+  }
+  return eligibleIds[0] ?? null;
+}
+
 /** Clear reserved create-slot when filter excludes that task's project. */
 export function shouldDropReservedForProjectFilter(args: {
   reserved: { slot: number; taskId: string } | null;

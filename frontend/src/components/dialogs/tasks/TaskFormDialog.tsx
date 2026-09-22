@@ -284,18 +284,22 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   const isDirty = useStore(form.store, (state) => state.isDirty);
   const canSubmit = useStore(form.store, (state) => state.canSubmit);
 
-  // Branches arrive late — from the sidebar, not until a project has been picked, which is
-  // usually after the first keystroke. TanStack Form re-applies `defaultValues` only while the
-  // form is untouched, so by then the seeded branches never land: the form fails its own
-  // "need branch for all repos" rule and Create stays disabled with a branch on screen and no
-  // hint of what is missing. Put them into the field ourselves instead, keeping whatever branch
-  // the user has already picked for a repo that is still in play.
+  // Branches arrive late — from the sidebar / Linear, not until a project has been picked,
+  // usually after the form already has a title. TanStack Form re-applies `defaultValues` only
+  // while the form is untouched, so by then the seeded branches never land: the form fails its
+  // own "need branch for all repos" rule and Create stays disabled with a branch on screen and
+  // no hint of what is missing. Put them into the field ourselves instead, keeping whatever
+  // branch the user has already picked for a repo that is still in play.
   //
-  // `dontUpdateMeta`/`dontValidate` keep this a seed rather than an edit: it must not mark the
-  // form dirty (that would raise "discard unsaved changes?" over a form nobody typed in) or
-  // touched (that is what tells the onMount validator the user has started). The explicit
-  // `validate` is what refreshes `canSubmit` afterwards.
+  // `dontUpdateMeta` keeps this a seed rather than an edit (must not mark the form dirty — that
+  // would raise "discard unsaved changes?" over a form nobody typed in). Do NOT pass
+  // `dontValidate`: without a validation pass, `canSubmit` stays false until the user edits
+  // another field (e.g. description) — the Linear create-after-project bug.
   const seededBranches = useRef<string | null>(null);
+  useEffect(() => {
+    seededBranches.current = null;
+  }, [projectId]);
+
   useEffect(() => {
     const key = defaultRepoBranches
       .map((b) => `${b.repoId}@${b.branch}`)
@@ -309,10 +313,16 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           const chosen = current.find((c) => c.repoId === fallback.repoId);
           return chosen?.branch ? chosen : fallback;
         }),
-      { dontUpdateMeta: true, dontValidate: true }
+      { dontUpdateMeta: true }
     );
-    form.validate('change');
   }, [defaultRepoBranches, form]);
+
+  // Project select is outside the form fields — re-check canSubmit once a project exists so
+  // Create enables without needing a description keystroke.
+  useEffect(() => {
+    if (!projectId) return;
+    void form.validate('change');
+  }, [projectId, defaultRepoBranches, form]);
 
   // Load images for edit mode
   useEffect(() => {

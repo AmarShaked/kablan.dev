@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyWarzoneTaskParam,
+  resolveWarzoneFocusTaskId,
   shouldDropReservedForProjectFilter,
   warzoneToolbarStatusParts,
 } from './toolbarStatus';
@@ -37,6 +38,42 @@ describe('applyWarzoneTaskParam', () => {
     const next = applyWarzoneTaskParam(prev, null);
     expect(next.get('task')).toBeNull();
     expect(next.get('project')).toBe('p1');
+  });
+});
+
+describe('resolveWarzoneFocusTaskId', () => {
+  it('keeps focus when still eligible', () => {
+    expect(
+      resolveWarzoneFocusTaskId({
+        focusedTaskId: 'b',
+        eligibleIds: ['a', 'b', 'c'],
+      })
+    ).toBe('b');
+  });
+
+  it('replaces with needs-you when focus left eligibility', () => {
+    expect(
+      resolveWarzoneFocusTaskId({
+        focusedTaskId: 'gone',
+        eligibleIds: ['a', 'b'],
+        needsYouIds: ['b'],
+      })
+    ).toBe('b');
+  });
+
+  it('falls back to first eligible, then null', () => {
+    expect(
+      resolveWarzoneFocusTaskId({
+        focusedTaskId: 'gone',
+        eligibleIds: ['a', 'b'],
+      })
+    ).toBe('a');
+    expect(
+      resolveWarzoneFocusTaskId({
+        focusedTaskId: 'gone',
+        eligibleIds: [],
+      })
+    ).toBeNull();
   });
 });
 

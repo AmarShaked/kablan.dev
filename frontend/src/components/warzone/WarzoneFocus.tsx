@@ -81,6 +81,23 @@ function taskFromBare(task: Task): TaskWithAttemptStatus {
   };
 }
 
+function mergeFocusedTask(
+  fromList: TaskAcrossProjects | undefined,
+  fetched: Task | undefined
+): TaskWithAttemptStatus | null {
+  if (fromList && fetched) {
+    return {
+      ...fromList,
+      ...taskFromBare(fetched),
+      // Keep list-derived cross-project fields.
+      project_id: fromList.project_id,
+    };
+  }
+  if (fromList) return fromList;
+  if (fetched) return taskFromBare(fetched);
+  return null;
+}
+
 export function WarzoneFocus({
   focusedTaskId,
   tasks,
@@ -93,19 +110,30 @@ export function WarzoneFocus({
     [tasks, focusedTaskId]
   );
 
+  const mock = isWarzoneMockTaskId(focusedTaskId);
+
+  // Always fetch the focused task so status / fields stay live (list rows can lag).
   const { data: fetchedTask, isLoading: isFetchLoading } = useTask(
     focusedTaskId ?? undefined,
-    { enabled: !!focusedTaskId && !taskFromList && !isWarzoneMockTaskId(focusedTaskId) }
+    {
+      enabled: !!focusedTaskId && !mock,
+    }
   );
 
-  const task: TaskWithAttemptStatus | null =
-    taskFromList ?? (fetchedTask ? taskFromBare(fetchedTask) : null);
+  const task = mergeFocusedTask(taskFromList, fetchedTask);
 
   const { data: workspace, isLoading: isWorkspaceLoading } = useTaskWorkspace(
     focusedTaskId ?? undefined,
-    { enabled: !!focusedTaskId && !isWarzoneMockTaskId(focusedTaskId) }
+    {
+      enabled: !!focusedTaskId && !mock,
+      refetchInterval: 3000,
+    }
   );
   const attempt = workspace ?? undefined;
+  const sessionId = attempt?.session?.id;
+  // Remount chat stack when task / workspace / session changes so VirtuosoMessageList
+  // (message scroller) and process streams reconnect cleanly.
+  const chatKey = `${focusedTaskId ?? ''}:${attempt?.id ?? ''}:${sessionId ?? ''}`;
 
   if (!focusedTaskId) {
     return (
@@ -123,7 +151,7 @@ export function WarzoneFocus({
     );
   }
 
-  if (isWarzoneMockTaskId(focusedTaskId)) {
+  if (mock) {
     const lines = WARZONE_MOCK_CHATS[focusedTaskId] ?? [];
     const across = taskFromList;
     return (
@@ -177,18 +205,20 @@ export function WarzoneFocus({
         <ClickedElementsProvider attempt={attempt}>
           <ReviewProvider attemptId={attempt?.id}>
             <ExecutionProcessesProvider
+              key={chatKey}
               attemptId={attempt?.id}
-              sessionId={attempt?.session?.id}
+              sessionId={sessionId}
             >
               <div className="flex h-full min-h-0 flex-col bg-muted/25">
                 <FocusChrome task={task} />
-                <TaskRunPanel workspace={attempt} task={task}>
+                <TaskRunPanel key={chatKey} workspace={attempt} task={task}>
                   {({ logs, followUp }) => (
+                    // Same flex chain as ProjectTasks so VirtuosoMessageList gets a real height.
                     <div className="flex min-h-0 flex-1 flex-col">
                       <div className="relative flex min-h-0 flex-1 flex-col">
                         {logs}
                       </div>
-                      <div className="min-h-0 max-h-[50%] shrink-0 overflow-hidden">
+                      <div className="group/composer min-h-0 max-h-[50%] shrink-0 overflow-hidden">
                         <div className="mx-auto h-full min-h-0 w-full max-w-[50rem]">
                           {followUp}
                         </div>
