@@ -1,4 +1,5 @@
 import type { PatchTypeWithKey } from './types';
+import { claudeLoginContent } from '@/utils/claudeLoginError';
 
 export const MIN_INITIAL_ENTRIES = 10;
 export const REMAINING_BATCH_SIZE = 50;
@@ -22,12 +23,14 @@ export const nextActionPatch: (
   failed: boolean,
   execution_processes: number,
   needs_setup: boolean,
-  setup_help_text?: string
+  setup_help_text?: string,
+  claude_login_process_id?: string
 ) => PatchTypeWithKey = (
   failed,
   execution_processes,
   needs_setup,
-  setup_help_text
+  setup_help_text,
+  claude_login_process_id
 ) => ({
   type: 'NORMALIZED_ENTRY',
   content: {
@@ -38,7 +41,9 @@ export const nextActionPatch: (
       needs_setup: needs_setup,
       setup_help_text: setup_help_text ?? null,
     },
-    content: '',
+    content: claude_login_process_id
+      ? claudeLoginContent(claude_login_process_id)
+      : '',
     timestamp: null,
   },
   patchKey: 'next_action',

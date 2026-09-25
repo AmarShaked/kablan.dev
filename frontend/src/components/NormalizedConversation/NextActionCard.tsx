@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Play,
@@ -35,6 +35,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  ClaudeAuthDialog,
+  ClaudeLoginButton,
+} from '@/components/dialogs/auth/ClaudeAuthDialog';
+import { claimClaudeLoginDialog } from '@/utils/claudeLoginError';
 
 type NextActionCardProps = {
   attemptId?: string;
@@ -44,6 +49,9 @@ type NextActionCardProps = {
   execution_processes: number;
   task?: TaskWithAttemptStatus;
   needsSetup?: boolean;
+  needsClaudeLogin?: boolean;
+  /** Failed run that hit the expired Claude session. Opens the dialog once. */
+  claudeLoginProcessId?: string;
 };
 
 export function NextActionCard({
@@ -54,6 +62,8 @@ export function NextActionCard({
   execution_processes,
   task,
   needsSetup,
+  needsClaudeLogin,
+  claudeLoginProcessId,
 }: NextActionCardProps) {
   const { t } = useTranslation('tasks');
   const { config } = useUserSystem();
@@ -156,9 +166,20 @@ export function NextActionCard({
 
   const editorName = getIdeName(config?.editor?.editor_type);
 
+  // The summary bar is what appears when the run dies, so this is the moment
+  // the expired session is recognized. Once per run: revisiting the task keeps
+  // the button without popping the dialog again.
+  useEffect(() => {
+    if (!failed || !needsClaudeLogin) return;
+    const id = claudeLoginProcessId ?? attemptId;
+    if (!id || !claimClaudeLoginDialog(id)) return;
+    void ClaudeAuthDialog.show();
+  }, [failed, needsClaudeLogin, claudeLoginProcessId, attemptId]);
+
   // Necessary to prevent this component being displayed beyond fold within Virtualised List
   if (
-    (!failed || (execution_processes > 2 && !needsSetup)) &&
+    (!failed ||
+      (execution_processes > 2 && !needsSetup && !needsClaudeLogin)) &&
     fileCount === 0
   ) {
     return <div className="h-24"></div>;
@@ -204,6 +225,8 @@ export function NextActionCard({
               <span className="text-red-600 dark:text-red-400">-{deleted}</span>
             </button>
           )}
+
+          {failed && needsClaudeLogin && <ClaudeLoginButton />}
 
           {/* Run Setup or Try Again button */}
           {failed &&

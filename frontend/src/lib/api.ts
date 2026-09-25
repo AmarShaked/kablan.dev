@@ -931,6 +931,40 @@ export const fileSystemApi = {
   },
 };
 
+export type ClaudeAuthStatus = {
+  logged_in: boolean;
+  auth_method: string | null;
+  email: string | null;
+};
+
+export type ClaudeAuthLoginResponse = {
+  url: string | null;
+  running: boolean;
+  error: string | null;
+};
+
+/** Claude subscription sign-in, via the local Claude Code CLI. */
+export const claudeAuthApi = {
+  status: async (): Promise<ClaudeAuthStatus> => {
+    const response = await makeRequest('/api/claude/auth/status');
+    return handleApiResponse<ClaudeAuthStatus>(response);
+  },
+
+  /** Starts `claude auth login --claudeai` and returns once a URL is printed or the CLI exits. */
+  login: async (): Promise<ClaudeAuthLoginResponse> => {
+    const response = await makeRequest('/api/claude/auth/login', {
+      method: 'POST',
+    });
+    return handleApiResponse<ClaudeAuthLoginResponse>(response);
+  },
+
+  /** The sign-in process started by `login`, including after the browser step finishes. */
+  loginState: async (): Promise<ClaudeAuthLoginResponse> => {
+    const response = await makeRequest('/api/claude/auth/login');
+    return handleApiResponse<ClaudeAuthLoginResponse>(response);
+  },
+};
+
 // Claude subscription usage, read via the local Claude Code CLI credentials.
 export const usageApi = {
   /**

@@ -87,6 +87,7 @@ export {
 
 // Auth dialogs
 export { GhCliSetupDialog } from './auth/GhCliSetupDialog';
+export { ClaudeAuthDialog } from './auth/ClaudeAuthDialog';
 
 // Settings dialogs
 export {

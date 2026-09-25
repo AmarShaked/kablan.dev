@@ -35,6 +35,10 @@ import UserMessage from './UserMessage';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import PendingApprovalEntry from './PendingApprovalEntry';
 import { NextActionCard } from './NextActionCard';
+import {
+  CLAUDE_LOGIN_MARKER,
+  claudeLoginProcessId,
+} from '@/utils/claudeLoginError';
 import { cn } from '@/lib/utils';
 import { useRetryUi } from '@/contexts/RetryUiContext';
 import { Button } from '@/components/ui/button';
@@ -951,6 +955,13 @@ function DisplayConversationEntry({
           execution_processes={entry.entry_type.execution_processes}
           task={task}
           needsSetup={entry.entry_type.needs_setup}
+          needsClaudeLogin={
+            entry.content === CLAUDE_LOGIN_MARKER ||
+            claudeLoginProcessId(entry.content) !== null
+          }
+          claudeLoginProcessId={
+            claudeLoginProcessId(entry.content) ?? undefined
+          }
         />
       </div>
     );

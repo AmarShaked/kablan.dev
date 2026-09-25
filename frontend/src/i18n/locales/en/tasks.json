@@ -370,6 +370,19 @@
     "diffs": "Diffs",
     "gitActions": "Git Actions",
     "tryAgain": "Retry in a new task",
+    "claudeAuth": {
+      "signIn": "Sign in to Claude",
+      "title": "Sign in to Claude",
+      "description": "Your Claude subscription session expired. Sign in again in the browser to keep using that subscription.",
+      "opening": "Opening the Claude sign-in page…",
+      "waiting": "Finish signing in in the browser. This dialog updates when Claude is signed in.",
+      "visit": "If the browser did not open, use this link:",
+      "signedIn": "Signed in as {{email}}.",
+      "signedInNoEmail": "Claude is signed in.",
+      "signedInHint": "Close this and retry the task.",
+      "retry": "Try again",
+      "close": "Close"
+    },
     "runSetup": "Run Setup",
     "setupHelpText": "{{agent}} isn't setup correctly. Click 'Run Setup' to install it and login.",
     "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"

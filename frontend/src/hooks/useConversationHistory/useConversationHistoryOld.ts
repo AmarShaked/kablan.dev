@@ -24,6 +24,7 @@ import {
   nextActionPatch,
   REMAINING_BATCH_SIZE,
 } from './constants';
+import { isClaudeLoginError } from '@/utils/claudeLoginError';
 
 export const useConversationHistoryOld = ({
   attempt,
@@ -152,6 +153,7 @@ export const useConversationHistoryOld = ({
       let lastProcessFailedOrKilled = false;
       let needsSetup = false;
       let setupHelpText: string | undefined;
+      let claudeLoginProcessId: string | undefined;
 
       // Create user messages + tool calls for setup/cleanup scripts
       const allEntries = Object.values(executionProcessState)
@@ -267,6 +269,17 @@ export const useConversationHistoryOld = ({
               if (hasSetupRequired) {
                 needsSetup = true;
               }
+
+              const hasClaudeLoginError = filteredEntries.some((entry) => {
+                if (entry.type !== 'NORMALIZED_ENTRY') return false;
+                return (
+                  entry.content.entry_type.type === 'error_message' &&
+                  isClaudeLoginError(entry.content.content)
+                );
+              });
+              if (hasClaudeLoginError) {
+                claudeLoginProcessId = p.executionProcess.id;
+              }
             }
 
             if (isProcessRunning && !hasPendingApprovalEntry) {
@@ -368,7 +381,8 @@ export const useConversationHistoryOld = ({
             lastProcessFailedOrKilled,
             Object.keys(executionProcessState).length,
             needsSetup,
-            setupHelpText
+            setupHelpText,
+            claudeLoginProcessId
           )
         );
       }
