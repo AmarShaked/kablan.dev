@@ -321,7 +321,17 @@ impl EventService {
                                             // Not in the active list any more: the task was
                                             // archived. Every live view is showing active tasks, and
                                             // a removal is the only thing that tells them it left.
-                                            None => task_patch::remove(task.id),
+                                            //
+                                            // An insert that is not visible yet is not an archive.
+                                            // Removing it here deletes a task the board has not
+                                            // been told about, and the row only appears on refresh.
+                                            None => {
+                                                if matches!(hook.operation, SqliteOperation::Insert)
+                                                {
+                                                    return;
+                                                }
+                                                task_patch::remove(task.id)
+                                            }
                                         };
                                         msg_store_for_hook.push_patch(patch);
                                         return;

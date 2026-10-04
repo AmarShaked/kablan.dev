@@ -907,6 +907,9 @@ export function ProjectTasks() {
       <ClickedElementsProvider attempt={attempt}>
         <ReviewProvider attemptId={attempt?.id}>
           <ExecutionProcessesProvider
+            key={
+              attempt?.session?.id ?? attempt?.id ?? selectedTask?.id ?? 'none'
+            }
             attemptId={attempt?.id}
             sessionId={attempt?.session?.id}
           >

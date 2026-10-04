@@ -419,10 +419,29 @@ export const useConversationHistoryOld = ({
     [flattenEntriesForEmit]
   );
 
+  // Controllers for live streams, so a return to the tab can drop a frozen
+  // socket. Closing rejects the waiter and the backoff opens a fresh one.
+  const liveControllersRef = useRef<Map<string, { close: () => void }>>(
+    new Map()
+  );
+  // Bumped when the attempt changes or this hook unmounts so a late patch
+  // from the previous chat cannot paint into the next one.
+  const streamGenerationRef = useRef(0);
+
   // This emits its own events as they are streamed
   const loadRunningAndEmit = useCallback(
     (executionProcess: ExecutionProcess): Promise<void> => {
+      const generation = streamGenerationRef.current;
       return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          liveControllersRef.current.delete(executionProcess.id);
+          fn();
+        };
+        const stillCurrent = () => streamGenerationRef.current === generation;
+
         let url = '';
         if (executionProcess.executor_action.typ.type === 'ScriptRequest') {
           url = `/api/execution-processes/${executionProcess.id}/raw-logs/ws`;
@@ -431,6 +450,7 @@ export const useConversationHistoryOld = ({
         }
         const controller = streamJsonPatchEntries<PatchType>(url, {
           onEntries(entries) {
+            if (!stillCurrent()) return;
             const patchesWithKey = entries.map((entry, index) =>
               patchWithKey(entry, executionProcess.id, index)
             );
@@ -443,13 +463,29 @@ export const useConversationHistoryOld = ({
             emitEntries(displayedExecutionProcesses.current, 'running', false);
           },
           onFinished: () => {
-            emitEntries(displayedExecutionProcesses.current, 'running', false);
             controller.close();
-            resolve();
+            finish(() => {
+              if (stillCurrent()) {
+                emitEntries(
+                  displayedExecutionProcesses.current,
+                  'running',
+                  false
+                );
+              }
+              resolve();
+            });
           },
           onError: () => {
             controller.close();
-            reject();
+            finish(() => reject());
+          },
+        });
+        liveControllersRef.current.set(executionProcess.id, {
+          close: () => {
+            controller.close();
+            // A frozen background socket never errors on its own. Reject so
+            // the backoff loop reconnects instead of hanging forever.
+            finish(() => reject(new Error('stream closed')));
           },
         });
       });
@@ -573,9 +609,33 @@ export const useConversationHistoryOld = ({
     [executionProcessesRaw]
   );
 
+  // Reset before any load/stream effect for this attempt, so a late patch from
+  // the previous chat is dropped and the new chat starts empty.
+  useEffect(() => {
+    streamGenerationRef.current += 1;
+    for (const controller of liveControllersRef.current.values()) {
+      controller.close();
+    }
+    liveControllersRef.current.clear();
+    displayedExecutionProcesses.current = {};
+    loadedInitialEntries.current = false;
+    streamingProcessIdsRef.current.clear();
+    emitEntries(displayedExecutionProcesses.current, 'initial', true);
+
+    return () => {
+      streamGenerationRef.current += 1;
+      for (const controller of liveControllersRef.current.values()) {
+        controller.close();
+      }
+      liveControllersRef.current.clear();
+      streamingProcessIdsRef.current.clear();
+    };
+  }, [attempt.id, emitEntries]);
+
   // Initial load when attempt changes
   useEffect(() => {
     let cancelled = false;
+    const generation = streamGenerationRef.current;
     (async () => {
       // Waiting for execution processes to load
       if (
@@ -586,7 +646,7 @@ export const useConversationHistoryOld = ({
 
       // Initial entries
       const allInitialEntries = await loadInitialEntries();
-      if (cancelled) return;
+      if (cancelled || streamGenerationRef.current !== generation) return;
       mergeIntoDisplayed((state) => {
         Object.assign(state, allInitialEntries);
       });
@@ -596,11 +656,14 @@ export const useConversationHistoryOld = ({
       // Then load the remaining in batches
       while (
         !cancelled &&
+        streamGenerationRef.current === generation &&
         (await loadRemainingEntriesInBatches(REMAINING_BATCH_SIZE))
       ) {
-        if (cancelled) return;
+        if (cancelled || streamGenerationRef.current !== generation) return;
       }
+      if (cancelled || streamGenerationRef.current !== generation) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
+      if (cancelled || streamGenerationRef.current !== generation) return;
       emitEntries(displayedExecutionProcesses.current, 'historic', false);
     })();
     return () => {
@@ -613,6 +676,18 @@ export const useConversationHistoryOld = ({
     loadRemainingEntriesInBatches,
     emitEntries,
   ]); // include idListKey so new processes trigger reload
+
+  const startStreaming = useCallback(
+    (activeProcess: ExecutionProcess) => {
+      if (streamingProcessIdsRef.current.has(activeProcess.id)) return;
+      streamingProcessIdsRef.current.add(activeProcess.id);
+      loadRunningAndEmitWithBackoff(activeProcess).finally(() => {
+        streamingProcessIdsRef.current.delete(activeProcess.id);
+        liveControllersRef.current.delete(activeProcess.id);
+      });
+    },
+    [loadRunningAndEmitWithBackoff]
+  );
 
   useEffect(() => {
     const activeProcesses = getActiveAgentProcesses();
@@ -632,14 +707,8 @@ export const useConversationHistoryOld = ({
         );
       }
 
-      if (
-        activeProcess.status === ExecutionProcessStatus.running &&
-        !streamingProcessIdsRef.current.has(activeProcess.id)
-      ) {
-        streamingProcessIdsRef.current.add(activeProcess.id);
-        loadRunningAndEmitWithBackoff(activeProcess).finally(() => {
-          streamingProcessIdsRef.current.delete(activeProcess.id);
-        });
+      if (activeProcess.status === ExecutionProcessStatus.running) {
+        startStreaming(activeProcess);
       }
     }
   }, [
@@ -647,8 +716,30 @@ export const useConversationHistoryOld = ({
     idStatusKey,
     emitEntries,
     ensureProcessVisible,
-    loadRunningAndEmitWithBackoff,
+    startStreaming,
   ]);
+
+  // A backgrounded tab often freezes the chat socket without closing it. When
+  // the page is visible again, drop any live stream so the backoff reconnects
+  // and the transcript catches up instead of sitting half-drawn.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const activeProcesses = getActiveAgentProcesses();
+      for (const activeProcess of activeProcesses) {
+        if (activeProcess.status !== ExecutionProcessStatus.running) continue;
+        const live = liveControllersRef.current.get(activeProcess.id);
+        if (live) {
+          live.close();
+          continue;
+        }
+        // The previous stream gave up; start again now that the tab is back.
+        startStreaming(activeProcess);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [startStreaming, idStatusKey]);
 
   // If an execution process is removed, remove it from the state
   useEffect(() => {
@@ -666,14 +757,6 @@ export const useConversationHistoryOld = ({
       });
     }
   }, [attempt.id, idListKey, executionProcessesRaw]);
-
-  // Reset state when attempt changes
-  useEffect(() => {
-    displayedExecutionProcesses.current = {};
-    loadedInitialEntries.current = false;
-    streamingProcessIdsRef.current.clear();
-    emitEntries(displayedExecutionProcesses.current, 'initial', true);
-  }, [attempt.id, emitEntries]);
 
   return {};
 };

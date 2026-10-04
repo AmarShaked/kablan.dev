@@ -11,6 +11,7 @@ import type {
   TaskWithAttemptStatus,
   UpdateTask,
 } from 'shared/types';
+import { invalidateTaskViews } from '@/lib/taskCache';
 import { taskKeys } from './useTask';
 
 export function useTaskMutations(
@@ -23,7 +24,9 @@ export function useTaskMutations(
     options?.navigateOnSuccess ?? Boolean(projectId);
 
   const invalidateQueries = (taskId?: string) => {
-    queryClient.invalidateQueries({ queryKey: taskKeys.all });
+    // Lists, the integration page's "already a task" match, and the sidebar
+    // counts. The open board hears the same write on its own stream.
+    invalidateTaskViews(queryClient);
     if (taskId) {
       queryClient.invalidateQueries({ queryKey: taskKeys.byId(taskId) });
     }

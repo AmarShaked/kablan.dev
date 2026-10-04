@@ -6,7 +6,7 @@ import {
   VirtuosoMessageListMethods,
   VirtuosoMessageListProps,
 } from '@virtuoso.dev/message-list';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import DisplayConversationEntry from '../NormalizedConversation/DisplayConversationEntry';
 import { useEntries } from '@/contexts/EntriesContext';
@@ -97,29 +97,32 @@ const VirtualizedList = ({ attempt, task }: VirtualizedListProps) => {
     reset();
   }, [attempt.id, reset]);
 
-  const onEntriesUpdated = (
-    newEntries: PatchTypeWithKey[],
-    addType: AddEntryType,
-    newLoading: boolean
-  ) => {
-    let scrollModifier: ScrollModifier = InitialDataScrollModifier;
+  const onEntriesUpdated = useCallback(
+    (
+      newEntries: PatchTypeWithKey[],
+      addType: AddEntryType,
+      newLoading: boolean
+    ) => {
+      let scrollModifier: ScrollModifier = InitialDataScrollModifier;
 
-    if ((addType === 'running' || addType === 'plan') && !loading) {
-      scrollModifier = AutoScrollToBottom;
-    }
+      if ((addType === 'running' || addType === 'plan') && !loading) {
+        scrollModifier = AutoScrollToBottom;
+      }
 
-    // Grouped for display; the context keeps the flat list, since everything else counting or
-    // scanning entries expects one item per entry.
-    setChannelData({
-      data: groupConversationEntries(newEntries),
-      scrollModifier,
-    });
-    setEntries(newEntries);
+      // Grouped for display; the context keeps the flat list, since everything else counting or
+      // scanning entries expects one item per entry.
+      setChannelData({
+        data: groupConversationEntries(newEntries),
+        scrollModifier,
+      });
+      setEntries(newEntries);
 
-    if (loading) {
-      setLoading(newLoading);
-    }
-  };
+      if (loading) {
+        setLoading(newLoading);
+      }
+    },
+    [loading, setEntries]
+  );
 
   useConversationHistory({
     attempt,

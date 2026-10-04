@@ -24,7 +24,11 @@ use deployment::Deployment;
 use executors::profile::ExecutorProfileId;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use services::services::{container::ContainerService, workspace_manager::WorkspaceManager};
+use services::services::{
+    container::ContainerService,
+    events::task_patch,
+    workspace_manager::WorkspaceManager,
+};
 use sqlx::Error as SqlxError;
 use ts_rs::TS;
 use utils::response::ApiResponse;
@@ -147,6 +151,29 @@ pub async fn get_task(
     Ok(ResponseJson(ApiResponse::success(task)))
 }
 
+/// Tell every open board about a task that was just written.
+///
+/// The connection hook does this too, but it looks the row up on another
+/// connection and can miss it. Publishing after the write has returned means
+/// the board shows the task without a refresh.
+async fn publish_task(deployment: &DeploymentImpl, project_id: Uuid, task_id: Uuid) {
+    let Ok(tasks) = Task::find_by_project_id_with_attempt_status(
+        &deployment.db().pool,
+        project_id,
+        ArchiveFilter::Active,
+    )
+    .await
+    else {
+        return;
+    };
+    if let Some(task) = tasks.into_iter().find(|task| task.id == task_id) {
+        deployment
+            .events()
+            .msg_store()
+            .push_patch(task_patch::add(&task));
+    }
+}
+
 pub async fn create_task(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<CreateTask>,
@@ -164,6 +191,8 @@ pub async fn create_task(
     if let Some(image_ids) = &payload.image_ids {
         TaskImage::associate_many_dedup(&deployment.db().pool, task.id, image_ids).await?;
     }
+
+    publish_task(&deployment, task.project_id, task.id).await;
 
     Ok(ResponseJson(ApiResponse::success(task)))
 }
@@ -251,7 +280,7 @@ pub async fn create_task_and_start(
         .ok_or(ApiError::Database(SqlxError::RowNotFound))?;
 
     tracing::info!("Started attempt for task {}", task.id);
-    Ok(ResponseJson(ApiResponse::success(TaskWithAttemptStatus {
+    let created = TaskWithAttemptStatus {
         task,
         has_in_progress_attempt: is_attempt_running,
         last_attempt_failed: false,
@@ -262,7 +291,12 @@ pub async fn create_task_and_start(
         last_turn_summary: None,
         last_turn_prompt: None,
         executor: payload.executor_profile_id.executor.to_string(),
-    })))
+    };
+    deployment
+        .events()
+        .msg_store()
+        .push_patch(task_patch::add(&created));
+    Ok(ResponseJson(ApiResponse::success(created)))
 }
 
 pub async fn update_task(
@@ -350,6 +384,14 @@ pub async fn delete_task(
 
     // Commit the transaction - if this fails, all changes are rolled back
     tx.commit().await?;
+
+    // The live board only drops a row when it hears a removal. Say so here,
+    // after the delete has committed, rather than hoping the connection hook
+    // caught the row.
+    deployment
+        .events()
+        .msg_store()
+        .push_patch(task_patch::remove(task.id));
 
     if total_children_affected > 0 {
         tracing::info!(

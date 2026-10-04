@@ -33,12 +33,18 @@ interface StreamController<E = unknown> {
  *   {"Finished": ""}
  *
  * Maintains an in-memory { entries: [] } snapshot and returns a controller.
+ *
+ * An unexpected close (tab backgrounded, network blip) is an error. Without
+ * that, a live chat stream dies quietly and never retries, which is what
+ * made the transcript look stuck after leaving the browser and coming back.
  */
 export function streamJsonPatchEntries<E = unknown>(
   url: string,
   opts: StreamOptions<E> = {}
 ): StreamController<E> {
   let connected = false;
+  let closedByUs = false;
+  let settled = false;
   let snapshot: PatchContainer<E> = structuredClone(
     opts.initial ?? ({ entries: [] } as PatchContainer<E>)
   );
@@ -60,6 +66,13 @@ export function streamJsonPatchEntries<E = unknown>(
     }
   };
 
+  const settleError = (err: unknown) => {
+    if (settled) return;
+    settled = true;
+    connected = false;
+    opts.onError?.(err);
+  };
+
   const handleMessage = (event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
@@ -79,11 +92,15 @@ export function streamJsonPatchEntries<E = unknown>(
 
       // Handle Finished messages
       if (msg.finished !== undefined) {
-        opts.onFinished?.(snapshot.entries);
+        if (!settled) {
+          settled = true;
+          opts.onFinished?.(snapshot.entries);
+        }
+        closedByUs = true;
         ws.close();
       }
     } catch (err) {
-      opts.onError?.(err);
+      settleError(err);
     }
   };
 
@@ -94,13 +111,15 @@ export function streamJsonPatchEntries<E = unknown>(
 
   ws.addEventListener('message', handleMessage);
 
-  ws.addEventListener('error', (err) => {
-    connected = false;
-    opts.onError?.(err);
+  ws.addEventListener('error', () => {
+    // Browsers often fire error then close with no useful detail. The close
+    // handler is what decides whether this was intentional.
   });
 
   ws.addEventListener('close', () => {
     connected = false;
+    if (closedByUs || settled) return;
+    settleError(new Error('Chat stream closed unexpectedly'));
   });
 
   return {
@@ -120,6 +139,8 @@ export function streamJsonPatchEntries<E = unknown>(
       return () => subscribers.delete(cb);
     },
     close(): void {
+      closedByUs = true;
+      settled = true;
       ws.close();
       subscribers.clear();
       connected = false;
