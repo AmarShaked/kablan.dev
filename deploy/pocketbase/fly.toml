@@ -5,11 +5,10 @@
 #   fly secrets set PB_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 #   fly deploy
 #
-# Then set on the Kablan host:
-#   POCKETBASE_URL=https://kablan-pocketbase.fly.dev
-#   POCKETBASE_ADMIN_EMAIL=...
-#   POCKETBASE_ADMIN_PASSWORD=...
-# And for the frontend:
+# Kablan server defaults to this app + the agent@kablan.service account
+# (see crates/server/src/pocketbase.rs). Optional overrides:
+#   POCKETBASE_URL / POCKETBASE_SERVICE_EMAIL / POCKETBASE_SERVICE_PASSWORD
+# Frontend:
 #   VITE_POCKETBASE_URL=https://kablan-pocketbase.fly.dev
 
 app = "kablan-pocketbase"

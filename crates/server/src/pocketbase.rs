@@ -1,9 +1,20 @@
-//! Minimal PocketBase admin client for chat agent posts.
+//! PocketBase client for chat agent posts (hosted service account).
 
 use anyhow::{Context, Result, anyhow};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Hosted Chats backend. Override with `POCKETBASE_URL`.
+pub const DEFAULT_POCKETBASE_URL: &str = "https://kablan-pocketbase.fly.dev";
+
+/// Must match `deploy/pocketbase/pb_migrations/1730000002_agent_service_account.js`.
+pub const DEFAULT_POCKETBASE_SERVICE_EMAIL: &str = "agent@kablan.service";
+
+/// Must match the migration that creates the service user. Override with
+/// `POCKETBASE_SERVICE_PASSWORD` when self-hosting.
+pub const DEFAULT_POCKETBASE_SERVICE_PASSWORD: &str =
+    "V6VI1lm2q25/EwPOpANAXN+2OyncQwUCFL31n53GW8A=";
 
 #[derive(Clone)]
 pub struct PocketBaseClient {
@@ -40,29 +51,33 @@ struct ListResponse<T> {
 }
 
 impl PocketBaseClient {
+    /// Always available for the hosted product (baked-in defaults).
+    /// Self-hosters override URL / password via env.
+    pub fn is_configured() -> bool {
+        true
+    }
+
     pub async fn from_env() -> Result<Self> {
         let base_url = std::env::var("POCKETBASE_URL")
-            .context("POCKETBASE_URL is not set")?
+            .unwrap_or_else(|_| DEFAULT_POCKETBASE_URL.to_string())
             .trim_end_matches('/')
             .to_string();
-        let email = std::env::var("POCKETBASE_ADMIN_EMAIL")
-            .context("POCKETBASE_ADMIN_EMAIL is not set")?;
-        let password = std::env::var("POCKETBASE_ADMIN_PASSWORD")
-            .context("POCKETBASE_ADMIN_PASSWORD is not set")?;
+        let email = std::env::var("POCKETBASE_SERVICE_EMAIL")
+            .unwrap_or_else(|_| DEFAULT_POCKETBASE_SERVICE_EMAIL.to_string());
+        let password = std::env::var("POCKETBASE_SERVICE_PASSWORD")
+            .unwrap_or_else(|_| DEFAULT_POCKETBASE_SERVICE_PASSWORD.to_string());
 
         let http = Client::new();
-        let token = Self::authenticate(&http, &base_url, &email, &password).await?;
+        let token = Self::authenticate(&http, &base_url, &email, &password)
+            .await
+            .with_context(|| {
+                format!("PocketBase service auth failed for {email} at {base_url}")
+            })?;
         Ok(Self {
             http,
             base_url,
             token,
         })
-    }
-
-    pub fn is_configured() -> bool {
-        std::env::var("POCKETBASE_URL").is_ok()
-            && std::env::var("POCKETBASE_ADMIN_EMAIL").is_ok()
-            && std::env::var("POCKETBASE_ADMIN_PASSWORD").is_ok()
     }
 
     async fn authenticate(
@@ -71,23 +86,24 @@ impl PocketBaseClient {
         email: &str,
         password: &str,
     ) -> Result<String> {
-        // PocketBase 0.23+ superusers; fall back to legacy admins.
         let body = serde_json::json!({ "identity": email, "password": password });
-        for path in [
-            "/api/collections/_superusers/auth-with-password",
-            "/api/admins/auth-with-password",
-        ] {
-            let res = http
-                .post(format!("{base_url}{path}"))
-                .json(&body)
-                .send()
-                .await?;
-            if res.status().is_success() {
-                let auth: AuthResponse = res.json().await?;
-                return Ok(auth.token);
-            }
+        let res = http
+            .post(format!(
+                "{base_url}/api/collections/users/auth-with-password"
+            ))
+            .json(&body)
+            .send()
+            .await
+            .context("PocketBase auth request failed")?;
+        if !res.status().is_success() {
+            let status = res.status();
+            let text = res.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "service user login failed ({status}): {text}"
+            ));
         }
-        Err(anyhow!("PocketBase admin authentication failed"))
+        let auth: AuthResponse = res.json().await?;
+        Ok(auth.token)
     }
 
     async fn authed(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
@@ -98,12 +114,18 @@ impl PocketBaseClient {
 
     pub async fn get_message(&self, message_id: &str) -> Result<PbMessage> {
         let res = self
-            .authed(reqwest::Method::GET, &format!("/api/collections/messages/records/{message_id}"))
+            .authed(
+                reqwest::Method::GET,
+                &format!("/api/collections/messages/records/{message_id}"),
+            )
             .await
             .send()
             .await?;
         if !res.status().is_success() {
-            return Err(anyhow!("Failed to load message {message_id}: {}", res.status()));
+            return Err(anyhow!(
+                "Failed to load message {message_id}: {}",
+                res.status()
+            ));
         }
         Ok(res.json().await?)
     }
@@ -206,4 +228,17 @@ impl PocketBaseClient {
 
 fn urlencoding_filter(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hosted_defaults_are_set() {
+        assert!(PocketBaseClient::is_configured());
+        assert!(DEFAULT_POCKETBASE_URL.starts_with("https://"));
+        assert!(DEFAULT_POCKETBASE_SERVICE_EMAIL.contains('@'));
+        assert!(!DEFAULT_POCKETBASE_SERVICE_PASSWORD.is_empty());
+    }
 }

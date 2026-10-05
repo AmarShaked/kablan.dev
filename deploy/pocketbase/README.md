@@ -15,18 +15,26 @@ fly deploy
 Open the admin UI at `https://<app>.fly.dev/_/` and create the first superuser
 (or use `fly ssh console` + `./pocketbase superuser upsert EMAIL PASS`).
 
-Create a **service** PocketBase user (email/password) used only by the Kablan
-server to post agent messages. Give it access by signing it into chats via
-admin if needed, or rely on admin API auth from the server.
+Migrations create a **service user** (`agent@kablan.service`) used by the Kablan
+server to post agent replies. Credentials are baked into the server defaults;
+self-hosters can override with env (below). No per-user PocketBase admin setup.
 
-## Env for Kablan
+## Env for Kablan (optional — hosted defaults work out of the box)
 
-Local / host running the Kablan server:
+The Kablan server defaults to:
+
+```
+POCKETBASE_URL=https://kablan-pocketbase.fly.dev
+POCKETBASE_SERVICE_EMAIL=agent@kablan.service
+POCKETBASE_SERVICE_PASSWORD=<same as migration 1730000002>
+```
+
+Override only when self-hosting PocketBase:
 
 ```bash
-POCKETBASE_URL=https://kablan-pocketbase.fly.dev
-POCKETBASE_ADMIN_EMAIL=admin@example.com
-POCKETBASE_ADMIN_PASSWORD=...
+POCKETBASE_URL=https://your-pb.example
+POCKETBASE_SERVICE_EMAIL=agent@kablan.service
+POCKETBASE_SERVICE_PASSWORD=...
 ```
 
 Frontend (Vite):
@@ -39,9 +47,6 @@ Production / npx builds default to `https://kablan-pocketbase.fly.dev` when the
 env var is omitted. Local `pnpm run dev` reads `frontend/.env.development`
 (same URL). Override if you run PocketBase yourself.
 
-Without a URL in local/test, Chats stays in the sidebar but asks you to
-configure PocketBase; the rest of Kablan works as before.
-
 ## Schema
 
 Migrations in `pb_migrations/` create:
@@ -49,6 +54,7 @@ Migrations in `pb_migrations/` create:
 - `chats` — `self`, `dm`, or `group`; DMs use `dm_key` (`userA_userB`) so the same pair always reopens one thread
 - `chat_members` — membership; owners can add the other person when starting a DM
 - `messages` — user or agent authors, optional `task_id` / `task_project_id`
+- Service user may list messages and create/update/delete rows with `author_agent` set
 - Authenticated users may list other users (email lookup for starting a DM)
 
 Phase 2: Chats **+** opens an email dialog. If that address already has a Chats

@@ -56,19 +56,12 @@ pub async fn agent_turn(
     Path(chat_id): Path<String>,
     Json(payload): Json<AgentTurnRequest>,
 ) -> Result<ResponseJson<ApiResponse<AgentTurnResponse>>, ApiError> {
-    if !PocketBaseClient::is_configured() {
-        return Err(ApiError::BadRequest(
-            "PocketBase is not configured on the server (set POCKETBASE_URL and admin credentials)"
-                .to_string(),
-        ));
-    }
-
     let agent = BaseCodingAgent::from_str_loose(&payload.agent).map_err(|e| {
         ApiError::BadRequest(format!("Unknown agent '{}': {e}", payload.agent))
     })?;
 
     let pb = PocketBaseClient::from_env().await.map_err(|e| {
-        ApiError::BadRequest(format!("PocketBase auth failed: {e}"))
+        ApiError::BadRequest(format!("PocketBase service auth failed: {e}"))
     })?;
 
     let trigger = pb
