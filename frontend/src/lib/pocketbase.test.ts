@@ -9,8 +9,8 @@ import {
 } from './pocketbase';
 
 describe('pocketbase config', () => {
-  it('is optional when VITE_POCKETBASE_URL is unset', () => {
-    // Vitest env does not set VITE_POCKETBASE_URL by default.
+  it('is optional when VITE_POCKETBASE_URL is unset outside production', () => {
+    // Vitest env does not set VITE_POCKETBASE_URL; MODE is not production.
     expect(POCKETBASE_URL).toBe('');
     expect(isPocketBaseConfigured()).toBe(false);
   });

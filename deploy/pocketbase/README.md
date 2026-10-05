@@ -35,8 +35,12 @@ Frontend (Vite):
 VITE_POCKETBASE_URL=https://kablan-pocketbase.fly.dev
 ```
 
-Without these, Chats stays available in the sidebar but asks you to configure
-PocketBase / sign in; the rest of Kablan works as before.
+Production / npx builds default to `https://kablan-pocketbase.fly.dev` when the
+env var is omitted. Local `pnpm run dev` reads `frontend/.env.development`
+(same URL). Override if you run PocketBase yourself.
+
+Without a URL in local/test, Chats stays in the sidebar but asks you to
+configure PocketBase; the rest of Kablan works as before.
 
 ## Schema
 

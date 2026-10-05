@@ -92,6 +92,8 @@ jobs:
       # The server embeds the built frontend, so this has to happen before cargo runs.
       - name: Build frontend
         run: cd frontend && pnpm build
+        env:
+          VITE_POCKETBASE_URL: https://kablan-pocketbase.fly.dev
 
       - name: Build binaries
         run: cargo build --release --target ${{ matrix.target }} --bin server --bin mcp_task_server

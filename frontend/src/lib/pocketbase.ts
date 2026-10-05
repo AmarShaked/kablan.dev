@@ -1,11 +1,20 @@
 import PocketBase, { ClientResponseError, type RecordModel } from 'pocketbase';
 
-/** Empty when unset — Chats then asks you to configure PocketBase. */
-export const POCKETBASE_URL =
-  (import.meta.env.VITE_POCKETBASE_URL as string | undefined)?.replace(
-    /\/$/,
-    ''
-  ) ?? '';
+/** Official hosted Chats backend. Override with VITE_POCKETBASE_URL. */
+export const DEFAULT_POCKETBASE_URL = 'https://kablan-pocketbase.fly.dev';
+
+/**
+ * Empty in local/test when unset (configure via `.env.development`).
+ * Production builds fall back to the hosted Fly app so npx releases work.
+ */
+export const POCKETBASE_URL = (() => {
+  const fromEnv = (
+    import.meta.env.VITE_POCKETBASE_URL as string | undefined
+  )?.replace(/\/$/, '');
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  if (import.meta.env.PROD) return DEFAULT_POCKETBASE_URL;
+  return '';
+})();
 
 export const isPocketBaseConfigured = () => POCKETBASE_URL.length > 0;
 
