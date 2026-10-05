@@ -45,6 +45,7 @@ import { DeleteTaskConfirmationDialog } from '@/components/dialogs';
 import { TaskGroupSidebar } from '@/components/tasks/TaskGroupSidebar';
 import {
   ACTIVE_STATUSES,
+  ALL_STATUSES,
   compareTasks,
   matchesStatusFilter,
   type StatusFilter,
@@ -751,6 +752,15 @@ export function ProjectTasks() {
       : `${truncated}...`;
   };
 
+  const clearFiltersAndSearch = useCallback(() => {
+    handleFiltersChange({
+      status: ALL_STATUSES,
+      archive: 'active',
+      needsMe: false,
+    });
+    clearSearch();
+  }, [handleFiltersChange, clearSearch]);
+
   // With a task open the left pane becomes the task list: the board's columns are unreadable at
   // sidebar width, and losing sight of the other tasks was the point of the redesign. The centre
   // (the agent conversation) is untouched.
@@ -758,14 +768,21 @@ export function ProjectTasks() {
   // open. The board and the full-width list each answered "show me everything" by taking the
   // window, so opening a task meant losing the list and going back meant leaving the
   // conversation. Both still exist (TaskKanbanBoard, TaskListView) and neither is reachable.
+  // Default empty project (Active/All, no search) gets the create CTA. Any narrower filter that
+  // hides every row keeps the sidebar toolbar so you can change filters without a dead end.
+  const trulyEmptyProject =
+    tasks.length === 0 &&
+    filters.archive === 'active' &&
+    !hasSearch &&
+    !filters.needsMe &&
+    (filters.status === ACTIVE_STATUSES || filters.status === ALL_STATUSES);
+
   const kanbanContent = isInitialTasksLoad ? (
     // Switching projects goes through here: the query key changes, tasks empties, and without
     // this the column would flash the "no tasks" state before the new ones arrive.
     <TaskGroupSidebarSkeleton />
-  ) : tasks.length === 0 ? (
+  ) : trulyEmptyProject ? (
     <NoTasksEmptyState onCreate={handleCreateNewTask} />
-  ) : !hasVisibleTasks ? (
-    <NoSearchResultsEmptyState onClear={hasSearch ? clearSearch : undefined} />
   ) : (
     <TaskGroupSidebar
       columns={visibleTasksByStatus}
@@ -781,6 +798,11 @@ export function ProjectTasks() {
       onSortChange={handleSortChange}
       statusCounts={statusCounts}
       needsMeCount={needsMeCount}
+      emptyState={
+        !hasVisibleTasks ? (
+          <NoSearchResultsEmptyState onClear={clearFiltersAndSearch} />
+        ) : undefined
+      }
     />
   );
 

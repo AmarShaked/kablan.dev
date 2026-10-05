@@ -380,6 +380,7 @@ export function TaskGroupSidebar({
   onSortChange,
   statusCounts,
   needsMeCount,
+  emptyState,
 }: {
   columns: Record<TaskStatus, TaskWithAttemptStatus[]>;
   /** Readonly so the caller can pass its `as const` status tuple directly. */
@@ -401,6 +402,8 @@ export function TaskGroupSidebar({
   statusCounts: Record<TaskStatus, number>;
   /** How many tasks are waiting on the reader, shown against the "Needs me" toggle. */
   needsMeCount?: number;
+  /** When filters/search hide every row, keep this toolbar and show the message below it. */
+  emptyState?: ReactNode;
 }) {
   const [overrides, setOverrides] = useState<CollapseOverrides>(loadOverrides);
   const [grouping, setGrouping] = useState<Grouping>(loadGrouping);
@@ -517,7 +520,9 @@ export function TaskGroupSidebar({
           </div>
 
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-            {grouping === 'none' ? (
+            {total === 0 && emptyState ? (
+              emptyState
+            ) : grouping === 'none' ? (
               // No card here: the border of a card is what separates one group from the next,
               // and ungrouped there is nothing to separate — just the rows on the page.
               <ul className="space-y-2">

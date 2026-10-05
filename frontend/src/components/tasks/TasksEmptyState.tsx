@@ -64,8 +64,8 @@ export function NoSearchResultsEmptyState({
   const { t } = useTranslation('tasks');
 
   return (
-    <div className="mx-auto mt-16 max-w-md px-6 text-center">
-      <SearchX className="mx-auto h-6 w-6 text-muted-foreground" />
+    <div className="mx-auto flex max-w-md flex-col items-center px-4 py-10 text-center">
+      <SearchX className="h-6 w-6 text-muted-foreground" />
       <h2 className="mt-4 text-lg font-medium tracking-tight">
         {t('empty.noSearchResults')}
       </h2>
