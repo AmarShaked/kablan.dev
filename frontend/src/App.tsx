@@ -50,6 +50,7 @@ import { ClickedElementsProvider } from './contexts/ClickedElementsProvider';
 // Design scope components
 import { AllTasks } from '@/pages/AllTasks';
 import { Warzone } from '@/pages/Warzone';
+import { ChatPage } from '@/pages/chats/ChatPage';
 import { LegacyDesignScope } from '@/components/legacy-design/LegacyDesignScope';
 
 function AppContent() {
@@ -151,6 +152,8 @@ function AppContent() {
               <Route path="/" element={<Projects />} />
               <Route path="/tasks" element={<AllTasks />} />
               <Route path="/warzone" element={<Warzone />} />
+              <Route path="/chats" element={<ChatPage />} />
+              <Route path="/chats/:chatId" element={<ChatPage />} />
               <Route path="/local-projects" element={<Projects />} />
               <Route path="/local-projects/:projectId" element={<Projects />} />
               <Route path="/migration" element={<Migration />} />

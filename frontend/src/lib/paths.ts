@@ -10,4 +10,6 @@ export const paths = {
   taskFull: (projectId: string, taskId: string) =>
     `/local-projects/${projectId}/tasks/${taskId}/full`,
   warzone: () => '/warzone',
+  chats: () => '/chats',
+  chat: (chatId: string) => `/chats/${chatId}`,
 };

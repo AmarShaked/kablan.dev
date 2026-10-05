@@ -1,6 +1,7 @@
 pub mod error;
 pub mod mcp;
 pub mod middleware;
+pub mod pocketbase;
 pub mod routes;
 pub mod run;
 

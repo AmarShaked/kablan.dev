@@ -88,6 +88,13 @@ export {
 // Auth dialogs
 export { GhCliSetupDialog } from './auth/GhCliSetupDialog';
 export { ClaudeAuthDialog } from './auth/ClaudeAuthDialog';
+export { PocketBaseAuthDialog } from './auth/PocketBaseAuthDialog';
+
+// Chat dialogs
+export {
+  InviteChatDialog,
+  type InviteChatResult,
+} from './chats/InviteChatDialog';
 
 // Settings dialogs
 export {

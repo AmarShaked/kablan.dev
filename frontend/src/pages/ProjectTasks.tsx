@@ -192,15 +192,17 @@ export function ProjectTasks() {
     useTaskWorkspace(taskId);
   const attempt = workspace ?? undefined;
 
-  // Until the task has been started there is no conversation to show, so the panel shows the
-  // task itself and the button that starts it.
-  const isTaskView = !!taskId && !isWorkspaceLoading && !attempt;
+  // Until something has actually run there is no conversation to show. Chat create-and-start can
+  // leave a workspace row with no session when start fails — treat that as never-started too so
+  // the Start empty state appears instead of a blank conversation.
+  const neverStarted = !attempt || !attempt.session;
+  const isTaskView = !!taskId && !isWorkspaceLoading && neverStarted;
 
   const rawMode = searchParams.get('view');
   // The details column is the default company for a running task — you almost always want the
   // branch, dev server and git state in sight while the agent works. `view=chat` is how
   // "I closed the column" is spelled, since the absent param now means the default.
-  const mode: LayoutMode = !attempt
+  const mode: LayoutMode = neverStarted
     ? null
     : rawMode === 'diffs' || rawMode === 'logs' || rawMode === 'env'
       ? rawMode

@@ -56,6 +56,15 @@ import { agentLabel } from '@/utils/agentLabels';
 import { IntegrationIcon } from '@/components/integrations/IntegrationIcon';
 import { useConfiguredIntegrations } from '@/hooks/useConfiguredIntegrations';
 import { integrationLabel } from '@/lib/integrations/catalog';
+import { PocketBaseAuthDialog } from '@/components/dialogs/auth/PocketBaseAuthDialog';
+import { InviteChatDialog } from '@/components/dialogs/chats/InviteChatDialog';
+import { ChatUserAvatar } from '@/components/chats/ChatUserAvatar';
+import { SidebarNavUser } from '@/components/layout/SidebarNavUser';
+import { useChats } from '@/hooks/useChats';
+import { usePocketBaseAuth } from '@/hooks/usePocketBaseAuth';
+import { paths } from '@/lib/paths';
+import { isChatsPath } from '@/lib/routes/chatRoutes';
+import { ensureSelfChat } from '@/lib/pocketbase';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -79,10 +88,46 @@ export function ProjectsSidebar() {
   const { configuredAgents, isConnected } = useConfiguredAgents();
   const { enabledIntegrations, isConnected: isIntegrationConnected } =
     useConfiguredIntegrations();
+  const { isSignedIn, pb, signOut, user } = usePocketBaseAuth();
   const activeAgent = parseAgentParam(location.pathname.split('/')[2]);
   const activeIntegration = parseIntegrationParam(
     location.pathname.split('/')[2]
   );
+  const activeChatId = location.pathname.match(/^\/chats\/([^/]+)/)?.[1];
+  const { chats, refresh: refreshChats, isUnread } = useChats(activeChatId);
+
+  const openChats = async () => {
+    if (!isSignedIn) {
+      const ok = await PocketBaseAuthDialog.show().catch(() => false);
+      if (!ok) return;
+      await refreshChats();
+    }
+    if (!pb) {
+      navigate(paths.chats());
+      return;
+    }
+    try {
+      const self = await ensureSelfChat(pb);
+      await refreshChats();
+      navigate(paths.chat(self.id));
+    } catch {
+      navigate(paths.chats());
+    }
+  };
+
+  const openInviteChat = async () => {
+    if (!isSignedIn) {
+      const ok = await PocketBaseAuthDialog.show().catch(() => false);
+      if (!ok) return;
+      await refreshChats();
+    }
+    const result = await InviteChatDialog.show().catch(() => ({
+      action: 'canceled' as const,
+    }));
+    if (result.action !== 'opened') return;
+    await refreshChats();
+    navigate(paths.chat(result.chat.id));
+  };
 
   // The same query the projects page uses, so the two share one fetch and one cache.
   const { data: projects = [] } = useQuery({
@@ -276,6 +321,64 @@ export function ProjectsSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {isSignedIn && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="gap-1.5">
+              Chats
+              <span className="rounded bg-warning/15 px-1 py-px font-ibm-plex-mono text-[9px] font-medium uppercase tracking-wide text-warning">
+                Beta
+              </span>
+            </SidebarGroupLabel>
+            <SidebarGroupAction
+              title="Start a chat by email"
+              onClick={() => void openInviteChat()}
+            >
+              <Plus />
+              <span className="sr-only">New chat</span>
+            </SidebarGroupAction>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {chats.map((chat) => {
+                  const isActive = activeChatId === chat.id;
+                  const unread = isUnread(chat.id);
+                  const label = chat.label;
+                  return (
+                    <SidebarMenuItem key={chat.id}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={label}
+                      >
+                        <Link to={paths.chat(chat.id)}>
+                          <ChatUserAvatar name={label} />
+                          <span
+                            className={cn(
+                              'truncate',
+                              unread && 'font-semibold'
+                            )}
+                          >
+                            {label}
+                          </span>
+                        </Link>
+                      </SidebarMenuButton>
+                      <SidebarMenuBadge>
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            unread ? 'bg-info' : 'bg-green-500'
+                          )}
+                          aria-label={unread ? 'Unread messages' : 'Online'}
+                          role="img"
+                        />
+                      </SidebarMenuBadge>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup>
           <SidebarGroupLabel>Agents</SidebarGroupLabel>
           <SidebarGroupAction
@@ -387,6 +490,15 @@ export function ProjectsSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <SidebarNavUser
+          user={user}
+          isSignedIn={isSignedIn}
+          onSignIn={() => void openChats()}
+          onSignOut={() => {
+            signOut();
+            if (isChatsPath(location.pathname)) navigate(paths.chats());
+          }}
+        />
       </SidebarFooter>
 
       {/* The draggable edge: collapses the sidebar without hunting for a button. */}

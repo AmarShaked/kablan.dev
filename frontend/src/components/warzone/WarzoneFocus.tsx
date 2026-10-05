@@ -188,7 +188,8 @@ export function WarzoneFocus({
   }
 
   // Never-started: no conversation yet (eligible tasks almost always have a run).
-  if (!isWorkspaceLoading && !attempt) {
+  // A workspace without a session is the same — start failed before anything ran.
+  if (!isWorkspaceLoading && (!attempt || !attempt.session)) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-muted/25">
         <FocusChrome task={task} />

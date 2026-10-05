@@ -31,8 +31,10 @@ export const useConversationHistoryOld = ({
   onEntriesUpdated,
   onTokenUsage,
 }: UseConversationHistoryParams): UseConversationHistoryResult => {
-  const { executionProcessesVisible: executionProcessesRaw } =
-    useExecutionProcessesContext();
+  const {
+    executionProcessesVisible: executionProcessesRaw,
+    isLoading: processesLoading,
+  } = useExecutionProcessesContext();
   const executionProcesses = useRef<ExecutionProcess[]>(executionProcessesRaw);
   const displayedExecutionProcesses = useRef<ExecutionProcessStateStore>({});
   const loadedInitialEntries = useRef(false);
@@ -637,12 +639,18 @@ export const useConversationHistoryOld = ({
     let cancelled = false;
     const generation = streamGenerationRef.current;
     (async () => {
-      // Waiting for execution processes to load
-      if (
-        executionProcesses?.current.length === 0 ||
-        loadedInitialEntries.current
-      )
+      if (loadedInitialEntries.current) return;
+
+      // Still waiting for the session process snapshot.
+      if (processesLoading) return;
+
+      // Task exists but nothing has run yet (e.g. chat-created TODO that never started).
+      // Clear the loading overlay so the Next Action / empty state can show.
+      if (executionProcesses.current.length === 0) {
+        emitEntries(displayedExecutionProcesses.current, 'initial', false);
+        loadedInitialEntries.current = true;
         return;
+      }
 
       // Initial entries
       const allInitialEntries = await loadInitialEntries();
@@ -672,6 +680,7 @@ export const useConversationHistoryOld = ({
   }, [
     attempt.id,
     idListKey,
+    processesLoading,
     loadInitialEntries,
     loadRemainingEntriesInBatches,
     emitEntries,

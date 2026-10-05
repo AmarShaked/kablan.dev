@@ -7,6 +7,7 @@ use tower_http::validate_request::ValidateRequestHeaderLayer;
 use crate::{DeploymentImpl, middleware};
 
 pub mod approvals;
+pub mod chats;
 pub mod claude_auth;
 pub mod config;
 pub mod containers;
@@ -59,6 +60,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(terminal::router())
         .merge(usage::router())
         .merge(claude_auth::router())
+        .merge(chats::router(&deployment))
         .nest("/images", images::routes())
         .layer(ValidateRequestHeaderLayer::custom(
             middleware::validate_origin,

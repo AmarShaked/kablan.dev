@@ -1660,6 +1660,29 @@ export type LinearIssueListParams = {
   first?: number;
 };
 
+export type AgentTurnRequest = {
+  message_id: string;
+  agent: string;
+  project_id?: string;
+};
+
+export type AgentTurnResponse = {
+  accepted: boolean;
+};
+
+export const chatsApi = {
+  agentTurn: async (
+    chatId: string,
+    data: AgentTurnRequest
+  ): Promise<AgentTurnResponse> => {
+    const response = await makeRequest(`/api/chats/${chatId}/agent-turn`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<AgentTurnResponse>(response);
+  },
+};
+
 export const linearApi = {
   connect: async (apiKey: string): Promise<ConnectLinearResponse> => {
     const body: ConnectLinearBody = { api_key: apiKey };

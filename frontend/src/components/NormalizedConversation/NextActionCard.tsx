@@ -39,6 +39,7 @@ import {
   ClaudeAuthDialog,
   ClaudeLoginButton,
 } from '@/components/dialogs/auth/ClaudeAuthDialog';
+import { TaskNotStartedEmpty } from '@/components/panels/TaskNotStartedEmpty';
 import { claimClaudeLoginDialog } from '@/utils/claudeLoginError';
 
 type NextActionCardProps = {
@@ -175,6 +176,16 @@ export function NextActionCard({
     if (!id || !claimClaudeLoginDialog(id)) return;
     void ClaudeAuthDialog.show();
   }, [failed, needsClaudeLogin, claudeLoginProcessId, attemptId]);
+
+  // Nothing has run yet — show the same Start empty state as a never-started task, not a blank
+  // spacer. Chat-created workspaces that failed mid-start land here (session exists, 0 processes).
+  if (!failed && execution_processes === 0 && fileCount === 0) {
+    return (
+      <div className="px-2 py-8">
+        <TaskNotStartedEmpty taskId={task?.id} projectId={projectId} />
+      </div>
+    );
+  }
 
   // Necessary to prevent this component being displayed beyond fold within Virtualised List
   if (

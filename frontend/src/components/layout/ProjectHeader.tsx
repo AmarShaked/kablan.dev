@@ -42,6 +42,7 @@ import {
   parseIntegrationParam,
 } from '@/lib/routes/integrationRoutes';
 import { isProjectSettingsPath } from '@/lib/routes/projectRoutes';
+import { isChatsPath } from '@/lib/routes/chatRoutes';
 import { paths } from '@/lib/paths';
 import { cn } from '@/lib/utils';
 import { agentLabel } from '@/utils/agentLabels';
@@ -94,6 +95,7 @@ export function ProjectHeader() {
   );
   const isAllTasks = location.pathname === '/tasks';
   const isWarzone = location.pathname === paths.warzone();
+  const isChats = isChatsPath(location.pathname);
   // Settings is a destination of its own, not a page inside a project — its trail starts at
   // Settings and names the section, rather than claiming to sit under Projects.
   const settingsSection = isSettings
@@ -171,6 +173,8 @@ export function ProjectHeader() {
                 )
               ) : isAllTasks ? (
                 <BreadcrumbPage>Tasks</BreadcrumbPage>
+              ) : isChats ? (
+                <BreadcrumbPage>Chats</BreadcrumbPage>
               ) : projectId ? (
                 <BreadcrumbLink asChild>
                   <Link to="/local-projects">Projects</Link>

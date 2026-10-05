@@ -191,6 +191,9 @@ importers:
       lucide-react:
         specifier: ^0.539.0
         version: 0.539.0(react@18.3.1)
+      pocketbase:
+        specifier: 0.25.2
+        version: 0.25.2
       posthog-js:
         specifier: ^1.276.0
         version: 1.283.0
@@ -3654,6 +3657,9 @@ packages:
   pirates@4.0.7:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
+
+  pocketbase@0.25.2:
+    resolution: {integrity: sha512-ONZl1+qHJMnhR2uacBlBJ90lm7njtL/zy0606+1ROfK9hSL4LRBRc8r89rMcNRzPzRqCNyoFTh2Qg/lYXdEC1w==}
 
   point-in-polygon@1.1.0:
     resolution: {integrity: sha512-3ojrFwjnnw8Q9242TzgXuTD+eKiutbzyslcq1ydfu82Db2y+Ogbmyrkpv0Hgj31qwT3lbS9+QAAO/pIQM35XRw==}
@@ -7901,6 +7907,8 @@ snapshots:
   pify@2.3.0: {}
 
   pirates@4.0.7: {}
+
+  pocketbase@0.25.2: {}
 
   point-in-polygon@1.1.0: {}
 
