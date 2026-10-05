@@ -145,13 +145,32 @@ async fn run_agent_turn(
     let status_id = status.id;
 
     let mut tool_notes: Vec<String> = Vec::new();
+    let mut project_cwd: Option<PathBuf> = None;
     if let Some(pid) = preferred_project {
-        tool_notes.push(format!("Preferred project_id from client: {pid}"));
+        match load_pinned_project_context(&deployment, pid).await {
+            Some((notes, cwd)) => {
+                tool_notes.push(notes);
+                project_cwd = cwd;
+            }
+            None => {
+                tool_notes.push(format!(
+                    "Preferred project_id from client: {pid} (not found in Kablan)"
+                ));
+            }
+        }
     }
 
     // Up to a few tool rounds: ask the CLI (or fall back) then execute tools.
     for round in 0..5 {
-        let decision = decide_next_action(&agent, &user_message, &history, &tool_notes, round).await;
+        let decision = decide_next_action(
+            &agent,
+            &user_message,
+            &history,
+            &tool_notes,
+            project_cwd.as_ref(),
+            round,
+        )
+        .await;
 
         match decision {
             AgentDecision::Reply(text) => {
@@ -276,12 +295,13 @@ async fn decide_next_action(
     user_message: &str,
     history: &[crate::pocketbase::PbMessage],
     tool_notes: &[String],
+    project_cwd: Option<&PathBuf>,
     round: usize,
 ) -> AgentDecision {
     // Prefer a CLI-backed decision for Claude; otherwise use heuristics.
     if *agent == BaseCodingAgent::ClaudeCode {
         if let Ok(Some(decision)) =
-            ask_claude_for_decision(user_message, history, tool_notes).await
+            ask_claude_for_decision(user_message, history, tool_notes, project_cwd).await
         {
             return decision;
         }
@@ -294,6 +314,7 @@ async fn ask_claude_for_decision(
     user_message: &str,
     history: &[crate::pocketbase::PbMessage],
     tool_notes: &[String],
+    project_cwd: Option<&PathBuf>,
 ) -> anyhow::Result<Option<AgentDecision>> {
     let claude = resolve_executable_path("claude").await;
     let Some(claude) = claude else {
@@ -319,6 +340,14 @@ async fn ask_claude_for_decision(
         .join("\n");
 
     let tools = tool_notes.join("\n");
+    let cwd_note = project_cwd
+        .map(|p| {
+            format!(
+                "\nWorking directory for this turn: {}\nYou may inspect files/git there when answering.",
+                p.display()
+            )
+        })
+        .unwrap_or_default();
     let prompt = format!(
         r#"You are collaborating in a Kablan chat. Reply with EXACTLY one JSON object, no markdown.
 
@@ -328,10 +357,12 @@ Allowed shapes:
 {{"type":"create_and_start_task","project_id":"<uuid>","title":"...","description":"..."}}
 
 Rules:
-- Use list_projects when you need to pick a project and do not know ids/names yet.
-- Use create_and_start_task when the user wants work done in a known project.
-- Otherwise send a short helpful message.
+- Tool notes are authoritative Kablan facts (pinned project name, id, local repo paths, default branches). Use them to answer factual questions. Do not invent paths or claim you cannot see paths listed there.
+- When a project is pinned and the user asks for info (path, branch, repos, what project this is), reply with a short message using those facts.
+- Use list_projects only when no project is pinned/known and you need to pick one.
+- Use create_and_start_task when the user wants coding work done in a known project.
 - Do not invent project UUIDs; only use ids from tool notes or the user message.
+{cwd_note}
 
 Recent chat:
 {history_text}
@@ -352,6 +383,11 @@ Tool notes:
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    if let Some(dir) = project_cwd {
+        if dir.is_dir() {
+            cmd.current_dir(dir);
+        }
+    }
 
     let output = tokio::time::timeout(Duration::from_secs(90), cmd.output()).await??;
     if !output.status.success() {
@@ -407,6 +443,10 @@ async fn heuristic_decision(
     round: usize,
 ) -> AgentDecision {
     let lower = user_message.to_lowercase();
+    let pinned = tool_notes
+        .iter()
+        .find(|n| n.starts_with("Pinned project:"))
+        .cloned();
     let listed = tool_notes.iter().any(|n| n.starts_with("list_projects"));
     let looks_like_task = lower.contains("create")
         || lower.contains("start")
@@ -414,6 +454,30 @@ async fn heuristic_decision(
         || lower.contains("fix")
         || lower.contains("build")
         || lower.contains("implement");
+    let looks_like_info = lower.contains("path")
+        || lower.contains("repo")
+        || lower.contains("branch")
+        || lower.contains("where")
+        || lower.contains("which project")
+        || lower.contains("what is");
+
+    if let Some(notes) = pinned.as_ref() {
+        if looks_like_info && !looks_like_task {
+            return AgentDecision::Reply(format_pinned_project_reply(notes));
+        }
+        if looks_like_task {
+            if let Some(id) = extract_uuid(notes).or_else(|| extract_uuid(user_message)) {
+                return AgentDecision::CreateAndStart {
+                    project_id: id,
+                    title: title_from_message(user_message),
+                    description: Some(user_message.to_string()),
+                };
+            }
+        }
+        if !looks_like_task {
+            return AgentDecision::Reply(format_pinned_project_reply(notes));
+        }
+    }
 
     if !listed && round == 0 && (looks_like_task || !user_message.trim().is_empty()) {
         // First try listing so we can bind a project; if a UUID is already in the message, create.
@@ -431,13 +495,12 @@ async fn heuristic_decision(
     }
 
     if listed {
-        if let Some(id) = extract_uuid(user_message)
-            .or_else(|| {
-                tool_notes
-                    .iter()
-                    .find_map(|n| n.strip_prefix("resolved project_id=").and_then(|s| Uuid::parse_str(s).ok()))
+        if let Some(id) = extract_uuid(user_message).or_else(|| {
+            tool_notes.iter().find_map(|n| {
+                n.strip_prefix("resolved project_id=")
+                    .and_then(|s| Uuid::parse_str(s).ok())
             })
-        {
+        }) {
             return AgentDecision::CreateAndStart {
                 project_id: id,
                 title: title_from_message(user_message),
@@ -451,8 +514,79 @@ async fn heuristic_decision(
     }
 
     AgentDecision::Reply(
-        "I'm here. Ask me to create a task in a project, or say what you want done and I'll pick a project.".into(),
+        "I'm here. Pin a project with #, ask me to create a task, or say what you want done."
+            .into(),
     )
+}
+
+fn format_pinned_project_reply(notes: &str) -> String {
+    // notes already list name, id, and repo paths — return a readable answer.
+    notes
+        .lines()
+        .map(|line| {
+            if let Some(rest) = line.strip_prefix("Pinned project: ") {
+                format!("Pinned project: {rest}")
+            } else if let Some(rest) = line.strip_prefix("- ") {
+                // "- Name path=`…` default_branch=`…` repo_id=`…`"
+                if let (Some(path), Some(branch)) = (
+                    rest.split("path=`").nth(1).and_then(|s| s.split('`').next()),
+                    rest.split("default_branch=`")
+                        .nth(1)
+                        .and_then(|s| s.split('`').next()),
+                ) {
+                    let name = rest.split(" path=`").next().unwrap_or("repo");
+                    format!("• {name}: `{path}` (default branch `{branch}`)")
+                } else {
+                    format!("• {rest}")
+                }
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+async fn load_pinned_project_context(
+    deployment: &DeploymentImpl,
+    project_id: Uuid,
+) -> Option<(String, Option<PathBuf>)> {
+    let pool = &deployment.db().pool;
+    let project = Project::find_by_id(pool, project_id).await.ok()??;
+    let repos = ProjectRepo::find_repos_for_project(pool, project_id)
+        .await
+        .ok()?;
+
+    let mut lines = vec![format!(
+        "Pinned project: {} (`{}`)",
+        project.name, project.id
+    )];
+    if repos.is_empty() {
+        lines.push("Repositories: (none linked)".into());
+    } else {
+        lines.push("Repositories:".into());
+        for repo in &repos {
+            let branch = repo
+                .default_target_branch
+                .as_deref()
+                .unwrap_or("main");
+            let label = if repo.display_name.trim().is_empty() {
+                repo.name.as_str()
+            } else {
+                repo.display_name.as_str()
+            };
+            lines.push(format!(
+                "- {} path=`{}` default_branch=`{}` repo_id=`{}`",
+                label,
+                repo.path.display(),
+                branch,
+                repo.id
+            ));
+        }
+    }
+
+    let cwd = repos.first().map(|r| r.path.clone());
+    Some((lines.join("\n"), cwd))
 }
 
 fn extract_uuid(s: &str) -> Option<Uuid> {
@@ -683,5 +817,18 @@ mod tests {
             BaseCodingAgent::from_str_loose("claude-code").unwrap(),
             BaseCodingAgent::ClaudeCode
         );
+    }
+
+    #[tokio::test]
+    async fn heuristic_answers_from_pinned_project() {
+        let notes = "Pinned project: Sweet UI (`11111111-1111-1111-1111-111111111111`)\nRepositories:\n- app path=`/Users/me/sweet` default_branch=`main` repo_id=`22222222-2222-2222-2222-222222222222`";
+        let d = heuristic_decision("what is this repo path?", &[notes.into()], 0).await;
+        match d {
+            AgentDecision::Reply(body) => {
+                assert!(body.contains("/Users/me/sweet"), "{body}");
+                assert!(body.contains("Sweet UI"), "{body}");
+            }
+            other => panic!("expected Reply, got {other:?}"),
+        }
     }
 }

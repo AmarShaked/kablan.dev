@@ -56,6 +56,7 @@ Migrations in `pb_migrations/` create:
 - `messages` — user or agent authors, optional `task_id` / `task_project_id`
 - Service user may list messages and create/update/delete rows with `author_agent` set
 - Authenticated users may list other users (email lookup for starting a DM)
+- `users.last_seen` — client heartbeat for online status in the Chats sidebar
 
 Phase 2: Chats **+** opens an email dialog. If that address already has a Chats
 account, a 1:1 DM is created or reopened. There is no email invite — they must

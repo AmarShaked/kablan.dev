@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { BaseCodingAgent } from 'shared/types';
 import {
   extractAgentMention,
+  extractProjectMention,
   parseMentionSegments,
   stripMentionToken,
 } from './chatMentions';
 
 describe('chatMentions', () => {
   const agents = [BaseCodingAgent.CLAUDE_CODE, BaseCodingAgent.CURSOR_AGENT];
+  const projects = [
+    { id: 'p1', name: 'Sweet UI' },
+    { id: 'p2', name: 'kablan-app' },
+  ];
 
   it('extracts @Claude mention', () => {
     expect(extractAgentMention('@Claude fix the login bug', agents)).toBe(
@@ -49,6 +54,30 @@ describe('chatMentions', () => {
         agent: BaseCodingAgent.CLAUDE_CODE,
       },
       { type: 'text', value: ' you are here?' },
+    ]);
+  });
+
+  it('extracts #project mention', () => {
+    expect(extractProjectMention('look at #Sweet UI please', projects)).toEqual(
+      projects[0]
+    );
+  });
+
+  it('parses #project segments', () => {
+    const segs = parseMentionSegments(
+      '@Claude in #Sweet UI',
+      agents,
+      [],
+      projects
+    );
+    expect(segs).toEqual([
+      {
+        type: 'mention',
+        value: '@Claude',
+        agent: BaseCodingAgent.CLAUDE_CODE,
+      },
+      { type: 'text', value: ' in ' },
+      { type: 'project', value: '#Sweet UI', projectId: 'p1' },
     ]);
   });
 });

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -61,10 +62,15 @@ import { InviteChatDialog } from '@/components/dialogs/chats/InviteChatDialog';
 import { ChatUserAvatar } from '@/components/chats/ChatUserAvatar';
 import { SidebarNavUser } from '@/components/layout/SidebarNavUser';
 import { useChats } from '@/hooks/useChats';
+import { useChatPresence } from '@/hooks/useChatPresence';
 import { usePocketBaseAuth } from '@/hooks/usePocketBaseAuth';
 import { paths } from '@/lib/paths';
 import { isChatsPath } from '@/lib/routes/chatRoutes';
 import { ensureSelfChat } from '@/lib/pocketbase';
+import {
+  encodeProjectDrag,
+  KABLAN_PROJECT_DRAG_TYPE,
+} from '@/lib/chatPinnedProject';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -95,6 +101,16 @@ export function ProjectsSidebar() {
   );
   const activeChatId = location.pathname.match(/^\/chats\/([^/]+)/)?.[1];
   const { chats, refresh: refreshChats, isUnread } = useChats(activeChatId);
+  const presenceUserIds = useMemo(
+    () =>
+      chats
+        .map((chat) =>
+          chat.kind === 'self' ? user?.id : chat.peer?.id
+        )
+        .filter((id): id is string => !!id),
+    [chats, user?.id]
+  );
+  const { isOnline } = useChatPresence(presenceUserIds);
 
   const openChats = async () => {
     if (!isSignedIn) {
@@ -297,7 +313,21 @@ export function ProjectsSidebar() {
                           : project.name
                       }
                     >
-                      <Link to={`/local-projects/${project.id}/tasks`}>
+                      <Link
+                        to={`/local-projects/${project.id}/tasks`}
+                        draggable
+                        title="Drag into a chat to pin this project"
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            KABLAN_PROJECT_DRAG_TYPE,
+                            encodeProjectDrag({
+                              id: project.id,
+                              name: project.name,
+                            })
+                          );
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                      >
                         <Icon />
                         <span>{project.name}</span>
                       </Link>
@@ -342,6 +372,9 @@ export function ProjectsSidebar() {
                   const isActive = activeChatId === chat.id;
                   const unread = isUnread(chat.id);
                   const label = chat.label;
+                  const presenceId =
+                    chat.kind === 'self' ? user?.id : chat.peer?.id;
+                  const online = isOnline(presenceId);
                   return (
                     <SidebarMenuItem key={chat.id}>
                       <SidebarMenuButton
@@ -362,14 +395,19 @@ export function ProjectsSidebar() {
                         </Link>
                       </SidebarMenuButton>
                       <SidebarMenuBadge>
-                        <span
-                          className={cn(
-                            'h-2 w-2 rounded-full',
-                            unread ? 'bg-info' : 'bg-green-500'
-                          )}
-                          aria-label={unread ? 'Unread messages' : 'Online'}
-                          role="img"
-                        />
+                        {unread ? (
+                          <span
+                            className="h-2 w-2 rounded-full bg-info"
+                            aria-label="Unread messages"
+                            role="img"
+                          />
+                        ) : online ? (
+                          <span
+                            className="h-2 w-2 rounded-full bg-green-500"
+                            aria-label="Online"
+                            role="img"
+                          />
+                        ) : null}
                       </SidebarMenuBadge>
                     </SidebarMenuItem>
                   );
