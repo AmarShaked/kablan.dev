@@ -40,7 +40,15 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
+import { SidebarSectionMenu } from '@/components/layout/SidebarSectionMenu';
+import { useSidebarSectionPrefs } from '@/hooks/useSidebarSectionPrefs';
 import { projectKeys } from '@/lib/queryKeys';
+import {
+  arrangeIntegrations,
+  arrangeProjects,
+  INTEGRATIONS_SECTION_KEY,
+  PROJECTS_SECTION_KEY,
+} from '@/lib/sidebarSection';
 import { AgentIcon } from '@/components/agents/AgentIcon';
 import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
 import {
@@ -94,6 +102,14 @@ export function ProjectsSidebar() {
   const { configuredAgents, isConnected } = useConfiguredAgents();
   const { enabledIntegrations, isConnected: isIntegrationConnected } =
     useConfiguredIntegrations();
+  const projectList = useSidebarSectionPrefs(PROJECTS_SECTION_KEY, [
+    'unreads',
+    'all',
+  ]);
+  const integrationList = useSidebarSectionPrefs(INTEGRATIONS_SECTION_KEY, [
+    'connected',
+    'all',
+  ]);
   const { isSignedIn, pb, signOut, user } = usePocketBaseAuth();
   const activeAgent = parseAgentParam(location.pathname.split('/')[2]);
   const activeIntegration = parseIntegrationParam(
@@ -104,9 +120,7 @@ export function ProjectsSidebar() {
   const presenceUserIds = useMemo(
     () =>
       chats
-        .map((chat) =>
-          chat.kind === 'self' ? user?.id : chat.peer?.id
-        )
+        .map((chat) => (chat.kind === 'self' ? user?.id : chat.peer?.id))
         .filter((id): id is string => !!id),
     [chats, user?.id]
   );
@@ -153,6 +167,22 @@ export function ProjectsSidebar() {
     // pushes turns at this query — so it asks, at the pace an agent finishes work.
     refetchInterval: 30_000,
   });
+
+  const visibleProjects = arrangeProjects(
+    projects,
+    projectList.sort,
+    projectList.filter
+  );
+  const visibleIntegrations = arrangeIntegrations(
+    enabledIntegrations.map((provider, order) => ({
+      provider,
+      name: integrationLabel(provider),
+      connected: isIntegrationConnected(provider),
+      order,
+    })),
+    integrationList.sort,
+    integrationList.filter
+  );
 
   const activeId = location.pathname.match(/^\/local-projects\/([^/]+)/)?.[1];
   const isArchiveView =
@@ -287,18 +317,33 @@ export function ProjectsSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Projects</SidebarGroupLabel>
-          <SidebarGroupAction
-            title="New project"
-            onClick={() => ProjectFormDialog.show({}).catch(() => {})}
-          >
-            <Plus />
-            <span className="sr-only">New project</span>
-          </SidebarGroupAction>
+          <div className="group/header">
+            <SidebarGroupLabel className="pr-16">Projects</SidebarGroupLabel>
+            <SidebarSectionMenu
+              label="Project options"
+              sort={projectList.sort}
+              onSortChange={projectList.setSort}
+              filter={projectList.filter}
+              onFilterChange={projectList.setFilter}
+              filterOption={{ id: 'unreads', label: 'Unreads' }}
+            />
+            <SidebarGroupAction
+              title="New project"
+              onClick={() => ProjectFormDialog.show({}).catch(() => {})}
+            >
+              <Plus />
+              <span className="sr-only">New project</span>
+            </SidebarGroupAction>
+          </div>
 
           <SidebarGroupContent>
             <SidebarMenu>
-              {projects.map((project) => {
+              {projects.length > 0 && visibleProjects.length === 0 && (
+                <li className="px-2 py-1.5 text-[13px] text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                  No unread projects
+                </li>
+              )}
+              {visibleProjects.map((project) => {
                 const Icon = projectIcon(project.icon);
                 const isActive = project.id === activeId;
 
@@ -461,41 +506,57 @@ export function ProjectsSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Integrations</SidebarGroupLabel>
-          <SidebarGroupAction
-            title="Add integration"
-            onClick={() => navigate(ADD_INTEGRATION_PATH)}
-          >
-            <Plus />
-            <span className="sr-only">Add integration</span>
-          </SidebarGroupAction>
+          <div className="group/header">
+            <SidebarGroupLabel className="pr-16">
+              Integrations
+            </SidebarGroupLabel>
+            <SidebarSectionMenu
+              label="Integration options"
+              sort={integrationList.sort}
+              onSortChange={integrationList.setSort}
+              filter={integrationList.filter}
+              onFilterChange={integrationList.setFilter}
+              filterOption={{ id: 'connected', label: 'Connected' }}
+            />
+            <SidebarGroupAction
+              title="Add integration"
+              onClick={() => navigate(ADD_INTEGRATION_PATH)}
+            >
+              <Plus />
+              <span className="sr-only">Add integration</span>
+            </SidebarGroupAction>
+          </div>
 
           <SidebarGroupContent>
             <SidebarMenu>
-              {enabledIntegrations.map((provider) => (
-                <SidebarMenuItem key={provider}>
+              {enabledIntegrations.length > 0 &&
+                visibleIntegrations.length === 0 && (
+                  <li className="px-2 py-1.5 text-[13px] text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                    Nothing connected
+                  </li>
+                )}
+              {visibleIntegrations.map((integration) => (
+                <SidebarMenuItem key={integration.provider}>
                   <SidebarMenuButton
                     asChild
-                    isActive={activeIntegration === provider}
-                    tooltip={integrationLabel(provider)}
+                    isActive={activeIntegration === integration.provider}
+                    tooltip={integration.name}
                   >
-                    <Link to={buildIntegrationPath(provider)}>
-                      <IntegrationIcon provider={provider} />
-                      <span>{integrationLabel(provider)}</span>
+                    <Link to={buildIntegrationPath(integration.provider)}>
+                      <IntegrationIcon provider={integration.provider} />
+                      <span>{integration.name}</span>
                     </Link>
                   </SidebarMenuButton>
                   <SidebarMenuBadge>
                     <span
                       className={cn(
                         'h-2 w-2 rounded-full',
-                        isIntegrationConnected(provider)
+                        integration.connected
                           ? 'bg-green-500'
                           : 'bg-muted-foreground/40'
                       )}
                       aria-label={
-                        isIntegrationConnected(provider)
-                          ? 'Connected'
-                          : 'Not connected'
+                        integration.connected ? 'Connected' : 'Not connected'
                       }
                       role="img"
                     />
