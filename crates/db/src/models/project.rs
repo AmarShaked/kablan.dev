@@ -56,6 +56,11 @@ pub struct ProjectWithStats {
     /// An agent here has finished saying something nobody has read. What the sidebar shows
     /// instead of a number: a project is worth opening when it is waiting on you.
     pub has_unseen_turns: bool,
+    /// The latest thing that happened in this project: a task, a chat turn, a workspace,
+    /// or an edit to the project itself. `updated_at` only moves when the project row is
+    /// edited, so creating a task used to leave the project where the sidebar had put it.
+    #[ts(type = "Date")]
+    pub last_activity_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -134,7 +139,29 @@ impl Project {
                         WHERE t.project_id = p.id
                           AND t.archived_at IS NULL
                           AND cat.seen = 0)
-                        as "has_unseen_turns!: bool"
+                        as "has_unseen_turns!: bool",
+                      -- Recency is the latest work, not the last time the project row was
+                      -- renamed. A new task, a chat turn, or a running workspace all count.
+                      (SELECT MAX(ts) FROM (
+                          SELECT p.updated_at AS ts
+                          UNION ALL
+                          SELECT t.created_at FROM tasks t WHERE t.project_id = p.id
+                          UNION ALL
+                          SELECT t.updated_at FROM tasks t WHERE t.project_id = p.id
+                          UNION ALL
+                          SELECT w.updated_at
+                            FROM workspaces w
+                            JOIN tasks t ON t.id = w.task_id
+                           WHERE t.project_id = p.id
+                          UNION ALL
+                          SELECT cat.created_at
+                            FROM coding_agent_turns cat
+                            JOIN execution_processes ep ON ep.id = cat.execution_process_id
+                            JOIN sessions s ON s.id = ep.session_id
+                            JOIN workspaces w ON w.id = s.workspace_id
+                            JOIN tasks t ON t.id = w.task_id
+                           WHERE t.project_id = p.id
+                      )) as "last_activity_at!: DateTime<Utc>"
                FROM projects p
                ORDER BY p.created_at DESC"#
         )
@@ -156,6 +183,7 @@ impl Project {
                 task_count: r.task_count,
                 running_count: r.running_count,
                 has_unseen_turns: r.has_unseen_turns,
+                last_activity_at: r.last_activity_at,
             })
             .collect())
     }

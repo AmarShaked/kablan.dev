@@ -30,6 +30,8 @@ type ProjectRow = {
   name: string;
   created_at: Date | string;
   updated_at: Date | string;
+  /** Latest task, chat turn, or workspace. Falls back to the project edit time. */
+  last_activity_at?: Date | string | null;
   has_unseen_turns: boolean;
   running_count: bigint | number;
 };
@@ -50,13 +52,23 @@ function byName(a: { name: string }, b: { name: string }): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
 
-/** Newest edit first. Created time breaks a tie, then the name. */
+/**
+ * Newest work first. A task or a message in chat moves the project; editing the
+ * project row does too. Created time breaks a tie, then the name.
+ */
 function byProjectRecency(a: ProjectRow, b: ProjectRow): number {
   return (
-    timestamp(b.updated_at) - timestamp(a.updated_at) ||
+    projectRecencyTime(b) - projectRecencyTime(a) ||
     timestamp(b.created_at) - timestamp(a.created_at) ||
     byName(a, b)
   );
+}
+
+function projectRecencyTime(project: ProjectRow): number {
+  const activity = project.last_activity_at
+    ? timestamp(project.last_activity_at)
+    : 0;
+  return Math.max(activity, timestamp(project.updated_at));
 }
 
 /**

@@ -43,6 +43,17 @@ describe('arrangeProjects', () => {
     ).toEqual(['Alpha', 'zeta', 'middle']);
   });
 
+  it('treats a new task or chat as more recent than the project row', () => {
+    const worked = projects.map((project) =>
+      project.name === 'middle'
+        ? { ...project, last_activity_at: '2024-12-01T00:00:00.000Z' }
+        : project
+    );
+    expect(
+      arrangeProjects(worked, 'recency', 'all').map((project) => project.name)
+    ).toEqual(['middle', 'Alpha', 'zeta']);
+  });
+
   it('ranks unread ahead of a running agent, then everything else', () => {
     expect(
       arrangeProjects(projects, 'priority', 'all').map(

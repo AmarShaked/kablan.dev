@@ -31,7 +31,13 @@ running_count: bigint,
  * An agent here has finished saying something nobody has read. What the sidebar shows
  * instead of a number: a project is worth opening when it is waiting on you.
  */
-has_unseen_turns: boolean, id: string, name: string, default_agent_working_dir: string | null, 
+has_unseen_turns: boolean, 
+/**
+ * The latest thing that happened in this project: a task, a chat turn, a workspace,
+ * or an edit to the project itself. `updated_at` only moves when the project row is
+ * edited, so creating a task used to leave the project where the sidebar had put it.
+ */
+last_activity_at: Date, id: string, name: string, default_agent_working_dir: string | null, 
 /**
  * Lucide icon key chosen by the user (see the frontend's icon picker). None = default glyph.
  */
@@ -629,11 +635,19 @@ export type LinearViewer = { id: string, name: string, email: string | null, };
 
 export type LinearPageInfo = { has_next_page: boolean, end_cursor: string | null, };
 
-export type LinearIssuesResponse = { viewer: LinearViewer, issues: Array<LinearIssue>, page_info: LinearPageInfo, total_count: number, };
+export type LinearIssuesResponse = { viewer: LinearViewer, issues: Array<LinearIssue>, page_info: LinearPageInfo, 
+/**
+ * Total matching issues for the current filter (from Linear `totalCount`).
+ */
+total_count: number, };
 
 export type LinearIdName = { id: string, name: string, };
 
-export type LinearWorkflowState = { id: string, name: string, type_name: string, color: string, team_id: string | null, };
+export type LinearWorkflowState = { id: string, name: string, 
+/**
+ * Linear workflow type: triage | backlog | unstarted | started | completed | canceled
+ */
+type_name: string, color: string, team_id: string | null, };
 
 export type LinearMetaResponse = { viewer: LinearViewer, teams: Array<LinearIdName>, users: Array<LinearIdName>, states: Array<LinearWorkflowState>, };
 
