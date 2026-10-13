@@ -83,6 +83,10 @@ import type {
   TaskStatus,
 } from 'shared/types';
 import { taskKeys } from '@/lib/queryKeys';
+import {
+  PageBoundary,
+  RouteRecovery,
+} from '@/components/routing/RouteRecovery';
 
 type Task = TaskWithAttemptStatus;
 
@@ -94,8 +98,16 @@ const TASK_STATUSES = [
   'cancelled',
 ] as const;
 
-const normalizeStatus = (status: string): TaskStatus =>
-  status.toLowerCase() as TaskStatus;
+// A status the client does not know (an old row, a newer server) must not throw: indexing
+// the column map and calling push is what blanked the whole window, sidebar included.
+const normalizeStatus = (
+  status: string | null | undefined
+): TaskStatus | null => {
+  const key = status?.toLowerCase();
+  return (TASK_STATUSES as readonly string[]).includes(key ?? '')
+    ? (key as TaskStatus)
+    : null;
+};
 
 function GitErrorBanner() {
   const { error: gitError } = useGitOperationsError();
@@ -130,6 +142,7 @@ export function ProjectTasks() {
 
   const {
     projectId,
+    project,
     isLoading: projectLoading,
     error: projectError,
   } = useProject();
@@ -310,6 +323,15 @@ export function ProjectTasks() {
     [setSearchParam]
   );
 
+  const clearFiltersAndSearch = useCallback(() => {
+    handleFiltersChange({
+      status: ALL_STATUSES,
+      archive: 'active',
+      needsMe: false,
+    });
+    clearSearch();
+  }, [handleFiltersChange, clearSearch]);
+
   // The stream only carries active tasks. Asking for archived ones is a different question, so
   // it is a different request — and archived work does not change under you, so a snapshot is
   // the honest thing to show.
@@ -349,6 +371,7 @@ export function ProjectTasks() {
 
     source.forEach((task: Task) => {
       const statusKey = normalizeStatus(task.status);
+      if (!statusKey) return;
 
       if (!matchesSearch(task.title, task.description)) return;
       if (!matchesStatusFilter(statusKey, filters.status)) return;
@@ -384,7 +407,8 @@ export function ProjectTasks() {
     const source =
       filters.archive === 'active' ? tasks : (archivedTasks ?? tasks);
     source.forEach((task: Task) => {
-      counts[normalizeStatus(task.status)] += 1;
+      const statusKey = normalizeStatus(task.status);
+      if (statusKey) counts[statusKey] += 1;
     });
     return counts;
   }, [tasks, archivedTasks, filters.archive]);
@@ -579,7 +603,7 @@ export function ProjectTasks() {
   const selectNextTask = useCallback(() => {
     if (selectedTask) {
       const statusKey = normalizeStatus(selectedTask.status);
-      const tasksInStatus = visibleTasksByStatus[statusKey] || [];
+      const tasksInStatus = statusKey ? visibleTasksByStatus[statusKey] : [];
       const currentIndex = tasksInStatus.findIndex(
         (task) => task.id === selectedTask.id
       );
@@ -600,7 +624,7 @@ export function ProjectTasks() {
   const selectPreviousTask = useCallback(() => {
     if (selectedTask) {
       const statusKey = normalizeStatus(selectedTask.status);
-      const tasksInStatus = visibleTasksByStatus[statusKey] || [];
+      const tasksInStatus = statusKey ? visibleTasksByStatus[statusKey] : [];
       const currentIndex = tasksInStatus.findIndex(
         (task) => task.id === selectedTask.id
       );
@@ -720,6 +744,19 @@ export function ProjectTasks() {
 
   const isInitialTasksLoad = isLoading && tasks.length === 0;
 
+  // The id is in the address, but it is not one of this machine's projects. Rendering the
+  // board anyway left an empty column and, when the stream failed, a blank page — with the
+  // task list gone, so there was nothing to switch to.
+  if (!projectLoading && projectId && !project && !projectError) {
+    return (
+      <RouteRecovery
+        title="This project doesn't exist"
+        detail="It may have been removed. Choose another project in the sidebar, or open tasks."
+        includeProjectTasks={false}
+      />
+    );
+  }
+
   if (projectError) {
     return (
       <div className="p-4">
@@ -751,15 +788,6 @@ export function ProjectTasks() {
       ? `${truncated.substring(0, lastSpace)}...`
       : `${truncated}...`;
   };
-
-  const clearFiltersAndSearch = useCallback(() => {
-    handleFiltersChange({
-      status: ALL_STATUSES,
-      archive: 'active',
-      needsMe: false,
-    });
-    clearSearch();
-  }, [handleFiltersChange, clearSearch]);
 
   // With a task open the left pane becomes the task list: the board's columns are unreadable at
   // sidebar width, and losing sight of the other tasks was the point of the redesign. The centre
@@ -939,8 +967,8 @@ export function ProjectTasks() {
           >
             <TasksLayout
               kanban={kanbanContent}
-              attempt={attemptContent}
-              aux={auxContent}
+              attempt={<PageBoundary>{attemptContent}</PageBoundary>}
+              aux={<PageBoundary>{auxContent}</PageBoundary>}
               isPanelOpen={isPanelOpen}
               mode={mode}
               isMobile={isMobile}

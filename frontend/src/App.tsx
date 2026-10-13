@@ -7,6 +7,7 @@ import { ProjectTasks } from '@/pages/ProjectTasks';
 import { FullTaskLogsPage } from '@/pages/FullTaskLogs';
 import { LegacyAttemptRedirect } from '@/components/routing/LegacyAttemptRedirect';
 import { LegacyProjectsPrefixRedirect } from '@/components/routing/LegacyProjectsPrefixRedirect';
+import { UnknownRoute } from '@/components/routing/RouteRecovery';
 import { Migration } from '@/pages/Migration';
 import { NormalLayout } from '@/components/layout/NormalLayout';
 import { useAuth } from '@/hooks';
@@ -179,6 +180,10 @@ function AppContent() {
                   path="usage"
                   element={<Navigate to={SETTINGS_USAGE_REDIRECT} replace />}
                 />
+                <Route
+                  path="*"
+                  element={<Navigate to="/settings/general" replace />}
+                />
               </Route>
               <Route
                 path="/mcp-servers"
@@ -213,11 +218,8 @@ function AppContent() {
                 element={<LegacyProjectsPrefixRedirect />}
               />
               {/* Without this, an unmatched route renders nothing and the app looks crashed.
-                  Any URL we cannot place lands on the projects list instead of a blank page. */}
-              <Route
-                path="*"
-                element={<Navigate to="/local-projects" replace />}
-              />
+                  The recovery page stays in this layout, so the sidebar can still change project. */}
+              <Route path="*" element={<UnknownRoute />} />
             </Route>
           </Routes>
         </SearchProvider>

@@ -3,12 +3,14 @@ import { render, screen } from '@testing-library/react';
 import {
   MemoryRouter,
   Navigate,
+  Outlet,
   Route,
   Routes,
   useLocation,
 } from 'react-router-dom';
 import { LegacyAttemptRedirect } from './LegacyAttemptRedirect';
 import { LegacyProjectsPrefixRedirect } from './LegacyProjectsPrefixRedirect';
+import { UnknownRoute } from './RouteRecovery';
 import { SettingsProjectsRedirect } from './SettingsProjectsRedirect';
 import { SettingsReposRedirect } from './SettingsReposRedirect';
 
@@ -49,10 +51,7 @@ function App() {
       <Route path="/agents" element={<Landed />} />
       <Route path="/agents/new" element={<Landed />} />
       <Route path="/agents/:agent" element={<Landed />} />
-      <Route
-        path="/local-projects/:projectId/settings"
-        element={<Landed />}
-      />
+      <Route path="/local-projects/:projectId/settings" element={<Landed />} />
       <Route
         path="/settings/agents"
         element={<Navigate to="/agents" replace />}
@@ -61,12 +60,9 @@ function App() {
         path="/settings/usage"
         element={<Navigate to="/agents/CLAUDE_CODE" replace />}
       />
-      <Route
-        path="/settings/projects"
-        element={<SettingsProjectsRedirect />}
-      />
+      <Route path="/settings/projects" element={<SettingsProjectsRedirect />} />
       <Route path="/settings/repos" element={<SettingsReposRedirect />} />
-      <Route path="*" element={<Navigate to="/local-projects" replace />} />
+      <Route path="*" element={<UnknownRoute />} />
     </Routes>
   );
 }
@@ -125,8 +121,68 @@ describe('the /projects prefix', () => {
 });
 
 describe('the catch-all', () => {
-  it('lands an unknown URL on the projects list rather than rendering nothing', () => {
-    expect(landOn('/nonsense/path')).toBe('/local-projects');
+  it('keeps an unknown URL on a page you can leave for tasks or projects', () => {
+    render(
+      <MemoryRouter initialEntries={['/nonsense/path']}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(
+      screen.getByRole('heading', { name: "This page doesn't exist" })
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Tasks' })).toHaveAttribute(
+      'href',
+      '/tasks'
+    );
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/local-projects'
+    );
+  });
+
+  it('offers that project’s tasks when the address started there', () => {
+    render(
+      <MemoryRouter initialEntries={[`/local-projects/${P}/tasks/${T}/nope`]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(
+      screen.getByRole('link', { name: "This project's tasks" })
+    ).toHaveAttribute('href', `/local-projects/${P}/tasks`);
+  });
+});
+
+describe('unknown settings sections', () => {
+  function SettingsApp() {
+    return (
+      <Routes>
+        <Route path="/settings/*" element={<Outlet />}>
+          <Route path="general" element={<Landed />} />
+          <Route
+            path="*"
+            element={<Navigate to="/settings/general" replace />}
+          />
+        </Route>
+      </Routes>
+    );
+  }
+
+  it('still opens General', () => {
+    render(
+      <MemoryRouter initialEntries={['/settings/general']}>
+        <SettingsApp />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('landed').textContent).toBe('/settings/general');
+  });
+
+  it('sends an unknown settings section to General rather than a blank outlet', () => {
+    render(
+      <MemoryRouter initialEntries={['/settings/nope']}>
+        <SettingsApp />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('landed').textContent).toBe('/settings/general');
   });
 });
 

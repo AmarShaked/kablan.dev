@@ -10,6 +10,7 @@ import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { ReviewProvider } from '@/contexts/ReviewProvider';
 import { ClickedElementsProvider } from '@/contexts/ClickedElementsProvider';
+import { RouteRecovery } from '@/components/routing/RouteRecovery';
 
 export function FullTaskLogsPage() {
   const { projectId = '', taskId = '' } = useParams<{
@@ -18,8 +19,23 @@ export function FullTaskLogsPage() {
   }>();
 
   const { data: workspace } = useTaskWorkspace(taskId);
-  const { tasksById } = useProjectTasks(projectId);
+  const { tasksById, isLoading: tasksLoading } = useProjectTasks(projectId);
   const task = taskId ? (tasksById[taskId] ?? null) : null;
+
+  // This route sits outside the app shell (the VS Code logs view). A missing task used to
+  // spin on "Loading…" with no link out, so you could not open another task or project.
+  if (!tasksLoading && taskId && !task) {
+    return (
+      <AppWithStyleOverride>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <RouteRecovery
+            title="This task doesn't exist"
+            detail="It may have been deleted. Open the project's tasks, or pick another project."
+          />
+        </div>
+      </AppWithStyleOverride>
+    );
+  }
 
   const body = (
     <TaskRunPanel workspace={workspace ?? undefined} task={task}>

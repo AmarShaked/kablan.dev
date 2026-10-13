@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { ProjectHeader } from '@/components/layout/ProjectHeader';
 import { ProjectsSidebar } from '@/components/layout/ProjectsSidebar';
 import { RightRail } from '@/components/layout/RightRail';
+import { PageBoundary } from '@/components/routing/RouteRecovery';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
 export function NormalLayout() {
@@ -18,8 +19,12 @@ export function NormalLayout() {
           tailwind-merge disabled and would otherwise keep both this and the variant's `m-2`. */}
       <SidebarInset className="min-h-0 min-w-0 overflow-hidden !mr-0">
         <ProjectHeader />
+        {/* A failure in the page stays in this column. The sidebar and header stay mounted,
+            so an unknown address or a broken task does not take away the way out. */}
         <div className="min-h-0 flex-1 overflow-auto">
-          <Outlet />
+          <PageBoundary>
+            <Outlet />
+          </PageBoundary>
         </div>
       </SidebarInset>
       {/* Outside the inset, so it runs the full height of the window like the sidebar opposite
