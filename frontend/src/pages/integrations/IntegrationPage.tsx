@@ -6,7 +6,7 @@ import {
   useDefaultLayout,
   type PanelSize,
 } from 'react-resizable-panels';
-import { ArrowUpRight, Loader2, Search, X } from 'lucide-react';
+import { ArrowUpRight, Loader2, RefreshCw, Search, X } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/dialogs';
 import {
@@ -233,6 +233,8 @@ function LinearInbox() {
   const { tasks } = useAllTasks();
   const metaQuery = useLinearMeta(true);
   const issuesQuery = useLinearIssuesInfinite(filters, true);
+  const invalidateLinear = useInvalidateLinearQueries();
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -324,6 +326,16 @@ function LinearInbox() {
     setIsInboxCollapsed(size.asPercentage === COLLAPSED_SIZE);
   };
 
+  const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      await invalidateLinear();
+    } finally {
+      setReloading(false);
+    }
+  };
+
   return (
     <Group
       orientation="horizontal"
@@ -352,6 +364,18 @@ function LinearInbox() {
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {assigneeFilterLabel(filters.assignee, users)}
             </span>
+            <button
+              type="button"
+              aria-label="Reload"
+              title="Reload"
+              disabled={reloading}
+              onClick={() => void handleReload()}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn('h-3.5 w-3.5', reloading && 'animate-spin')}
+              />
+            </button>
             <LinearFilterMenu
               value={filters}
               onChange={setFilters}

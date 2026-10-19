@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { IntegrationProvider } from 'shared/types';
 import { IntegrationPage } from './IntegrationPage';
 
-const { isConnected } = vi.hoisted(() => ({
+const { isConnected, invalidateLinear } = vi.hoisted(() => ({
   isConnected: vi.fn(() => false),
+  invalidateLinear: vi.fn(async () => {}),
 }));
 
 vi.mock('@/components/ThemeProvider', () => ({
@@ -21,7 +22,7 @@ vi.mock('@/hooks/useAllTasks', () => ({
 }));
 
 vi.mock('@/hooks/useLinearIssues', () => ({
-  useInvalidateLinearQueries: () => vi.fn(),
+  useInvalidateLinearQueries: () => invalidateLinear,
   useLinearIssuesInfinite: () => ({
     data: { issues: [], totalCount: 0 },
     isLoading: false,
@@ -53,6 +54,7 @@ vi.mock('@/hooks/useConfiguredIntegrations', () => ({
 
 beforeEach(() => {
   isConnected.mockReturnValue(false);
+  invalidateLinear.mockClear();
   class FakeObserver {
     observe() {}
     disconnect() {}
@@ -102,5 +104,16 @@ describe('Linear inbox layout', () => {
     expect(
       screen.getByRole('separator', { name: 'Resize panels' })
     ).toBeInTheDocument();
+  });
+
+  it('reloads Linear issues from the inbox header', async () => {
+    isConnected.mockReturnValue(true);
+    renderAt('/integrations/LINEAR');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    });
+
+    expect(invalidateLinear).toHaveBeenCalledTimes(1);
   });
 });
