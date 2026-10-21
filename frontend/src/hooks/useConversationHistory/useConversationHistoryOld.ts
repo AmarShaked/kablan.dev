@@ -274,10 +274,9 @@ export const useConversationHistoryOld = ({
 
               const hasClaudeLoginError = filteredEntries.some((entry) => {
                 if (entry.type !== 'NORMALIZED_ENTRY') return false;
-                return (
-                  entry.content.entry_type.type === 'error_message' &&
-                  isClaudeLoginError(entry.content.content)
-                );
+                // The CLI prints this as a system line, not only as an error,
+                // and that was the line people actually saw — with no sign-in button.
+                return isClaudeLoginError(entry.content.content);
               });
               if (hasClaudeLoginError) {
                 claudeLoginProcessId = p.executionProcess.id;

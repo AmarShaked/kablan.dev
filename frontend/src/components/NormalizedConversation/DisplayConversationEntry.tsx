@@ -38,6 +38,8 @@ import { NextActionCard } from './NextActionCard';
 import {
   CLAUDE_LOGIN_MARKER,
   claudeLoginProcessId,
+  isClaudeLoginError,
+  withoutClaudeLoginLines,
 } from '@/utils/claudeLoginError';
 import { cn } from '@/lib/utils';
 import { useRetryUi } from '@/contexts/RetryUiContext';
@@ -734,6 +736,7 @@ function DisplayConversationEntry({
   compact,
 }: Props) {
   const { t } = useTranslation('common');
+  const { t: tTasks } = useTranslation('tasks');
   const isNormalizedEntry = (
     entry: NormalizedEntry | ProcessStartPayload
   ): entry is NormalizedEntry => 'entry_type' in entry;
@@ -920,16 +923,30 @@ function DisplayConversationEntry({
   }
 
   if (isSystem || isError) {
+    const raw = isNormalizedEntry(entry) ? entry.content : '';
+    const loginError = isClaudeLoginError(raw);
+    // The CLI sentence ("OAuth session expired") does not say what to do.
+    // Keep any other lines, and put the sign-in steps in its place.
+    const content = loginError
+      ? [withoutClaudeLoginLines(raw), tTasks('attempt.claudeAuth.expiredHelp')]
+          .filter(Boolean)
+          .join('\n\n')
+      : raw;
+
     return (
       <div
         className={`px-4 py-1 text-sm ${greyed ? 'opacity-50 pointer-events-none' : ''}`}
       >
         <CollapsibleEntry
-          content={isNormalizedEntry(entry) ? entry.content : ''}
-          markdown={shouldRenderMarkdown(entryType)}
+          content={content}
+          markdown={loginError ? false : shouldRenderMarkdown(entryType)}
           expansionKey={expansionKey}
-          variant={isSystem ? 'system' : 'error'}
-          contentClassName={getContentClassName(entryType)}
+          variant={loginError || !isSystem ? 'error' : 'system'}
+          contentClassName={
+            loginError
+              ? 'whitespace-pre-wrap break-words'
+              : getContentClassName(entryType)
+          }
           taskAttemptId={taskAttempt?.id}
         />
       </div>

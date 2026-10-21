@@ -49,3 +49,15 @@ export function isClaudeLoginError(content: string): boolean {
     text.includes('please run /login')
   );
 }
+
+/**
+ * Drop the CLI's own sentence ("OAuth session expired…") and leave the rest.
+ * The caller shows a plain explanation of signing in again in its place.
+ */
+export function withoutClaudeLoginLines(content: string): string {
+  if (!isClaudeLoginError(content)) return content;
+  return content
+    .split('\n')
+    .filter((line) => line.trim() && !isClaudeLoginError(line))
+    .join('\n');
+}

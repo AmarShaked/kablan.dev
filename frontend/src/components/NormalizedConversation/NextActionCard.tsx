@@ -207,6 +207,14 @@ export function NextActionCard({
           </span>
         </div>
 
+        {failed && needsClaudeLogin && (
+          <div
+            className={`border-x border-t ${failed ? 'border-destructive' : 'border-foreground'} px-3 py-2 text-sm`}
+          >
+            {t('attempt.claudeAuth.summary')}
+          </div>
+        )}
+
         {/* Display setup help text when setup is needed */}
         {needsSetup && setupHelpText && (
           <div
@@ -218,7 +226,7 @@ export function NextActionCard({
         )}
 
         <div
-          className={`border px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0 ${failed ? 'border-destructive' : 'border-foreground'} ${needsSetup && setupHelpText ? 'border-t-0' : ''}`}
+          className={`border px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0 ${failed ? 'border-destructive' : 'border-foreground'} ${(needsSetup && setupHelpText) || (failed && needsClaudeLogin) ? 'border-t-0' : ''}`}
         >
           {/* Left: Diff summary */}
           {!error && (

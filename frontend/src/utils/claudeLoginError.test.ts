@@ -4,6 +4,7 @@ import {
   claudeLoginProcessId,
   isClaudeLoginError,
   resetClaudeLoginDialogClaims,
+  withoutClaudeLoginLines,
 } from './claudeLoginError';
 
 describe('isClaudeLoginError', () => {
@@ -26,6 +27,22 @@ describe('isClaudeLoginError', () => {
 
   it('ignores an ordinary task failure', () => {
     expect(isClaudeLoginError('Command failed with exit code 1')).toBe(false);
+  });
+});
+
+describe('withoutClaudeLoginLines', () => {
+  it('removes the expired-session sentence and keeps the rest', () => {
+    expect(
+      withoutClaudeLoginLines(
+        'System initialized with model: <synthetic>\nFailed to authenticate: OAuth session expired and could not be refreshed'
+      )
+    ).toBe('System initialized with model: <synthetic>');
+  });
+
+  it('leaves an ordinary failure alone', () => {
+    expect(withoutClaudeLoginLines('Command failed with exit code 1')).toBe(
+      'Command failed with exit code 1'
+    );
   });
 });
 
