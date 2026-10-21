@@ -204,6 +204,7 @@ pub enum SDKControlRequestType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PermissionMode {
+    Auto,
     Default,
     AcceptEdits,
     Plan,
@@ -213,6 +214,7 @@ pub enum PermissionMode {
 impl PermissionMode {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::Auto => "auto",
             Self::Default => "default",
             Self::AcceptEdits => "acceptEdits",
             Self::Plan => "plan",

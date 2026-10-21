@@ -71,7 +71,11 @@ impl Deployment for LocalDeployment {
         if !raw_config.onboarding_acknowledged
             && let Ok(recommended_executor) = profiles.get_recommended_executor_profile().await
         {
-            raw_config.executor_profile = recommended_executor;
+            raw_config.last_agent_selection = executors::selection::selection_from_legacy(
+                recommended_executor.executor,
+                recommended_executor.variant.as_deref(),
+                None,
+            );
         }
 
         // Check if app version has changed and set release notes flag

@@ -46,10 +46,12 @@ const OnboardingDialogImpl = NiceModal.create<NoProps>(() => {
   const { profiles, config } = useUserSystem();
 
   const [profile, setProfile] = useState<ExecutorProfileId>(
-    config?.executor_profile || {
-      executor: BaseCodingAgent.CLAUDE_CODE,
-      variant: null,
-    }
+    config?.last_agent_selection
+      ? { executor: config.last_agent_selection.executor, variant: null }
+      : {
+          executor: BaseCodingAgent.CLAUDE_CODE,
+          variant: null,
+        }
   );
   const [editorType, setEditorType] = useState<EditorType>(EditorType.VS_CODE);
   const [customCommand, setCustomCommand] = useState<string>('');

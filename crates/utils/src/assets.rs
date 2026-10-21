@@ -34,6 +34,10 @@ pub fn profiles_path() -> std::path::PathBuf {
     asset_dir().join("profiles.json")
 }
 
+pub fn model_cache_path() -> std::path::PathBuf {
+    asset_dir().join("model-cache.json")
+}
+
 pub fn credentials_path() -> std::path::PathBuf {
     asset_dir().join("credentials.json")
 }

@@ -10,7 +10,8 @@ use crate::{
     approvals::ExecutorApprovalService,
     env::ExecutionEnv,
     executors::{BaseCodingAgent, ExecutorError, SpawnedChild, StandardCodingAgentExecutor},
-    profile::{ExecutorConfigs, ExecutorProfileId},
+    profile::ExecutorProfileId,
+    selection::{AgentRunSelection, resolve_coding_agent, selection_asks_in_app},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
@@ -23,6 +24,8 @@ pub struct RepoReviewContext {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 pub struct ReviewRequest {
     pub executor_profile_id: ExecutorProfileId,
+    #[serde(default)]
+    pub agent_selection: Option<AgentRunSelection>,
     pub context: Option<Vec<RepoReviewContext>>,
     pub prompt: String,
     /// Optional session ID to resume an existing session
@@ -35,7 +38,10 @@ pub struct ReviewRequest {
 
 impl ReviewRequest {
     pub fn base_executor(&self) -> BaseCodingAgent {
-        self.executor_profile_id.executor
+        self.agent_selection
+            .as_ref()
+            .map(|selection| selection.executor)
+            .unwrap_or(self.executor_profile_id.executor)
     }
 
     pub fn effective_dir(&self, current_dir: &Path) -> std::path::PathBuf {
@@ -60,14 +66,17 @@ impl Executable for ReviewRequest {
             None => current_dir.to_path_buf(),
         };
 
-        let executor_profile_id = self.executor_profile_id.clone();
-        let mut agent = ExecutorConfigs::get_cached()
-            .get_coding_agent(&executor_profile_id)
-            .ok_or(ExecutorError::UnknownExecutorType(
-                executor_profile_id.to_string(),
-            ))?;
-
-        agent.use_approvals(approvals.clone());
+        let mut agent =
+            resolve_coding_agent(self.agent_selection.as_ref(), &self.executor_profile_id)
+                .map_err(ExecutorError::UnknownExecutorType)?;
+        let attach_approvals = self
+            .agent_selection
+            .as_ref()
+            .map(selection_asks_in_app)
+            .unwrap_or(true);
+        if attach_approvals {
+            agent.use_approvals(approvals.clone());
+        }
 
         agent
             .spawn_review(

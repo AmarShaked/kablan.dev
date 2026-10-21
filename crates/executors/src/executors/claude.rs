@@ -53,7 +53,7 @@ fn base_command(claude_code_router: bool) -> &'static str {
     if claude_code_router {
         "npx -y @musistudio/claude-code-router@1.0.66 code"
     } else {
-        "npx -y @anthropic-ai/claude-code@2.1.236"
+        "npx -y @anthropic-ai/claude-code@2.1.306"
     }
 }
 
@@ -74,6 +74,9 @@ pub struct ClaudeCode {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dangerously_skip_permissions: Option<bool>,
+    /// Claude CLI `--permission-mode` when this run is not using in-app approvals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_permission_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disable_api_key: Option<bool>,
     #[serde(flatten)]
@@ -103,12 +106,20 @@ impl ClaudeCode {
         if plan && approvals {
             tracing::warn!("Both plan and approvals are enabled. Plan will take precedence.");
         }
-        if plan || approvals {
-            // Enable bypass at startup, otherwise we cannot change to it after exiting plan mode
+        if approvals {
+            // The app asks before changes. Bypass at startup so the control
+            // channel can still move the session after a plan exit.
             builder = builder.extend_params(["--permission-prompt-tool=stdio"]);
             builder = builder.extend_params([format!(
                 "--permission-mode={}",
                 PermissionMode::BypassPermissions
+            )]);
+        } else if let Some(mode) = &self.requested_permission_mode {
+            builder = builder.extend_params([format!("--permission-mode={mode}")]);
+        } else if plan {
+            builder = builder.extend_params([format!(
+                "--permission-mode={}",
+                PermissionMode::Plan
             )]);
         }
         if self.dangerously_skip_permissions.unwrap_or(false) {
@@ -140,6 +151,16 @@ impl ClaudeCode {
     }
 
     pub fn permission_mode(&self) -> PermissionMode {
+        if let Some(mode) = self.requested_permission_mode.as_deref() {
+            return match mode {
+                "auto" => PermissionMode::Auto,
+                "acceptEdits" => PermissionMode::AcceptEdits,
+                "plan" => PermissionMode::Plan,
+                "default" => PermissionMode::Default,
+                "bypassPermissions" => PermissionMode::BypassPermissions,
+                _ => PermissionMode::Default,
+            };
+        }
         if self.plan.unwrap_or(false) {
             PermissionMode::Plan
         } else if self.approvals.unwrap_or(false) {
@@ -2233,6 +2254,35 @@ mod tests {
     use super::*;
     use crate::logs::utils::{EntryIndexProvider, patch::extract_normalized_entry_from_patch};
 
+    #[tokio::test]
+    async fn plan_mode_does_not_also_bypass_permissions() {
+        let agent: ClaudeCode = serde_json::from_value(serde_json::json!({
+            "requested_permission_mode": "plan"
+        }))
+        .unwrap();
+        let params = agent.build_command_builder().await.unwrap().params.unwrap();
+        assert!(params.iter().any(|p| p == "--permission-mode=plan"));
+        assert!(!params.iter().any(|p| p.contains("bypass")));
+        assert!(!params
+            .iter()
+            .any(|p| p == "--dangerously-skip-permissions"));
+    }
+
+    #[tokio::test]
+    async fn skip_permissions_sets_the_bypass_flag_without_the_approval_prompt() {
+        let agent: ClaudeCode = serde_json::from_value(serde_json::json!({
+            "dangerously_skip_permissions": true
+        }))
+        .unwrap();
+        let params = agent.build_command_builder().await.unwrap().params.unwrap();
+        assert!(params
+            .iter()
+            .any(|p| p == "--dangerously-skip-permissions"));
+        assert!(!params
+            .iter()
+            .any(|p| p.starts_with("--permission-prompt-tool")));
+    }
+
     fn patches_to_entries(patches: &[json_patch::Patch]) -> Vec<NormalizedEntry> {
         patches
             .iter()
@@ -2666,6 +2716,7 @@ mod tests {
             model: None,
             append_prompt: AppendPrompt::default(),
             dangerously_skip_permissions: None,
+            requested_permission_mode: None,
             cmd: crate::command::CmdOverrides {
                 base_command_override: None,
                 additional_params: None,

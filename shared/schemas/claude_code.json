@@ -41,6 +41,13 @@
         "null"
       ]
     },
+    "requested_permission_mode": {
+      "description": "Claude CLI `--permission-mode` when this run is not using in-app approvals.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "disable_api_key": {
       "type": [
         "boolean",

@@ -11,8 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { AgentSelector } from '@/components/tasks/AgentSelector';
-import { ConfigSelector } from '@/components/tasks/ConfigSelector';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
 import { sessionsApi } from '@/lib/api';
@@ -20,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import { buildResolveConflictsInstructions } from '@/lib/conflicts';
+import { profileToSelection } from '@/utils/agentRun';
 import type {
   BaseCodingAgent,
   ExecutorProfileId,
@@ -51,7 +50,7 @@ const ResolveConflictsDialogImpl =
     }) => {
       const modal = useModal();
       const queryClient = useQueryClient();
-      const { profiles, config } = useUserSystem();
+      const { config } = useUserSystem();
       const { sessions, selectedSession, selectedSessionId, selectSession } =
         useWorkspaceContext();
       const { t } = useTranslation(['tasks', 'common']);
@@ -69,24 +68,20 @@ const ResolveConflictsDialogImpl =
 
       const resolvedDefaultProfile = useMemo(() => {
         if (sessionExecutor) {
-          const variant =
-            config?.executor_profile?.executor === sessionExecutor
-              ? config.executor_profile.variant
-              : null;
-          return { executor: sessionExecutor, variant };
+          return { executor: sessionExecutor, variant: null };
         }
-        return config?.executor_profile ?? null;
-      }, [sessionExecutor, config?.executor_profile]);
+        return config?.last_agent_selection
+          ? { executor: config.last_agent_selection.executor, variant: null }
+          : null;
+      }, [sessionExecutor, config?.last_agent_selection]);
 
       // Default to creating a new session if no existing session
       const [createNewSession, setCreateNewSession] =
         useState(!selectedSessionId);
-      const [userSelectedProfile, setUserSelectedProfile] =
-        useState<ExecutorProfileId | null>(null);
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [error, setError] = useState<string | null>(null);
 
-      const effectiveProfile = userSelectedProfile ?? resolvedDefaultProfile;
+      const effectiveProfile = resolvedDefaultProfile;
       const canSubmit = Boolean(effectiveProfile && !isSubmitting);
 
       // Build the conflict resolution instructions
@@ -131,6 +126,7 @@ const ResolveConflictsDialogImpl =
           await sessionsApi.followUp(targetSessionId, {
             prompt: conflictInstructions,
             executor_profile_id: effectiveProfile,
+            agent_selection: profileToSelection(effectiveProfile),
             retry_process_id: null,
             force_when_dirty: null,
             perform_git_reset: null,
@@ -189,10 +185,6 @@ const ResolveConflictsDialogImpl =
 
       const handleNewSessionChange = (checked: boolean) => {
         setCreateNewSession(checked);
-        // Reset to default profile when toggling back to existing session
-        if (!checked && resolvedDefaultProfile) {
-          setUserSelectedProfile(resolvedDefaultProfile);
-        }
       };
 
       const hasExistingSession = Boolean(selectedSessionId);
@@ -240,23 +232,6 @@ const ResolveConflictsDialogImpl =
 
               {error && <div className="text-sm text-destructive">{error}</div>}
 
-              {/* Agent/profile selector - only show when creating new session */}
-              {profiles && createNewSession && (
-                <div className="flex gap-3 flex-col sm:flex-row">
-                  <AgentSelector
-                    profiles={profiles}
-                    selectedExecutorProfile={effectiveProfile}
-                    onChange={setUserSelectedProfile}
-                    showLabel={false}
-                  />
-                  <ConfigSelector
-                    profiles={profiles}
-                    selectedExecutorProfile={effectiveProfile}
-                    onChange={setUserSelectedProfile}
-                    showLabel={false}
-                  />
-                </div>
-              )}
             </div>
 
             <DialogFooter className="sm:!justify-between">

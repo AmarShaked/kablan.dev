@@ -4,6 +4,7 @@ import {
   ApprovalStatus,
   ApiResponse,
   Config,
+  ModelCacheResponse,
   CreateFollowUpAttempt,
   ResetProcessRequest,
   EditorType,
@@ -1201,6 +1202,13 @@ export const mcpServersApi = {
         response
       );
     }
+  },
+};
+
+export const agentModelsApi = {
+  get: async (): Promise<ModelCacheResponse> => {
+    const response = await makeRequest('/api/agent-models');
+    return handleApiResponse(response);
   },
 };
 

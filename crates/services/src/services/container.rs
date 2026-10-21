@@ -1109,7 +1109,7 @@ pub trait ContainerService {
     async fn start_workspace(
         &self,
         workspace: &Workspace,
-        executor_profile_id: ExecutorProfileId,
+        selection: executors::selection::AgentRunSelection,
     ) -> Result<ExecutionProcess, ContainerError> {
         // Create container
         self.create(workspace).await?;
@@ -1130,7 +1130,7 @@ pub trait ContainerService {
         let session = Session::create(
             &self.db().pool,
             &CreateSession {
-                executor: Some(executor_profile_id.executor.to_string()),
+                executor: Some(selection.executor.to_string()),
             },
             Uuid::new_v4(),
             workspace.id,
@@ -1154,7 +1154,8 @@ pub trait ContainerService {
         let coding_action = ExecutorAction::new(
             ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
                 prompt,
-                executor_profile_id: executor_profile_id.clone(),
+                executor_profile_id: ExecutorProfileId::new(selection.executor),
+                agent_selection: Some(selection.clone()),
                 working_dir,
             }),
             cleanup_action.map(Box::new),

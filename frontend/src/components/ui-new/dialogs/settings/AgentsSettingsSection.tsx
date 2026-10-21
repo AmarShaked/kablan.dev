@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   SpinnerIcon,
@@ -16,6 +16,7 @@ import {
 import { ExecutorConfigForm } from './ExecutorConfigForm';
 import { useProfiles } from '@/hooks/useProfiles';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { profileToSelection } from '@/utils/agentRun';
 import { CreateConfigurationDialog } from '@/components/dialogs/settings/CreateConfigurationDialog';
 import { DeleteConfigurationDialog } from '@/components/dialogs/settings/DeleteConfigurationDialog';
 import { AddAgentWizardDialog } from '@/components/dialogs/settings/AddAgentWizardDialog';
@@ -58,6 +59,16 @@ export function AgentsSettingsSection() {
   } = useProfiles();
 
   const { config, updateAndSaveConfig, reloadSystem } = useUserSystem();
+  const savedAgent = useMemo(
+    () =>
+      config?.last_agent_selection
+        ? {
+            executor: config.last_agent_selection.executor,
+            variant: null as string | null,
+          }
+        : undefined,
+    [config?.last_agent_selection]
+  );
 
   const [profilesSuccess, setProfilesSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -72,15 +83,15 @@ export function AgentsSettingsSection() {
 
   useEffect(() => {
     if (selectedExecutorType) return;
-    if (config?.executor_profile?.executor) {
-      setSelectedExecutorType(config.executor_profile.executor);
-      setSelectedConfiguration(config.executor_profile.variant || 'DEFAULT');
+    if (savedAgent?.executor) {
+      setSelectedExecutorType(savedAgent.executor);
+      setSelectedConfiguration(savedAgent.variant || 'DEFAULT');
       return;
     }
     if (configuredAgents[0]) {
       setSelectedExecutorType(configuredAgents[0]);
     }
-  }, [config?.executor_profile, selectedExecutorType, configuredAgents]);
+  }, [savedAgent, selectedExecutorType, configuredAgents]);
 
   useEffect(() => {
     if (!isDirty && serverProfilesContent) {
@@ -250,10 +261,10 @@ export function AgentsSettingsSection() {
   const handleMakeDefault = async (executor: string, configName: string) => {
     try {
       await updateAndSaveConfig({
-        executor_profile: {
+        last_agent_selection: profileToSelection({
           executor: executor as BaseCodingAgent,
           variant: configName,
-        },
+        }),
       });
       reloadSystem();
     } catch (err) {
@@ -497,7 +508,7 @@ export function AgentsSettingsSection() {
                   ? t('settings.agents.connected')
                   : t('settings.agents.notConnected')}
               </span>
-              {config?.executor_profile?.executor === selectedExecutorType && (
+              {savedAgent?.executor === selectedExecutorType && (
                 <TwoColumnPickerBadge variant="brand">
                   {t('settings.agents.editor.isDefault')}
                 </TwoColumnPickerBadge>
@@ -506,12 +517,12 @@ export function AgentsSettingsSection() {
             <AgentActionsDropdown
               executorType={selectedExecutorType}
               isDefault={
-                config?.executor_profile?.executor === selectedExecutorType
+                savedAgent?.executor === selectedExecutorType
               }
               canRemove={configuredAgents.length > 1}
               defaultConfig={
-                config?.executor_profile?.executor === selectedExecutorType
-                  ? (config?.executor_profile?.variant ?? 'DEFAULT')
+                savedAgent?.executor === selectedExecutorType
+                  ? (savedAgent?.variant ?? 'DEFAULT')
                   : 'DEFAULT'
               }
               onMakeDefault={handleMakeDefault}
@@ -541,8 +552,8 @@ export function AgentsSettingsSection() {
               executorType={selectedExecutorType}
               configName={selectedConfiguration ?? 'DEFAULT'}
               isDefault={
-                config?.executor_profile?.executor === selectedExecutorType &&
-                (config?.executor_profile?.variant ?? 'DEFAULT') ===
+                savedAgent?.executor === selectedExecutorType &&
+                (savedAgent?.variant ?? 'DEFAULT') ===
                   (selectedConfiguration ?? 'DEFAULT')
               }
               configCount={selectedConfigs.length}

@@ -18,7 +18,7 @@ use db::models::{
     workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
 };
 use deployment::Deployment;
-use executors::{executors::BaseCodingAgent, profile::ExecutorProfileId};
+use executors::executors::BaseCodingAgent;
 use serde::{Deserialize, Serialize};
 use services::services::{container::ContainerService, events::task_patch};
 use sqlx::Error as SqlxError;
@@ -731,10 +731,15 @@ async fn create_and_start_task(
         .collect();
     WorkspaceRepo::create_many(pool, workspace.id, &workspace_repos).await?;
 
-    let executor_profile_id = ExecutorProfileId::new(agent);
+    let agent_selection = executors::selection::AgentRunSelection {
+        executor: agent,
+        model: None,
+        permission: executors::selection::PermissionLevel::Bypass,
+    };
+    crate::routes::config::remember_agent_selection(&deployment, &agent_selection).await;
     let is_attempt_running = match deployment
         .container()
-        .start_workspace(&workspace, executor_profile_id.clone())
+        .start_workspace(&workspace, agent_selection.clone())
         .await
     {
         Ok(_) => true,
@@ -764,7 +769,7 @@ async fn create_and_start_task(
         has_unseen_turns: false,
         last_turn_summary: None,
         last_turn_prompt: None,
-        executor: executor_profile_id.executor.to_string(),
+        executor: agent_selection.executor.to_string(),
     };
     deployment
         .events()

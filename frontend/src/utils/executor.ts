@@ -1,10 +1,12 @@
 import type {
+  AgentRunSelection,
   BaseCodingAgent,
   ExecutorConfigs,
   ExecutorAction,
   ExecutorProfileId,
   ExecutionProcess,
 } from 'shared/types';
+import { profileToSelection } from '@/utils/agentRun';
 
 /**
  * Compare two ExecutorProfileIds for equality.
@@ -70,6 +72,39 @@ export function extractProfileFromAction(
  * Get the latest ExecutorProfileId from a list of execution processes.
  * Searches from most recent to oldest.
  */
+export function extractSelectionFromAction(
+  action: ExecutorAction | null
+): AgentRunSelection | null {
+  let curr: ExecutorAction | null = action;
+  while (curr) {
+    const typ = curr.typ;
+    switch (typ.type) {
+      case 'CodingAgentInitialRequest':
+      case 'CodingAgentFollowUpRequest':
+      case 'ReviewRequest':
+        return typ.agent_selection ?? profileToSelection(typ.executor_profile_id);
+      case 'ScriptRequest':
+      default:
+        curr = curr.next_action;
+        continue;
+    }
+  }
+  return null;
+}
+
+export function getLatestSelectionFromProcesses(
+  processes: ExecutionProcess[] | undefined
+): AgentRunSelection | null {
+  if (!processes?.length) return null;
+  return (
+    processes
+      .slice()
+      .reverse()
+      .map((p) => extractSelectionFromAction(p.executor_action ?? null))
+      .find((selection) => selection !== null) ?? null
+  );
+}
+
 export function getLatestProfileFromProcesses(
   processes: ExecutionProcess[] | undefined
 ): ExecutorProfileId | null {

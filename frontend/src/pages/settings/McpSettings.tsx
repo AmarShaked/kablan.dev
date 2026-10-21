@@ -53,7 +53,7 @@ export function McpSettings() {
     if (selectedProfile || !profiles || configuredAgents.length === 0) {
       return;
     }
-    const preferred = config?.executor_profile?.executor;
+    const preferred = config?.last_agent_selection?.executor;
     const initial =
       preferred && configuredAgents.includes(preferred)
         ? preferred
@@ -61,7 +61,7 @@ export function McpSettings() {
     if (initial && profiles[initial]) {
       setSelectedProfile(profiles[initial]);
     }
-  }, [config?.executor_profile, profiles, selectedProfile, configuredAgents]);
+  }, [config?.last_agent_selection, profiles, selectedProfile, configuredAgents]);
 
   // Load existing MCP configuration when selected profile changes
   useEffect(() => {

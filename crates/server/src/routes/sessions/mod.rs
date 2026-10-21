@@ -87,6 +87,9 @@ pub async fn create_session(
 pub struct CreateFollowUpAttempt {
     pub prompt: String,
     pub executor_profile_id: ExecutorProfileId,
+    /// Model and permission for this message. The agent must match the session.
+    #[serde(default)]
+    pub agent_selection: Option<executors::selection::AgentRunSelection>,
     pub retry_process_id: Option<Uuid>,
     pub force_when_dirty: Option<bool>,
     pub perform_git_reset: Option<bool>,
@@ -129,7 +132,12 @@ pub async fn follow_up(
         .ensure_container_exists(&workspace)
         .await?;
 
-    let executor_profile_id = payload.executor_profile_id;
+    let executor_profile_id = payload
+        .agent_selection
+        .as_ref()
+        .map(|selection| ExecutorProfileId::new(selection.executor))
+        .unwrap_or(payload.executor_profile_id);
+    let agent_selection = payload.agent_selection.clone();
 
     // Validate executor matches session if session has prior executions
     let expected_executor: Option<String> =
@@ -187,6 +195,7 @@ pub async fn follow_up(
             session_id: info.session_id,
             reset_to_message_id: if is_reset { info.message_id } else { None },
             executor_profile_id: executor_profile_id.clone(),
+            agent_selection: agent_selection.clone(),
             working_dir: working_dir.clone(),
         })
     } else {
@@ -194,6 +203,7 @@ pub async fn follow_up(
             executors::actions::coding_agent_initial::CodingAgentInitialRequest {
                 prompt,
                 executor_profile_id: executor_profile_id.clone(),
+                agent_selection,
                 working_dir,
             },
         )

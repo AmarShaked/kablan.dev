@@ -13,8 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AgentSelector } from '@/components/tasks/AgentSelector';
-import { ConfigSelector } from '@/components/tasks/ConfigSelector';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
 import { sessionsApi } from '@/lib/api';
@@ -35,7 +33,7 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
   ({ sessionId, workspaceId, reviewMarkdown, defaultProfile, onSuccess }) => {
     const modal = useModal();
     const queryClient = useQueryClient();
-    const { profiles, config } = useUserSystem();
+    const { config } = useUserSystem();
     const { sessions, selectedSession, selectedSessionId, selectSession } =
       useWorkspaceContext();
     const { t } = useTranslation(['tasks', 'common']);
@@ -54,17 +52,13 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
     const resolvedDefaultProfile = useMemo(() => {
       if (defaultProfile) return defaultProfile;
       if (sessionExecutor) {
-        const variant =
-          config?.executor_profile?.executor === sessionExecutor
-            ? config.executor_profile.variant
-            : null;
-        return { executor: sessionExecutor, variant };
+        return { executor: sessionExecutor, variant: null };
       }
-      return config?.executor_profile ?? null;
-    }, [defaultProfile, sessionExecutor, config?.executor_profile]);
+      return config?.last_agent_selection
+        ? { executor: config.last_agent_selection.executor, variant: null }
+        : null;
+    }, [defaultProfile, sessionExecutor, config?.last_agent_selection]);
 
-    const [userSelectedProfile, setUserSelectedProfile] =
-      useState<ExecutorProfileId | null>(null);
     const [additionalPrompt, setAdditionalPrompt] = useState('');
     const [createNewSession, setCreateNewSession] = useState(
       () => !resolvedSessionId
@@ -73,7 +67,7 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const effectiveProfile = userSelectedProfile ?? resolvedDefaultProfile;
+    const effectiveProfile = resolvedDefaultProfile;
 
     const canSubmit = Boolean(effectiveProfile && !isSubmitting);
 
@@ -152,9 +146,6 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
 
     const handleNewSessionChange = (checked: boolean) => {
       setCreateNewSession(checked);
-      if (!checked && resolvedDefaultProfile) {
-        setUserSelectedProfile(resolvedDefaultProfile);
-      }
     };
 
     const hasReviewComments = Boolean(reviewMarkdown);
@@ -227,23 +218,6 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
               </p>
             </div>
 
-            {profiles && (
-              <div className="flex gap-3 flex-col sm:flex-row">
-                <AgentSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  disabled={!createNewSession}
-                  showLabel={false}
-                />
-                <ConfigSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  showLabel={false}
-                />
-              </div>
-            )}
           </div>
 
           <DialogFooter className="sm:!justify-between">

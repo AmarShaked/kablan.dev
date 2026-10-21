@@ -77,6 +77,25 @@ pub async fn build_deployment() -> Result<DeploymentImpl, KablanError> {
         .await
         .map_err(DeploymentError::from)?;
 
+    // Model lists are fetched once per local day. A same-day restart reads the file.
+    tokio::spawn(async move {
+        let path = utils::assets::model_cache_path();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let installed = executors::model_cache::installed_agents();
+        let result = tokio::task::spawn_blocking(move || {
+            executors::model_cache::refresh_model_cache(
+                &path,
+                &today,
+                &installed,
+                executors::model_cache::fetch_agent_models,
+            )
+        })
+        .await;
+        if let Err(err) = result {
+            tracing::warn!("Model cache refresh task failed: {err}");
+        }
+    });
+
     // Warming the search cache is slow and nothing waits on it.
     let deployment_for_cache = deployment.clone();
     tokio::spawn(async move {

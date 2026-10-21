@@ -44,6 +44,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/sounds/{sound}", get(get_sound))
         .route("/mcp-config", get(get_mcp_servers).post(update_mcp_servers))
         .route("/profiles", get(get_profiles).put(update_profiles))
+        .route("/agent-models", get(get_agent_models))
         .route(
             "/editors/check-availability",
             get(check_editor_availability),
@@ -123,6 +124,31 @@ async fn get_user_system_info(
     };
 
     ResponseJson(ApiResponse::success(user_system_info))
+}
+
+async fn get_agent_models() -> ResponseJson<ApiResponse<executors::model_cache::ModelCacheResponse>> {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let response =
+        executors::model_cache::cache_response(&utils::assets::model_cache_path(), &today);
+    ResponseJson(ApiResponse::success(response))
+}
+
+pub async fn remember_agent_selection(
+    deployment: &DeploymentImpl,
+    selection: &executors::selection::AgentRunSelection,
+) {
+    let mut config = deployment.config().write().await;
+    if config.last_agent_selection == *selection {
+        return;
+    }
+    config.last_agent_selection = selection.clone();
+    let snapshot = config.clone();
+    drop(config);
+    if let Err(err) =
+        save_config_to_file(&snapshot, &utils::assets::config_path()).await
+    {
+        tracing::error!("Failed to save last agent selection: {err}");
+    }
 }
 
 async fn update_config(

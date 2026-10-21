@@ -49,12 +49,12 @@ export function useConfiguredAgents() {
     return resolveConfiguredAgents({
       persisted,
       stored,
-      defaultAgent: config?.executor_profile?.executor,
+      defaultAgent: config?.last_agent_selection?.executor,
       connectedAgents: connectedDetected,
     });
   }, [
     config?.enabled_agents,
-    config?.executor_profile?.executor,
+    config?.last_agent_selection?.executor,
     status,
     connectedDetected,
   ]);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -21,6 +21,7 @@ import { Loader2, Plus, Star, Trash2 } from 'lucide-react';
 import { ExecutorConfigForm } from '@/components/ExecutorConfigForm';
 import { useProfiles } from '@/hooks/useProfiles';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { profileToSelection } from '@/utils/agentRun';
 import { CreateConfigurationDialog } from '@/components/dialogs/settings/CreateConfigurationDialog';
 import { DeleteConfigurationDialog } from '@/components/dialogs/settings/DeleteConfigurationDialog';
 import { AddAgentWizardDialog } from '@/components/dialogs/settings/AddAgentWizardDialog';
@@ -54,6 +55,16 @@ export function AgentSettings() {
   } = useProfiles();
 
   const { config, updateAndSaveConfig, reloadSystem } = useUserSystem();
+  const savedAgent = useMemo(
+    () =>
+      config?.last_agent_selection
+        ? {
+            executor: config.last_agent_selection.executor,
+            variant: null as string | null,
+          }
+        : undefined,
+    [config?.last_agent_selection]
+  );
 
   const [profilesSuccess, setProfilesSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -67,15 +78,15 @@ export function AgentSettings() {
 
   useEffect(() => {
     if (selectedExecutorType) return;
-    if (config?.executor_profile?.executor) {
-      setSelectedExecutorType(config.executor_profile.executor);
-      setSelectedConfiguration(config.executor_profile.variant || 'DEFAULT');
+    if (savedAgent?.executor) {
+      setSelectedExecutorType(savedAgent.executor);
+      setSelectedConfiguration(savedAgent.variant || 'DEFAULT');
       return;
     }
     if (configuredAgents[0]) {
       setSelectedExecutorType(configuredAgents[0]);
     }
-  }, [config?.executor_profile, selectedExecutorType, configuredAgents]);
+  }, [savedAgent, selectedExecutorType, configuredAgents]);
 
   useEffect(() => {
     if (!isDirty && serverProfilesContent) {
@@ -225,10 +236,10 @@ export function AgentSettings() {
 
   const handleMakeDefault = async (executor: string, configName: string) => {
     await updateAndSaveConfig({
-      executor_profile: {
+      last_agent_selection: profileToSelection({
         executor: executor as BaseCodingAgent,
         variant: configName,
-      },
+      }),
     });
     reloadSystem();
   };
@@ -382,7 +393,7 @@ export function AgentSettings() {
                       ? t('settings.agents.connected')
                       : t('settings.agents.notConnected')}
                   </span>
-                  {config?.executor_profile?.executor ===
+                  {savedAgent?.executor ===
                     selectedExecutorType && (
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                       {t('settings.agents.editor.isDefault')}
@@ -394,7 +405,7 @@ export function AgentSettings() {
                     variant="ghost"
                     size="sm"
                     disabled={
-                      config?.executor_profile?.executor ===
+                      savedAgent?.executor ===
                       selectedExecutorType
                     }
                     onClick={() =>

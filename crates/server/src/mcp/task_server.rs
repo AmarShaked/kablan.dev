@@ -7,7 +7,7 @@ use db::models::{
     task::{CreateTask, Task, TaskStatus, TaskWithAttemptStatus, UpdateTask},
     workspace::{Workspace, WorkspaceContext},
 };
-use executors::{executors::BaseCodingAgent, profile::ExecutorProfileId};
+use executors::executors::BaseCodingAgent;
 use regex::Regex;
 use rmcp::{
     ErrorData, ServerHandler,
@@ -880,10 +880,11 @@ impl TaskServer {
             }
         });
 
-        let executor_profile_id = ExecutorProfileId {
-            executor: base_executor,
-            variant,
-        };
+        let agent_selection = executors::selection::selection_from_legacy(
+            base_executor,
+            variant.as_deref(),
+            None,
+        );
 
         let workspace_repos: Vec<WorkspaceRepoInput> = repos
             .into_iter()
@@ -895,7 +896,7 @@ impl TaskServer {
 
         let payload = CreateTaskAttemptBody {
             task_id,
-            executor_profile_id,
+            agent_selection,
             repos: workspace_repos,
         };
 

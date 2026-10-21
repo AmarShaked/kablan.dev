@@ -401,7 +401,11 @@ export type CheckEditorAvailabilityResponse = { available: boolean, };
 
 export type CheckAgentAvailabilityQuery = { executor: BaseCodingAgent, };
 
-export type CreateFollowUpAttempt = { prompt: string, executor_profile_id: ExecutorProfileId, retry_process_id: string | null, force_when_dirty: boolean | null, perform_git_reset: boolean | null, 
+export type CreateFollowUpAttempt = { prompt: string, executor_profile_id: ExecutorProfileId, 
+/**
+ * Model and permission for this message. The agent must match the session.
+ */
+agent_selection: AgentRunSelection | null, retry_process_id: string | null, force_when_dirty: boolean | null, perform_git_reset: boolean | null, 
 /**
  * Start the agent on a clean conversation instead of resuming the existing one.
  *
@@ -435,7 +439,7 @@ export type OpenEditorRequest = { editor_type: string | null, file_path: string 
 
 export type OpenEditorResponse = { url: string | null, };
 
-export type CreateAndStartTaskRequest = { task: CreateTask, executor_profile_id: ExecutorProfileId, repos: Array<WorkspaceRepoInput>, };
+export type CreateAndStartTaskRequest = { task: CreateTask, agent_selection: AgentRunSelection, repos: Array<WorkspaceRepoInput>, };
 
 export type CreatePrApiRequest = { title: string, body: string | null, target_branch: string | null, draft: boolean | null, repo_id: string, auto_generate_description: boolean, };
 
@@ -443,7 +447,7 @@ export type ImageResponse = { id: string, file_path: string, original_name: stri
 
 export type ImageMetadata = { exists: boolean, file_name: string | null, path: string | null, size_bytes: bigint | null, format: string | null, proxy_url: string | null, };
 
-export type CreateTaskAttemptBody = { task_id: string, executor_profile_id: ExecutorProfileId, repos: Array<WorkspaceRepoInput>, };
+export type CreateTaskAttemptBody = { task_id: string, agent_selection: AgentRunSelection, repos: Array<WorkspaceRepoInput>, };
 
 export type WorkspaceRepoInput = { repo_id: string, target_branch: string, };
 
@@ -569,37 +573,7 @@ export type DirectoryListResponse = { entries: Array<DirectoryEntry>, current_pa
 
 export type SearchMode = "taskform" | "settings";
 
-export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, 
-/**
- * Agents the user has added in Settings. None means not yet chosen — the app
- * seeds from connected agents plus the current default on first load.
- */
-enabled_agents: Array<BaseCodingAgent> | null, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, 
-/**
- * Linear personal API key for the Integrations inbox.
- */
-linear: LinearConfig, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
-/**
- * Days a task stays in the views after it is done or cancelled, before it is archived out of
- * them. None turns automatic archiving off; archiving by hand still works.
- *
- * Defaulted rather than versioned: a config written before this existed reads as the same
- * seven days a new one gets, so nothing has to migrate.
- */
-archive_tasks_after_days: number | null, 
-/**
- * 12- or 24-hour clock for times in lists. Defaulted rather than versioned so a config
- * written before this existed keeps the 12-hour display it already had.
- */
-time_format: TimeFormat, 
-/**
- * Integrations the user added to the sidebar. Empty until they pick one.
- */
-enabled_integrations: Array<IntegrationProvider>, 
-/**
- * Subset of `enabled_integrations` that finished their connect steps.
- */
-connected_integrations: Array<IntegrationProvider>, };
+export type Config = { config_version: string, theme: ThemeMode, last_agent_selection: AgentRunSelection, enabled_agents: Array<BaseCodingAgent> | null, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, linear: LinearConfig, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, beta_workspaces: boolean, beta_workspaces_invitation_sent: boolean, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, archive_tasks_after_days: number | null, time_format: TimeFormat, enabled_integrations: Array<IntegrationProvider>, connected_integrations: Array<IntegrationProvider>, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 
@@ -613,7 +587,7 @@ export type EditorOpenError = { "type": "executable_not_found", executable: stri
 
 export type GitHubConfig = { pat: string | null, oauth_token: string | null, username: string | null, primary_email: string | null, default_pr_base: string | null, };
 
-export enum SoundFile { ABSTRACT_SOUND1 = "ABSTRACT_SOUND1", ABSTRACT_SOUND2 = "ABSTRACT_SOUND2", ABSTRACT_SOUND3 = "ABSTRACT_SOUND3", ABSTRACT_SOUND4 = "ABSTRACT_SOUND4", COW_MOOING = "COW_MOOING", PHONE_VIBRATION = "PHONE_VIBRATION", ROOSTER = "ROOSTER" }
+export enum SoundFile { ABSTRACT_SOUND1 = "ABSTRACT_SOUND1", ABSTRACT_SOUND2 = "ABSTRACT_SOUND2", ABSTRACT_SOUND3 = "ABSTRACT_SOUND3", ABSTRACT_SOUND4 = "ABSTRACT_SOUND4", COW_MOOING = "COW_MOOING", PHONE_VIBRATION = "PHONE_VIBRATION", ROOSTER = "ROOSTER", UNCLE_ROGER = "UNCLE_ROGER" }
 
 export type UiLanguage = "BROWSER" | "EN" | "FR" | "JA" | "ES" | "KO" | "ZH_HANS" | "ZH_HANT";
 
@@ -728,13 +702,29 @@ executor: BaseCodingAgent,
  */
 variant: string | null, };
 
+export enum PermissionLevel { AUTO = "AUTO", MANUAL = "MANUAL", ACCEPT_EDITS = "ACCEPT_EDITS", PLAN = "PLAN", BYPASS = "BYPASS" }
+
+export type AgentRunSelection = { executor: BaseCodingAgent, model: string | null, permission: PermissionLevel, };
+
+export type ListedModel = { id: string, label: string, featured: boolean, };
+
+export type AgentModelList = { models: Array<ListedModel>, error?: string | null, };
+
+export type ModelCacheFile = { fetched_on: string, agents: { [key in string]?: AgentModelList }, };
+
+export type ModelCacheResponse = { ready: boolean, fetched_on: string | null, agents: { [key in string]?: AgentModelList }, };
+
 export type ExecutorConfig = { [key in string]?: { "CLAUDE_CODE": ClaudeCode } | { "AMP": Amp } | { "GEMINI": Gemini } | { "OPENCODE": Opencode } | { "CURSOR_AGENT": CursorAgent } | { "QWEN_CODE": QwenCode } | { "COPILOT": Copilot } | { "DROID": Droid } };
 
 export type ExecutorConfigs = { executors: { [key in BaseCodingAgent]?: ExecutorConfig }, };
 
 export enum BaseAgentCapability { SESSION_FORK = "SESSION_FORK", SETUP_HELPER = "SETUP_HELPER", CONTEXT_USAGE = "CONTEXT_USAGE" }
 
-export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
+export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, dangerously_skip_permissions?: boolean | null, 
+/**
+ * Claude CLI `--permission-mode` when this run is not using in-app approvals.
+ */
+requested_permission_mode?: string | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type Gemini = { append_prompt: AppendPrompt, model?: string | null, yolo?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
@@ -770,6 +760,10 @@ export type CodingAgentInitialRequest = { prompt: string,
  */
 executor_profile_id: ExecutorProfileId, 
 /**
+ * Model and permission for this run. Absent on actions stored before profiles were removed.
+ */
+agent_selection: AgentRunSelection | null, 
+/**
  * Optional relative path to execute the agent in (relative to container_ref).
  * If None, uses the container_ref directory directly.
  */
@@ -781,12 +775,16 @@ export type CodingAgentFollowUpRequest = { prompt: string, session_id: string, r
  */
 executor_profile_id: ExecutorProfileId, 
 /**
+ * Model and permission for this run. Absent on actions stored before profiles were removed.
+ */
+agent_selection: AgentRunSelection | null, 
+/**
  * Optional relative path to execute the agent in (relative to container_ref).
  * If None, uses the container_ref directory directly.
  */
 working_dir: string | null, };
 
-export type ReviewRequest = { executor_profile_id: ExecutorProfileId, context: Array<RepoReviewContext> | null, prompt: string, 
+export type ReviewRequest = { executor_profile_id: ExecutorProfileId, agent_selection: AgentRunSelection | null, context: Array<RepoReviewContext> | null, prompt: string, 
 /**
  * Optional session ID to resume an existing session
  */

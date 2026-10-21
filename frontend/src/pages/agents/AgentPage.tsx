@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Star, Trash2 } from 'lucide-react';
-import { BaseCodingAgent, type ExecutorConfigs } from 'shared/types';
+import { BaseCodingAgent, PermissionLevel } from 'shared/types';
 
 import { AgentIcon } from '@/components/agents/AgentIcon';
 import { ConfirmDialog } from '@/components/dialogs';
@@ -9,14 +8,9 @@ import { UsageSection } from '@/components/settings/UsageSection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
-import { useProfiles } from '@/hooks/useProfiles';
 import { useUserSystem } from '@/contexts/UserSystemContext';
-import {
-  firstAgentPath,
-  parseAgentParam,
-} from '@/lib/routes/agentRoutes';
+import { firstAgentPath, parseAgentParam } from '@/lib/routes/agentRoutes';
 import { agentLabel } from '@/utils/agentLabels';
-import { AgentProfilesPanel } from '@/pages/agents/AgentProfilesPanel';
 import {
   ConnectAgentEmpty,
   useConnectionCheck,
@@ -33,30 +27,7 @@ export function AgentPage() {
     removeAgent,
     refreshAgent,
   } = useConfiguredAgents();
-  const {
-    profilesContent,
-    isLoading: profilesLoading,
-    isSaving,
-    error: profilesError,
-    save: saveProfiles,
-  } = useProfiles();
   const { config, updateAndSaveConfig, reloadSystem } = useUserSystem();
-
-  const [localProfiles, setLocalProfiles] = useState<ExecutorConfigs | null>(
-    null
-  );
-  const [dirty, setDirty] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
-  useEffect(() => {
-    if (dirty || !profilesContent) return;
-    try {
-      setLocalProfiles(JSON.parse(profilesContent) as ExecutorConfigs);
-    } catch {
-      setLocalProfiles(null);
-    }
-  }, [profilesContent, dirty]);
 
   const connected = agent ? isConnected(agent) : false;
   const { checking, startChecking } = useConnectionCheck(
@@ -69,7 +40,7 @@ export function AgentPage() {
     return <Navigate to="/agents" replace />;
   }
 
-  if (agentsLoading || profilesLoading || !localProfiles) {
+  if (agentsLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin" />
@@ -77,7 +48,7 @@ export function AgentPage() {
     );
   }
 
-  const isDefault = config?.executor_profile?.executor === agent;
+  const isDefault = config?.last_agent_selection?.executor === agent;
   const canRemove = configuredAgents.includes(agent)
     ? configuredAgents.length > 1
     : true;
@@ -86,8 +57,7 @@ export function AgentPage() {
     try {
       const result = await ConfirmDialog.show({
         title: `Remove ${agentLabel(agent)}?`,
-        message:
-          'It will leave the sidebar. Profiles stay on disk if you add it again.',
+        message: 'It will leave the sidebar.',
         confirmText: 'Remove',
         cancelText: 'Cancel',
         variant: 'destructive',
@@ -102,42 +72,18 @@ export function AgentPage() {
   };
 
   const handleMakeDefault = async () => {
+    const current = config?.last_agent_selection;
     await updateAndSaveConfig({
-      executor_profile: {
+      last_agent_selection: {
         executor: agent,
-        variant: config?.executor_profile?.executor === agent
-          ? (config.executor_profile.variant ?? 'DEFAULT')
-          : 'DEFAULT',
+        model: current?.executor === agent ? current.model : null,
+        permission:
+          current?.executor === agent
+            ? current.permission
+            : PermissionLevel.BYPASS,
       },
     });
     reloadSystem();
-  };
-
-  const handleSave = async (
-    next: ExecutorConfigs,
-    selectedName: string,
-    previousName: string
-  ) => {
-    setSaveError(null);
-    try {
-      await saveProfiles(JSON.stringify(next, null, 2));
-      setLocalProfiles(next);
-      setDirty(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-      if (
-        config?.executor_profile?.executor === agent &&
-        config.executor_profile.variant === previousName &&
-        previousName !== selectedName
-      ) {
-        await updateAndSaveConfig({
-          executor_profile: { executor: agent, variant: selectedName },
-        });
-      }
-      reloadSystem();
-    } catch {
-      setSaveError('Could not save this profile.');
-    }
   };
 
   if (!connected) {
@@ -156,14 +102,6 @@ export function AgentPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-6">
-      {profilesError ? (
-        <p className="text-sm text-destructive">
-          {profilesError instanceof Error
-            ? profilesError.message
-            : String(profilesError)}
-        </p>
-      ) : null}
-
       <div className="flex flex-wrap items-center gap-2">
         <AgentIcon agent={agent} className="h-5 w-5" />
         <h1 className="text-xl font-semibold">{agentLabel(agent)}</h1>
@@ -208,18 +146,6 @@ export function AgentPage() {
         </div>
       )}
 
-      <AgentProfilesPanel
-        agent={agent}
-        profiles={localProfiles}
-        onProfilesChange={(next) => {
-          setDirty(true);
-          setLocalProfiles(next);
-        }}
-        onSave={handleSave}
-        isSaving={isSaving}
-        saveError={saveError}
-        saveSuccess={saveSuccess}
-      />
     </div>
   );
 }

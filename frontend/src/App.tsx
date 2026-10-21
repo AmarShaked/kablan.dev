@@ -13,6 +13,7 @@ import { NormalLayout } from '@/components/layout/NormalLayout';
 import { useAuth } from '@/hooks';
 import { usePreviousPath } from '@/hooks/usePreviousPath';
 import { useUiPreferencesScratch } from '@/hooks/useUiPreferencesScratch';
+import { profileToSelection } from '@/utils/agentRun';
 
 import {
   GeneralSettings,
@@ -88,7 +89,7 @@ function AppContent() {
         if (!cancelled) {
           await updateAndSaveConfig({
             onboarding_acknowledged: true,
-            executor_profile: result.profile,
+            last_agent_selection: profileToSelection(result.profile),
             editor: result.editor,
           });
         }

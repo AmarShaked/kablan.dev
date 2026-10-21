@@ -21,7 +21,6 @@ use db::models::{
     workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
 };
 use deployment::Deployment;
-use executors::profile::ExecutorProfileId;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use services::services::{
@@ -200,7 +199,7 @@ pub async fn create_task(
 #[derive(Debug, Deserialize, TS)]
 pub struct CreateAndStartTaskRequest {
     pub task: CreateTask,
-    pub executor_profile_id: ExecutorProfileId,
+    pub agent_selection: executors::selection::AgentRunSelection,
     pub repos: Vec<WorkspaceRepoInput>,
 }
 
@@ -268,9 +267,11 @@ pub async fn create_task_and_start(
         .collect();
     WorkspaceRepo::create_many(&deployment.db().pool, workspace.id, &workspace_repos).await?;
 
+    crate::routes::config::remember_agent_selection(&deployment, &payload.agent_selection).await;
+
     let is_attempt_running = deployment
         .container()
-        .start_workspace(&workspace, payload.executor_profile_id.clone())
+        .start_workspace(&workspace, payload.agent_selection.clone())
         .await
         .inspect_err(|err| tracing::error!("Failed to start task attempt: {}", err))
         .is_ok();
@@ -290,7 +291,7 @@ pub async fn create_task_and_start(
         has_unseen_turns: false,
         last_turn_summary: None,
         last_turn_prompt: None,
-        executor: payload.executor_profile_id.executor.to_string(),
+        executor: payload.agent_selection.executor.to_string(),
     };
     deployment
         .events()

@@ -205,7 +205,7 @@ pub async fn update_workspace(
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 pub struct CreateTaskAttemptBody {
     pub task_id: Uuid,
-    pub executor_profile_id: ExecutorProfileId,
+    pub agent_selection: executors::selection::AgentRunSelection,
     pub repos: Vec<WorkspaceRepoInput>,
 }
 
@@ -228,7 +228,7 @@ pub async fn create_task_attempt(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<CreateTaskAttemptBody>,
 ) -> Result<ResponseJson<ApiResponse<Workspace>>, ApiError> {
-    let executor_profile_id = payload.executor_profile_id.clone();
+    let agent_selection = payload.agent_selection.clone();
 
     if payload.repos.is_empty() {
         return Err(ApiError::BadRequest(
@@ -286,9 +286,10 @@ pub async fn create_task_attempt(
         .collect();
 
     WorkspaceRepo::create_many(pool, workspace.id, &workspace_repos).await?;
+    crate::routes::config::remember_agent_selection(&deployment, &agent_selection).await;
     if let Err(err) = deployment
         .container()
-        .start_workspace(&workspace, executor_profile_id.clone())
+        .start_workspace(&workspace, agent_selection)
         .await
     {
         tracing::error!("Failed to start task attempt: {}", err);

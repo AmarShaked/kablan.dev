@@ -5,7 +5,8 @@ import { useUserSystem } from '@/contexts/UserSystemContext';
 import { attemptsApi } from '@/lib/api';
 import { taskWorkspaceKeys } from '@/hooks/useTaskWorkspace';
 import { workspaceSummaryKeys } from '@/components/ui-new/hooks/useWorkspaces';
-import type { ExecutorProfileId, WorkspaceRepoInput } from 'shared/types';
+import type { AgentRunSelection, WorkspaceRepoInput } from 'shared/types';
+import { firstRunSelection } from '@/utils/agentRun';
 
 type UseStartTaskArgs = {
   taskId: string | undefined;
@@ -56,15 +57,15 @@ export function useStartTask({
 
   const mutation = useMutation({
     mutationFn: ({
-      profile,
+      selection,
       repos,
     }: {
-      profile: ExecutorProfileId;
+      selection: AgentRunSelection;
       repos: WorkspaceRepoInput[];
     }) =>
       attemptsApi.create({
         task_id: taskId!,
-        executor_profile_id: profile,
+        agent_selection: selection,
         repos,
       }),
     onSuccess: () => {
@@ -76,7 +77,7 @@ export function useStartTask({
   });
 
   const isPreparing = isLoadingRepos || isLoadingBranches;
-  const profile = config?.executor_profile ?? null;
+  const profile = config?.last_agent_selection ?? firstRunSelection();
   const unresolvedRepos = configs
     .filter((c) => c.targetBranch === null)
     .map((c) => c.repoDisplayName);
@@ -97,7 +98,7 @@ export function useStartTask({
     if (!taskId || !profile || blocker) return;
     const repos = getWorkspaceRepoInputs();
     if (repos.length !== projectRepos.length) return;
-    await mutation.mutateAsync({ profile, repos });
+    await mutation.mutateAsync({ selection: profile, repos });
   }, [
     taskId,
     profile,

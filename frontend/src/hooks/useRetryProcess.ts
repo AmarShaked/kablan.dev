@@ -9,6 +9,7 @@ import type {
   ExecutionProcess,
   BaseCodingAgent,
 } from 'shared/types';
+import { profileToSelection } from '@/utils/agentRun';
 
 export interface RetryProcessParams {
   message: string;
@@ -58,7 +59,8 @@ export function useRetryProcess(
       // Send the retry request
       await sessionsApi.followUp(sessionId, {
         prompt: message,
-        executor_profile_id: { executor, variant },
+        executor_profile_id: { executor, variant: null },
+        agent_selection: profileToSelection({ executor, variant }),
         retry_process_id: executionProcessId,
         force_when_dirty: modalResult.forceWhenDirty ?? false,
         perform_git_reset: modalResult.performGitReset ?? true,

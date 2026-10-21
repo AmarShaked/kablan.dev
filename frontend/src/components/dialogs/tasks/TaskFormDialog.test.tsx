@@ -41,7 +41,15 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/contexts/UserSystemContext', () => ({
   useUserSystem: () => ({
-    system: { config: { executor_profile: { executor: 'CLAUDE_CODE' } } },
+    system: {
+      config: {
+        last_agent_selection: {
+          executor: 'CLAUDE_CODE',
+          model: null,
+          permission: 'BYPASS',
+        },
+      },
+    },
     profiles: { CLAUDE_CODE: {} },
     loading: false,
   }),
@@ -117,6 +125,10 @@ vi.mock('@/components/ui/wysiwyg', () => ({
 
 vi.mock('@/components/settings', () => ({
   ExecutorProfileSelector: () => <div data-testid="executor-profile" />,
+}));
+
+vi.mock('@/components/tasks/AgentRunControls', () => ({
+  AgentRunControls: () => <div data-testid="agent-run-controls" />,
 }));
 
 vi.mock('@/components/tasks/BranchSelector', () => ({

@@ -5,5 +5,7 @@ pub mod env;
 pub mod executors;
 pub mod logs;
 pub mod mcp_config;
+pub mod model_cache;
 pub mod profile;
+pub mod selection;
 pub mod stdout_dup;

@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react';
 import { sessionsApi } from '@/lib/api';
-import type { BaseCodingAgent, CreateFollowUpAttempt } from 'shared/types';
+import type {
+  AgentRunSelection,
+  BaseCodingAgent,
+  CreateFollowUpAttempt,
+} from 'shared/types';
 import { buildAgentPrompt } from '@/utils/promptMessage';
 
 type Args = {
@@ -10,7 +14,7 @@ type Args = {
   reviewMarkdown: string;
   clickedMarkdown?: string;
   executor: BaseCodingAgent | null;
-  variant: string | null;
+  selection: AgentRunSelection | null;
   clearComments: () => void;
   clearClickedElements?: () => void;
   onAfterSendCleanup: () => void;
@@ -23,7 +27,7 @@ export function useFollowUpSend({
   reviewMarkdown,
   clickedMarkdown,
   executor,
-  variant,
+  selection,
   clearComments,
   clearClickedElements,
   onAfterSendCleanup,
@@ -47,7 +51,11 @@ export function useFollowUpSend({
         setFollowUpError(null);
         const body: CreateFollowUpAttempt = {
           prompt: prompt,
-          executor_profile_id: { executor, variant },
+          executor_profile_id: {
+            executor: selection?.executor ?? executor,
+            variant: null,
+          },
+          agent_selection: selection,
           retry_process_id: null,
           force_when_dirty: null,
           perform_git_reset: null,
@@ -77,7 +85,7 @@ export function useFollowUpSend({
       reviewMarkdown,
       clickedMarkdown,
       executor,
-      variant,
+      selection,
       clearComments,
       clearClickedElements,
       onAfterSendCleanup,

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axum::{Extension, Json, extract::State, response::Json as ResponseJson};
+use axum::{extract::State, response::Json as ResponseJson, Extension, Json};
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessRunReason},
@@ -11,18 +11,19 @@ use db::models::{
 use deployment::Deployment;
 use executors::{
     actions::{
-        ExecutorAction, ExecutorActionType,
         review::{RepoReviewContext as ExecutorRepoReviewContext, ReviewRequest as ReviewAction},
+        ExecutorAction, ExecutorActionType,
     },
     executors::build_review_prompt,
     profile::ExecutorProfileId,
+    selection::selection_from_legacy,
 };
 use serde::{Deserialize, Serialize};
 use services::services::container::ContainerService;
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
-use crate::{DeploymentImpl, error::ApiError};
+use crate::{error::ApiError, DeploymentImpl};
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct StartReviewRequest {
@@ -105,6 +106,11 @@ pub async fn start_review(
     let action = ExecutorAction::new(
         ExecutorActionType::ReviewRequest(ReviewAction {
             executor_profile_id: payload.executor_profile_id.clone(),
+            agent_selection: Some(selection_from_legacy(
+                payload.executor_profile_id.executor,
+                payload.executor_profile_id.variant.as_deref(),
+                None,
+            )),
             context,
             prompt,
             session_id: agent_session_id,

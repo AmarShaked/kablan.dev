@@ -170,7 +170,7 @@ impl Config {
 /// reset — theme, GitHub, editor, the lot. One agent going away should not cost someone their
 /// whole configuration, so it is renamed on the way in and saved back on the next write.
 #[cfg(not(feature = "codex"))]
-fn retire_missing_executors(raw_config: String) -> String {
+pub(crate) fn retire_missing_executors(raw_config: String) -> String {
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&raw_config) else {
         return raw_config;
     };
@@ -197,7 +197,7 @@ fn retire_missing_executors(raw_config: String) -> String {
 }
 
 #[cfg(feature = "codex")]
-fn retire_missing_executors(raw_config: String) -> String {
+pub(crate) fn retire_missing_executors(raw_config: String) -> String {
     raw_config
 }
 

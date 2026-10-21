@@ -5,13 +5,14 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 #[cfg(not(feature = "qa-mode"))]
-use crate::profile::ExecutorConfigs;
+use crate::selection::{resolve_coding_agent, selection_asks_in_app};
 use crate::{
     actions::Executable,
     approvals::ExecutorApprovalService,
     env::ExecutionEnv,
     executors::{BaseCodingAgent, ExecutorError, SpawnedChild, StandardCodingAgentExecutor},
     profile::ExecutorProfileId,
+    selection::AgentRunSelection,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
@@ -24,6 +25,9 @@ pub struct CodingAgentFollowUpRequest {
     #[serde(alias = "profile_variant_label")]
     // Backwards compatibility with ProfileVariantIds, esp stored in DB under ExecutorAction
     pub executor_profile_id: ExecutorProfileId,
+    /// Model and permission for this run. Absent on actions stored before profiles were removed.
+    #[serde(default)]
+    pub agent_selection: Option<AgentRunSelection>,
     /// Optional relative path to execute the agent in (relative to container_ref).
     /// If None, uses the container_ref directory directly.
     #[serde(default)]
@@ -44,7 +48,10 @@ impl CodingAgentFollowUpRequest {
     }
 
     pub fn base_executor(&self) -> BaseCodingAgent {
-        self.executor_profile_id.executor
+        self.agent_selection
+            .as_ref()
+            .map(|selection| selection.executor)
+            .unwrap_or(self.executor_profile_id.executor)
     }
 }
 
@@ -76,14 +83,19 @@ impl Executable for CodingAgentFollowUpRequest {
 
         #[cfg(not(feature = "qa-mode"))]
         {
-            let executor_profile_id = self.get_executor_profile_id();
-            let mut agent = ExecutorConfigs::get_cached()
-                .get_coding_agent(&executor_profile_id)
-                .ok_or(ExecutorError::UnknownExecutorType(
-                    executor_profile_id.to_string(),
-                ))?;
-
-            agent.use_approvals(approvals.clone());
+            let mut agent = resolve_coding_agent(
+                self.agent_selection.as_ref(),
+                &self.executor_profile_id,
+            )
+            .map_err(ExecutorError::UnknownExecutorType)?;
+            let attach_approvals = self
+                .agent_selection
+                .as_ref()
+                .map(selection_asks_in_app)
+                .unwrap_or(true);
+            if attach_approvals {
+                agent.use_approvals(approvals.clone());
+            }
 
             agent
                 .spawn_follow_up(

@@ -14,7 +14,6 @@ import { ScratchType, type TaskWithAttemptStatus } from 'shared/types';
 import { useBranchStatus } from '@/hooks';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 import { useAttemptExecution } from '@/hooks/useAttemptExecution';
-import { useUserSystem } from '@/contexts/UserSystemContext';
 import { cn } from '@/lib/utils';
 //
 import { useReview } from '@/contexts/ReviewProvider';
@@ -27,6 +26,7 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useProjectTags } from '@/hooks/useProjectTags';
 //
 import { ComposerMenu } from '@/components/tasks/ComposerMenu';
+import { AgentRunControls } from '@/components/tasks/AgentRunControls';
 import { useAttemptBranch } from '@/hooks/useAttemptBranch';
 import { FollowUpConflictSection } from '@/components/tasks/follow-up/FollowUpConflictSection';
 import { QueuedFollowUps } from '@/components/tasks/follow-up/QueuedFollowUps';
@@ -36,11 +36,16 @@ import { useRetryUi } from '@/contexts/RetryUiContext';
 import { useFollowUpSend } from '@/hooks/useFollowUpSend';
 import { useVariant } from '@/hooks/useVariant';
 import type {
+  AgentRunSelection,
   DraftFollowUpData,
   ExecutorProfileId,
   QueueStatus,
 } from 'shared/types';
-import { getLatestProfileFromProcesses } from '@/utils/executor';
+import {
+  getLatestProfileFromProcesses,
+  getLatestSelectionFromProcesses,
+} from '@/utils/executor';
+import { profileToSelection } from '@/utils/agentRun';
 import { buildResolveConflictsInstructions } from '@/lib/conflicts';
 import { useTranslation } from 'react-i18next';
 import { useScratch } from '@/hooks/useScratch';
@@ -84,7 +89,6 @@ export function TaskFollowUpSection({
   );
   const { branch: attemptBranch, refetch: refetchAttemptBranch } =
     useAttemptBranch(workspaceId);
-  const { profiles } = useUserSystem();
   const { comments, generateReviewMarkdown, clearComments } = useReview();
   const {
     generateMarkdown: generateClickedMarkdown,
@@ -140,10 +144,20 @@ export function TaskFollowUpSection({
     [processes]
   );
 
-  const currentProfile = useMemo(() => {
-    if (!latestProfileId) return null;
-    return profiles?.[latestProfileId.executor] ?? null;
-  }, [latestProfileId, profiles]);
+  const inheritedSelection = useMemo(
+    () =>
+      getLatestSelectionFromProcesses(processes) ??
+      profileToSelection(latestProfileId),
+    [processes, latestProfileId]
+  );
+  const inheritedKey = `${inheritedSelection.executor}:${inheritedSelection.model ?? ''}:${inheritedSelection.permission}`;
+  const [selection, setSelection] =
+    useState<AgentRunSelection>(inheritedSelection);
+  const inheritedSelectionRef = useRef(inheritedSelection);
+  inheritedSelectionRef.current = inheritedSelection;
+  useEffect(() => {
+    setSelection(inheritedSelectionRef.current);
+  }, [inheritedKey]);
 
   // Variant selection with priority: user selection > scratch > process
   const { selectedVariant, setSelectedVariant: setVariantFromHook } =
@@ -357,7 +371,7 @@ export function TaskFollowUpSection({
       reviewMarkdown,
       clickedMarkdown,
       executor: latestProfileId?.executor ?? null,
-      variant: selectedVariant,
+      selection,
       clearComments,
       clearClickedElements,
       onAfterSendCleanup: () => {
@@ -749,7 +763,7 @@ export function TaskFollowUpSection({
               onUpload={handleAttachClick}
               tags={tags}
               onInsertPrompt={handleInsertPrompt}
-              currentProfile={currentProfile}
+              currentProfile={null}
               selectedVariant={selectedVariant}
               onVariantChange={setSelectedVariant}
               disabled={!isEditable}
@@ -759,7 +773,14 @@ export function TaskFollowUpSection({
                 belongs on the row you are about to press send on. */}
             <ContextMeter info={tokenUsageInfo} variant="row" />
 
-            <div className="min-w-0 flex-1" />
+            <AgentRunControls
+              selection={selection}
+              onChange={(next) =>
+                setSelection({ ...next, executor: selection.executor })
+              }
+              agentFixed
+              disabled={!isEditable}
+            />
 
             {comments.length > 0 && (
               <Button
