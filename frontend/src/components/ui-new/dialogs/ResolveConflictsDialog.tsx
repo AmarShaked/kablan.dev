@@ -19,11 +19,7 @@ import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import { buildResolveConflictsInstructions } from '@/lib/conflicts';
 import { profileToSelection } from '@/utils/agentRun';
-import type {
-  BaseCodingAgent,
-  ExecutorProfileId,
-  ConflictOp,
-} from 'shared/types';
+import type { BaseCodingAgent, ConflictOp } from 'shared/types';
 
 export interface ResolveConflictsDialogProps {
   workspaceId: string;
