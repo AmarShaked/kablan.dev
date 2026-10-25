@@ -1,16 +1,6 @@
-import { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
-import {
-  Archive,
-  LayoutGrid,
-  ListChecks,
-  Moon,
-  Plus,
-  Settings,
-  Sun,
-} from 'lucide-react';
+import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
 
 import { ThemeMode } from 'shared/types';
 import { projectStatsApi } from '@/lib/api';
@@ -38,7 +28,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { SidebarSectionMenu } from '@/components/layout/SidebarSectionMenu';
 import { useSidebarSectionPrefs } from '@/hooks/useSidebarSectionPrefs';
@@ -65,20 +54,6 @@ import { agentLabel } from '@/utils/agentLabels';
 import { IntegrationIcon } from '@/components/integrations/IntegrationIcon';
 import { useConfiguredIntegrations } from '@/hooks/useConfiguredIntegrations';
 import { integrationLabel } from '@/lib/integrations/catalog';
-import { PocketBaseAuthDialog } from '@/components/dialogs/auth/PocketBaseAuthDialog';
-import { InviteChatDialog } from '@/components/dialogs/chats/InviteChatDialog';
-import { ChatUserAvatar } from '@/components/chats/ChatUserAvatar';
-import { SidebarNavUser } from '@/components/layout/SidebarNavUser';
-import { useChats } from '@/hooks/useChats';
-import { useChatPresence } from '@/hooks/useChatPresence';
-import { usePocketBaseAuth } from '@/hooks/usePocketBaseAuth';
-import { paths } from '@/lib/paths';
-import { isChatsPath } from '@/lib/routes/chatRoutes';
-import { ensureSelfChat } from '@/lib/pocketbase';
-import {
-  encodeProjectDrag,
-  KABLAN_PROJECT_DRAG_TYPE,
-} from '@/lib/chatPinnedProject';
 
 /**
  * Every project, always in reach — plus the two app-level controls that used to live in the
@@ -94,7 +69,6 @@ import {
  * icons instead of disappearing: the point is to keep the switch available, not the names.
  */
 export function ProjectsSidebar() {
-  const { t } = useTranslation('warzone');
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
@@ -110,55 +84,10 @@ export function ProjectsSidebar() {
     'connected',
     'all',
   ]);
-  const { isSignedIn, pb, signOut, user } = usePocketBaseAuth();
   const activeAgent = parseAgentParam(location.pathname.split('/')[2]);
   const activeIntegration = parseIntegrationParam(
     location.pathname.split('/')[2]
   );
-  const activeChatId = location.pathname.match(/^\/chats\/([^/]+)/)?.[1];
-  const { chats, refresh: refreshChats, isUnread } = useChats(activeChatId);
-  const presenceUserIds = useMemo(
-    () =>
-      chats
-        .map((chat) => (chat.kind === 'self' ? user?.id : chat.peer?.id))
-        .filter((id): id is string => !!id),
-    [chats, user?.id]
-  );
-  const { isOnline } = useChatPresence(presenceUserIds);
-
-  const openChats = async () => {
-    if (!isSignedIn) {
-      const ok = await PocketBaseAuthDialog.show().catch(() => false);
-      if (!ok) return;
-      await refreshChats();
-    }
-    if (!pb) {
-      navigate(paths.chats());
-      return;
-    }
-    try {
-      const self = await ensureSelfChat(pb);
-      await refreshChats();
-      navigate(paths.chat(self.id));
-    } catch {
-      navigate(paths.chats());
-    }
-  };
-
-  const openInviteChat = async () => {
-    if (!isSignedIn) {
-      const ok = await PocketBaseAuthDialog.show().catch(() => false);
-      if (!ok) return;
-      await refreshChats();
-    }
-    const result = await InviteChatDialog.show().catch(() => ({
-      action: 'canceled' as const,
-    }));
-    if (result.action !== 'opened') return;
-    await refreshChats();
-    navigate(paths.chat(result.chat.id));
-  };
-
   // The same query the projects page uses, so the two share one fetch and one cache.
   const { data: projects = [] } = useQuery({
     queryKey: projectKeys.withStats,
@@ -258,29 +187,6 @@ export function ProjectsSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* First after the CTA: the live deck of agents that need you. Own group + separator so
-            it reads as the primary view, not another peer of Tasks/Archive. */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === '/warzone'}
-                  tooltip={t('title')}
-                >
-                  <Link to="/warzone">
-                    <LayoutGrid />
-                    <span>{t('title')}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
         {/* Above the projects, because these are the views you take when you do not yet know
             which project the work is in. */}
         <SidebarGroup>
@@ -358,21 +264,7 @@ export function ProjectsSidebar() {
                           : project.name
                       }
                     >
-                      <Link
-                        to={`/local-projects/${project.id}/tasks`}
-                        draggable
-                        title="Drag into a chat to pin this project"
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            KABLAN_PROJECT_DRAG_TYPE,
-                            encodeProjectDrag({
-                              id: project.id,
-                              name: project.name,
-                            })
-                          );
-                          e.dataTransfer.effectAllowed = 'copy';
-                        }}
-                      >
+                      <Link to={`/local-projects/${project.id}/tasks`}>
                         <Icon />
                         <span>{project.name}</span>
                       </Link>
@@ -395,72 +287,6 @@ export function ProjectsSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {isSignedIn && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="gap-1.5">
-              Chats
-              <span className="rounded bg-warning/15 px-1 py-px font-ibm-plex-mono text-[9px] font-medium uppercase tracking-wide text-warning">
-                Beta
-              </span>
-            </SidebarGroupLabel>
-            <SidebarGroupAction
-              title="Start a chat by email"
-              onClick={() => void openInviteChat()}
-            >
-              <Plus />
-              <span className="sr-only">New chat</span>
-            </SidebarGroupAction>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {chats.map((chat) => {
-                  const isActive = activeChatId === chat.id;
-                  const unread = isUnread(chat.id);
-                  const label = chat.label;
-                  const presenceId =
-                    chat.kind === 'self' ? user?.id : chat.peer?.id;
-                  const online = isOnline(presenceId);
-                  return (
-                    <SidebarMenuItem key={chat.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        tooltip={label}
-                      >
-                        <Link to={paths.chat(chat.id)}>
-                          <ChatUserAvatar name={label} />
-                          <span
-                            className={cn(
-                              'truncate',
-                              unread && 'font-semibold'
-                            )}
-                          >
-                            {label}
-                          </span>
-                        </Link>
-                      </SidebarMenuButton>
-                      <SidebarMenuBadge>
-                        {unread ? (
-                          <span
-                            className="h-2 w-2 rounded-full bg-info"
-                            aria-label="Unread messages"
-                            role="img"
-                          />
-                        ) : online ? (
-                          <span
-                            className="h-2 w-2 rounded-full bg-green-500"
-                            aria-label="Online"
-                            role="img"
-                          />
-                        ) : null}
-                      </SidebarMenuBadge>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
         <SidebarGroup>
           <SidebarGroupLabel>Agents</SidebarGroupLabel>
@@ -589,15 +415,6 @@ export function ProjectsSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <SidebarNavUser
-          user={user}
-          isSignedIn={isSignedIn}
-          onSignIn={() => void openChats()}
-          onSignOut={() => {
-            signOut();
-            if (isChatsPath(location.pathname)) navigate(paths.chats());
-          }}
-        />
       </SidebarFooter>
 
       {/* The draggable edge: collapses the sidebar without hunting for a button. */}

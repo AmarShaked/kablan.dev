@@ -269,11 +269,22 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
         const dt = event.clipboardData;
         if (!dt) return;
 
-        const files: File[] = Array.from(dt.files || []).filter((f) =>
+        const fromFiles = Array.from(dt.files || []).filter((f) =>
           f.type.startsWith('image/')
         );
+        const files =
+          fromFiles.length > 0
+            ? fromFiles
+            : Array.from(dt.items || []).flatMap((item) => {
+                if (item.kind !== 'file' || !item.type.startsWith('image/')) {
+                  return [];
+                }
+                const file = item.getAsFile();
+                return file ? [file] : [];
+              });
 
         if (files.length > 0) {
+          event.preventDefault();
           onPasteFiles(files);
         }
       },

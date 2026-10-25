@@ -9,7 +9,7 @@ import {
 } from 'react';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, FolderGit2, GitBranch, Paperclip } from 'lucide-react';
+import { Check, FolderGit2, GitBranch, Paperclip, X } from 'lucide-react';
 import type {
   AgentRunSelection,
   Repo,
@@ -44,6 +44,17 @@ import type { TaskFormDialogProps } from './TaskFormDialog';
 
 const LAST_PROJECT_KEY = 'kablan.lastTaskProject';
 
+type Attachment = {
+  id: string;
+  name: string;
+  path: string;
+  url: string;
+};
+
+function imageMarkdown(image: Attachment): string {
+  return `![${image.name}](${image.path})`;
+}
+
 export type NewTaskDialogProps = Exclude<TaskFormDialogProps, { mode: 'edit' }>;
 
 function readLastProject(): string {
@@ -60,6 +71,19 @@ function rememberProject(id: string) {
   } catch {
     // Private mode can refuse storage. The choice still applies to this dialog.
   }
+}
+
+function imageFiles(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const listed = Array.from(data.files).filter((file) =>
+    file.type.startsWith('image/')
+  );
+  if (listed.length > 0) return listed;
+  return Array.from(data.items).flatMap((item) => {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) return [];
+    const file = item.getAsFile();
+    return file ? [file] : [];
+  });
 }
 
 function initialCopy(props: NewTaskDialogProps): {
@@ -119,7 +143,7 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
   const [selection, setSelection] = useState<AgentRunSelection>(
     () => system.config?.last_agent_selection ?? firstRunSelection()
   );
-  const [imageIds, setImageIds] = useState<string[]>([]);
+  const [images, setImages] = useState<Attachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
@@ -164,7 +188,7 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
   const dirty =
     title.trim().length > 0 ||
     description.trim().length > 0 ||
-    imageIds.length > 0;
+    images.length > 0;
 
   const close = () => {
     modal.remove();
@@ -199,20 +223,45 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
     }
   };
 
-  const onAttach = async (files: FileList | null) => {
-    if (!files) return;
-    for (const file of Array.from(files)) {
+  const onAttach = async (files: File[]) => {
+    if (files.length === 0 || submitting) return;
+    for (const file of files) {
+      const pendingId = `pending-${crypto.randomUUID()}`;
+      let preview = '';
       try {
+        preview = URL.createObjectURL(file);
+        setImages((prev) => [
+          ...prev,
+          { id: pendingId, name: file.name, path: '', url: preview },
+        ]);
         const img = await upload(file);
-        const markdown = `![${img.original_name}](${img.file_path})`;
-        setDescription((prev) =>
-          prev.trim() ? `${prev}\n${markdown}` : markdown
+        URL.revokeObjectURL(preview);
+        setImages((prev) =>
+          prev.map((item) =>
+            item.id === pendingId
+              ? {
+                  id: img.id,
+                  name: img.original_name,
+                  path: img.file_path,
+                  url: `/api/images/${img.id}/file`,
+                }
+              : item
+          )
         );
-        setImageIds((prev) => [...prev, img.id]);
       } catch (err) {
+        if (preview) URL.revokeObjectURL(preview);
+        setImages((prev) => prev.filter((item) => item.id !== pendingId));
         setError(err instanceof Error ? err.message : 'Could not attach image');
       }
     }
+  };
+
+  const removeImage = (id: string) => {
+    setImages((prev) => {
+      const image = prev.find((item) => item.id === id);
+      if (image?.url.startsWith('blob:')) URL.revokeObjectURL(image.url);
+      return prev.filter((item) => item.id !== id);
+    });
   };
 
   const start = useCallback(async () => {
@@ -221,14 +270,26 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
     setSubmitting(true);
     setError(null);
     const source = props.mode === 'create' ? props.source : undefined;
+    const readyImages = images.filter((image) => image.path);
+    const extra = readyImages
+      .map(imageMarkdown)
+      .filter((line) => !description.includes(line));
+    const body = description.trim();
+    const descriptionWithImages =
+      extra.length === 0
+        ? body || null
+        : body
+          ? `${body}\n${extra.join('\n')}`
+          : extra.join('\n');
     const task = {
       project_id: projectId,
       title: trimmed,
-      description: description.trim() ? description : null,
+      description: descriptionWithImages,
       status: null,
       parent_workspace_id:
         props.mode === 'subtask' ? props.parentTaskAttemptId : null,
-      image_ids: imageIds.length > 0 ? imageIds : null,
+      image_ids:
+        readyImages.length > 0 ? readyImages.map((image) => image.id) : null,
       source_provider: source?.provider ?? null,
       source_id: source?.id ?? null,
       source_identifier: source?.identifier ?? null,
@@ -259,7 +320,7 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
     configs,
     createAndStart,
     description,
-    imageIds,
+    images,
     modal,
     projectId,
     props,
@@ -278,7 +339,15 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
         className="max-w-xl gap-0 p-0 sm:rounded-xl"
       >
         <DialogTitle className="sr-only">New task</DialogTitle>
-        <div className="flex flex-col gap-3 p-4">
+        <div
+          className="flex flex-col gap-3 p-4"
+          onPaste={(event) => {
+            const files = imageFiles(event.clipboardData);
+            if (files.length === 0) return;
+            event.preventDefault();
+            void onAttach(files);
+          }}
+        >
           <div className="flex flex-wrap items-center gap-1.5 pr-8">
             <ProjectChip
               name={project?.name}
@@ -340,6 +409,28 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
             }}
             className="min-h-24 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {images.map((image) => (
+                <span key={image.id} className="group relative">
+                  <img
+                    src={image.url}
+                    alt={image.name}
+                    className="h-16 w-16 rounded-md border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remove ${image.name}`}
+                    disabled={submitting}
+                    onClick={() => removeImage(image.id)}
+                    className="absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
           <AgentRunControls
             variant="chips"
@@ -360,7 +451,7 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
               accept="image/*"
               className="hidden"
               onChange={(e) => {
-                void onAttach(e.target.files);
+                void onAttach(Array.from(e.target.files ?? []));
                 e.target.value = '';
               }}
             />

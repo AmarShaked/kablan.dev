@@ -50,9 +50,10 @@ vi.mock('@/hooks/useProjects', () => ({
 }));
 
 const createAndStart = vi.fn().mockResolvedValue({ id: 'task-1' });
+const upload = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks', () => ({
-  useImageUpload: () => ({ upload: vi.fn(), uploadForTask: vi.fn() }),
+  useImageUpload: () => ({ upload, uploadForTask: vi.fn() }),
   useTaskMutations: () => ({
     createAndStart: { mutateAsync: createAndStart },
   }),
@@ -109,6 +110,8 @@ describe('NewTaskDialog', () => {
     vi.clearAllMocks();
     branchesReady = false;
     localStorage.clear();
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
   });
 
   it('shows the project and its default branch, with agent and model chips', async () => {
@@ -145,5 +148,47 @@ describe('NewTaskDialog', () => {
       task: { project_id: 'project-1', title: 'Fix the thing' },
       repos: [{ repo_id: 'repo-1', target_branch: 'main' }],
     });
+  });
+
+  it('uploads an image pasted into the description', async () => {
+    upload.mockResolvedValue({
+      id: 'img-1',
+      original_name: 'shot.png',
+      file_path: 'uploads/shot.png',
+    });
+    renderApp();
+    NewTaskDialog.show({ mode: 'create', projectId: 'project-1' });
+
+    const description = await screen.findByLabelText('description');
+    const file = new File(['png'], 'shot.png', { type: 'image/png' });
+    fireEvent.paste(description, {
+      clipboardData: {
+        files: [file],
+        items: [],
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute(
+        'src',
+        '/api/images/img-1/file'
+      )
+    );
+    expect(description).toHaveValue('');
+
+    act(deliverBranches);
+    fireEvent.change(await screen.findByLabelText('Task title'), {
+      target: { value: 'Fix the thing' },
+    });
+    const start = await screen.findByRole('button', { name: 'Start' });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+
+    await waitFor(() => expect(createAndStart).toHaveBeenCalled());
+    expect(createAndStart.mock.calls[0][0].task).toMatchObject({
+      description: '![shot.png](uploads/shot.png)',
+      image_ids: ['img-1'],
+    });
+    expect(upload).toHaveBeenCalledWith(file);
   });
 });
