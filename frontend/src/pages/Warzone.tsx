@@ -20,7 +20,7 @@ import {
   resolveWarzoneFocusTaskId,
   shouldDropReservedForProjectFilter,
 } from '@/lib/warzone/toolbarStatus';
-import { TaskFormDialog } from '@/components/dialogs/tasks/TaskFormDialog';
+import { NewTaskDialog } from '@/components/dialogs/tasks/NewTaskDialog';
 import { openTaskForm } from '@/lib/openTaskForm';
 import { paths } from '@/lib/paths';
 import { taskNeedsAttention } from '@/utils/taskActivity';
@@ -97,7 +97,7 @@ export function Warzone() {
 
   useEffect(() => {
     if (createSlot != null && createSlot > slotCount) {
-      TaskFormDialog.hide();
+      NewTaskDialog.hide();
       pendingCreateSlotRef.current = null;
       setCreateSlot(null);
     }
@@ -160,7 +160,7 @@ export function Warzone() {
 
       if (e.key === 'Escape') {
         if (createSlot != null) {
-          TaskFormDialog.hide();
+          NewTaskDialog.hide();
           pendingCreateSlotRef.current = null;
           setCreateSlot(null);
           return;

@@ -1,4 +1,13 @@
-import { Check } from 'lucide-react';
+import {
+  Check,
+  FilePen,
+  ListTodo,
+  Shield,
+  ShieldOff,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react';
+import { AgentIcon } from '@/components/agents/AgentIcon';
 import { useQuery } from '@tanstack/react-query';
 import {
   BaseCodingAgent,
@@ -29,17 +38,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+const chipTriggerClass =
+  'h-7 gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 text-xs font-normal text-foreground hover:bg-accent';
+
 export function AgentRunControls({
   selection,
   onChange,
   agentFixed = false,
   disabled = false,
+  variant = 'bar',
+  showPermission = false,
 }: {
   selection: AgentRunSelection;
   onChange: (next: AgentRunSelection) => void;
   /** Follow-ups keep the agent the task started with. */
   agentFixed?: boolean;
   disabled?: boolean;
+  /** `chips` draws each control as a small pill under the input. */
+  variant?: 'bar' | 'chips';
+  /** Follow-up chips include the permission mode. New task leaves it stored. */
+  showPermission?: boolean;
 }) {
   const { configuredAgents } = useConfiguredAgents();
   const { data: cache } = useQuery({
@@ -62,6 +80,57 @@ export function AgentRunControls({
     });
   };
 
+  const agentMenu = agentFixed ? (
+    <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 text-xs text-foreground">
+      <AgentIcon agent={selection.executor} className="h-3.5 w-3.5" />
+      <span className="truncate">{agentLabel(selection.executor)}</span>
+    </span>
+  ) : (
+    <AgentMenu
+      agents={configuredAgents}
+      executor={selection.executor}
+      disabled={disabled}
+      chip={variant === 'chips'}
+      onChange={chooseAgent}
+    />
+  );
+  const modelMenu = (
+    <ModelMenu
+      models={models}
+      ready={ready}
+      error={modelError}
+      selectedId={selection.model}
+      selectedLabel={
+        selection.model
+          ? (selectedModel?.label ?? selection.model)
+          : models.length > 0 || ready
+            ? 'Default'
+            : '…'
+      }
+      disabled={disabled}
+      chip={variant === 'chips'}
+      onChange={(model) => onChange({ ...selection, model })}
+    />
+  );
+
+  if (variant === 'chips') {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {showPermission && (
+          <PermissionMenu
+            agent={selection.executor}
+            permission={selection.permission}
+            disabled={disabled}
+            chip
+            onChange={(permission) => onChange({ ...selection, permission })}
+          />
+        )}
+        {agentMenu}
+        {modelMenu}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
       <PermissionMenu
@@ -76,45 +145,43 @@ export function AgentRunControls({
             {agentLabel(selection.executor)}
           </span>
         ) : (
-          <AgentMenu
-            agents={configuredAgents}
-            executor={selection.executor}
-            disabled={disabled}
-            onChange={chooseAgent}
-          />
+          agentMenu
         )}
-        <ModelMenu
-          models={models}
-          ready={ready}
-          error={modelError}
-          selectedId={selection.model}
-          selectedLabel={
-            selection.model
-              ? (selectedModel?.label ?? selection.model)
-              : ready
-                ? 'Default'
-                : '…'
-          }
-          disabled={disabled}
-          onChange={(model) => onChange({ ...selection, model })}
-        />
+        {modelMenu}
       </div>
     </div>
   );
+}
+
+function permissionIcon(permission: PermissionLevel): LucideIcon {
+  switch (permission) {
+    case PermissionLevel.PLAN:
+      return ListTodo;
+    case PermissionLevel.ACCEPT_EDITS:
+      return FilePen;
+    case PermissionLevel.BYPASS:
+      return ShieldOff;
+    case PermissionLevel.AUTO:
+    case PermissionLevel.MANUAL:
+      return Shield;
+  }
 }
 
 function PermissionMenu({
   agent,
   permission,
   disabled,
+  chip = false,
   onChange,
 }: {
   agent: BaseCodingAgent;
   permission: PermissionLevel;
   disabled: boolean;
+  chip?: boolean;
   onChange: (permission: PermissionLevel) => void;
 }) {
   const modes = supportedPermissions(agent);
+  const Icon = permissionIcon(permission);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -123,8 +190,14 @@ function PermissionMenu({
           variant="ghost"
           size="sm"
           disabled={disabled}
-          className="h-8 shrink-0 px-2 text-sm font-normal text-foreground/80"
+          aria-label="Permission"
+          className={
+            chip
+              ? chipTriggerClass
+              : 'h-8 shrink-0 px-2 text-sm font-normal text-foreground/80'
+          }
         >
+          {chip && <Icon className="text-muted-foreground" />}
           {permissionLabel(permission)}
         </Button>
       </DropdownMenuTrigger>
@@ -156,11 +229,13 @@ function AgentMenu({
   agents,
   executor,
   disabled,
+  chip = false,
   onChange,
 }: {
   agents: BaseCodingAgent[];
   executor: BaseCodingAgent;
   disabled: boolean;
+  chip?: boolean;
   onChange: (executor: BaseCodingAgent) => void;
 }) {
   return (
@@ -171,8 +246,14 @@ function AgentMenu({
           variant="ghost"
           size="sm"
           disabled={disabled}
-          className="h-8 max-w-[10rem] px-2 text-sm font-normal text-foreground/80"
+          aria-label="Agent"
+          className={
+            chip
+              ? `max-w-[12rem] ${chipTriggerClass}`
+              : 'h-8 max-w-[10rem] px-2 text-sm font-normal text-foreground/80'
+          }
         >
+          {chip && <AgentIcon agent={executor} className="h-3.5 w-3.5" />}
           <span className="truncate">{agentLabel(executor)}</span>
         </Button>
       </DropdownMenuTrigger>
@@ -195,6 +276,7 @@ function ModelMenu({
   selectedId,
   selectedLabel,
   disabled,
+  chip = false,
   onChange,
 }: {
   models: ListedModel[];
@@ -203,6 +285,7 @@ function ModelMenu({
   selectedId: string | null;
   selectedLabel: string;
   disabled: boolean;
+  chip?: boolean;
   onChange: (model: string | null) => void;
 }) {
   const featured = models.filter((model) => model.featured);
@@ -216,8 +299,14 @@ function ModelMenu({
           variant="ghost"
           size="sm"
           disabled={disabled}
-          className="h-8 max-w-[12rem] px-2 text-sm font-normal text-foreground/80"
+          aria-label="Model"
+          className={
+            chip
+              ? `max-w-[12rem] ${chipTriggerClass}`
+              : 'h-8 max-w-[12rem] px-2 text-sm font-normal text-foreground/80'
+          }
         >
+          {chip && <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />}
           <span className="truncate">{selectedLabel}</span>
         </Button>
       </DropdownMenuTrigger>

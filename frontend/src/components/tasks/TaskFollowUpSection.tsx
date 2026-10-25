@@ -758,7 +758,24 @@ export function TaskFollowUpSection({
             />
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 px-4 pb-3 pt-3">
+          <div className="flex shrink-0 items-center gap-2 px-3 pb-2.5 pt-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {/* The context is what the next turn costs, so it sits with the controls you
+                  are about to send with. */}
+              <ContextMeter info={tokenUsageInfo} variant="row" />
+
+              <AgentRunControls
+                variant="chips"
+                showPermission
+                selection={selection}
+                onChange={(next) =>
+                  setSelection({ ...next, executor: selection.executor })
+                }
+                agentFixed
+                disabled={!isEditable}
+              />
+            </div>
+
             <ComposerMenu
               onUpload={handleAttachClick}
               tags={tags}
@@ -766,19 +783,6 @@ export function TaskFollowUpSection({
               currentProfile={null}
               selectedVariant={selectedVariant}
               onVariantChange={setSelectedVariant}
-              disabled={!isEditable}
-            />
-
-            {/* Always visible, beside the controls: the context is what the next turn costs, so it
-                belongs on the row you are about to press send on. */}
-            <ContextMeter info={tokenUsageInfo} variant="row" />
-
-            <AgentRunControls
-              selection={selection}
-              onChange={(next) =>
-                setSelection({ ...next, executor: selection.executor })
-              }
-              agentFixed
               disabled={!isEditable}
             />
 

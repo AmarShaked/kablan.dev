@@ -1,10 +1,12 @@
+import { NewTaskDialog } from '@/components/dialogs/tasks/NewTaskDialog';
 import { TaskFormDialog } from '@/components/dialogs/tasks/TaskFormDialog';
 import type { TaskFormDialogProps } from '@/components/dialogs/tasks/TaskFormDialog';
 
 /**
- * Open the task form dialog programmatically
- * This replaces the previous TaskFormDialogContainer pattern
+ * New work opens the minimal dialog. Editing an existing task keeps the
+ * smaller status form.
  */
 export function openTaskForm(props: TaskFormDialogProps) {
-  return TaskFormDialog.show(props);
+  if (props.mode === 'edit') return TaskFormDialog.show(props);
+  return NewTaskDialog.show(props);
 }
