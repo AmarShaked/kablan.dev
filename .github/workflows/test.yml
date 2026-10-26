@@ -70,7 +70,12 @@ jobs:
 
       # The installer decides what to stop and what to leave alone; getting that wrong either
       # leaves the old version serving or signals a process that is not ours.
+      #
+      # Runs even when the frontend checks fail: these tests share nothing with lint, i18n,
+      # format or build, and sequencing them behind that step is what hid a broken
+      # `npm run test:cli` from us entirely (KAB-37).
       - name: Run npx CLI tests
+        if: ${{ !cancelled() }}
         run: npm run test:cli
 
   backend-schema-checks:
