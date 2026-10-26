@@ -2,6 +2,8 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+import releasePkg from '../npx-cli/package.json';
+
 /**
  * Test config, separate from vite.config.ts.
  *
@@ -12,6 +14,11 @@ import react from '@vitejs/plugin-react';
  */
 export default defineConfig({
   plugins: [react()],
+  // Mirrors vite.config.ts: __APP_VERSION__ is a compile-time constant, so any module that reads
+  // it is a ReferenceError under test unless the test build defines it too.
+  define: {
+    __APP_VERSION__: JSON.stringify(releasePkg.version),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

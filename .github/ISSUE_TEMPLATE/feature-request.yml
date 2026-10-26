@@ -1,0 +1,37 @@
+name: Feature request
+description: Something Kablan should do and doesn't.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Half-formed is fine. If you'd rather talk it through first than file it, that's what
+        [Ideas](https://github.com/AmarShaked/kablan.dev/discussions/new?category=ideas) is for.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: The situation you were in when you noticed this was missing.
+      placeholder: >-
+        I had four attempts on one task and no way to tell which branch each one was on
+        without opening them one at a time.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: What you'd want Kablan to do. A rough shape is enough.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you're doing instead today
+      description: If you've found a way around it, say so — it tells us how much this is costing you.
+    validations:
+      required: false

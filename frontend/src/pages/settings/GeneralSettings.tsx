@@ -22,9 +22,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   ArrowUpCircle,
+  Bug,
   Check,
   FolderOpen,
   Loader2,
+  MessagesSquare,
   Volume2,
 } from 'lucide-react';
 import {
@@ -43,6 +45,7 @@ import { EditorAvailabilityIndicator } from '@/components/EditorAvailabilityIndi
 import { useTheme } from '@/components/ThemeProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useLatestRelease } from '@/hooks/useLatestRelease';
+import { DISCUSSIONS_URL, buildReportProblemUrl } from '@/lib/reportProblem';
 import { TagManager } from '@/components/TagManager';
 import { FolderPickerDialog } from '@/components/dialogs/shared/FolderPickerDialog';
 
@@ -58,6 +61,7 @@ export function GeneralSettings() {
   );
   const {
     config,
+    environment,
     loading,
     updateAndSaveConfig, // Use this on Save
   } = useUserSystem();
@@ -840,6 +844,35 @@ export function GeneralSettings() {
                 Could not check for updates
               </span>
             )}
+          </div>
+
+          {/*
+            Next to the version, because the version is what you come here looking for when
+            something is wrong. The report link carries that version, your OS and your agent
+            into the issue form as text you read before you send it — Kablan sends nothing.
+          */}
+          <div className="mt-4 flex flex-wrap items-center gap-4 border-t pt-4">
+            <a
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              href={buildReportProblemUrl({
+                environment,
+                executor: config?.last_agent_selection?.executor,
+              })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Bug className="h-3.5 w-3.5 shrink-0" />
+              Report a problem
+            </a>
+            <a
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              href={DISCUSSIONS_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessagesSquare className="h-3.5 w-3.5 shrink-0" />
+              Ask a question
+            </a>
           </div>
         </CardContent>
       </Card>

@@ -1,0 +1,69 @@
+name: It didn't work on my machine
+description: Kablan would not install, would not start, or would not get you to a diff.
+title: "[didn't work] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Five fields, most of them one line. If you opened this from inside Kablan the
+        environment box is already filled in — read it, delete anything you'd rather not
+        post, and send.
+
+        Nothing is submitted until you press the button. Kablan does not send anything on
+        its own.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran or clicked, and what you got instead of what you expected.
+      placeholder: |
+        Ran `npx kablan`, the browser opened, I made a task, hit Start — the attempt sat
+        on "Starting" forever and nothing appeared in the conversation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >-
+        Pre-filled if you came from inside Kablan. Otherwise: your OS and version, and the
+        Kablan version you're running.
+      value: |
+        Kablan:
+        OS:
+        Browser:
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: "`node --version`"
+      placeholder: v22.14.0
+    validations:
+      required: true
+
+  - type: input
+    id: agent
+    attributes:
+      label: Which coding agent
+      description: >-
+        The agent CLI you pointed Kablan at, and its version if you have it handy
+        (`claude --version`, `codex --version`, …).
+      placeholder: Claude Code 2.0.14
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Anything the terminal said
+      description: >-
+        The error text, if there was any. Paste it raw — it gets formatted as a code block.
+      render: shell
+    validations:
+      required: false

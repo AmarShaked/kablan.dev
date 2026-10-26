@@ -1,0 +1,71 @@
+name: Bug report
+description: Kablan runs, but something in it is wrong.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If Kablan would not install or would not start at all, use
+        [It didn't work on my machine](https://github.com/AmarShaked/kablan.dev/issues/new?template=didnt-work.yml)
+        instead — it asks for the things that matter for a cold start.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what Kablan did.
+      placeholder: |
+        Merged an attempt from the right-hand column. The toast said it merged, but the
+        branch is still open on GitHub and the task stayed In Progress.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: As far as you can retrace them. "It happened once and I can't repeat it" is a fine answer.
+      placeholder: |
+        1. Open a project with two repos
+        2. Start a task on the second one
+        3. …
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Pre-filled if you came from inside Kablan.
+      value: |
+        Kablan:
+        OS:
+        Browser:
+    validations:
+      required: true
+
+  - type: input
+    id: agent
+    attributes:
+      label: Which coding agent
+      description: Only if the bug involves running a task.
+      placeholder: Claude Code
+    validations:
+      required: false
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Logs or error text
+      description: From the terminal Kablan is running in, or the browser console.
+      render: shell
+    validations:
+      required: false
