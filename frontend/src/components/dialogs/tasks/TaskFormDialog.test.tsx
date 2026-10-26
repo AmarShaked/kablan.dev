@@ -35,6 +35,15 @@ const deliverBranches = () => {
   branchListeners.forEach((cb) => cb());
 };
 
+// What each repo's own checkout looks like, for the warnings shown before a task starts.
+// Clean and pushable unless a test says otherwise.
+type WorkingCopy = {
+  uncommitted_count: number;
+  untracked_count: number;
+  has_remote: boolean;
+};
+let workingCopies: Record<string, WorkingCopy> = {};
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -94,6 +103,7 @@ vi.mock('@/hooks', () => ({
       isLoading,
     };
   },
+  useRepoWorkingCopy: () => workingCopies,
 }));
 
 vi.mock('@/keyboard', () => ({
@@ -201,6 +211,7 @@ describe('TaskFormDialog opened from the sidebar (no project yet)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     branchesReady = false;
+    workingCopies = {};
   });
 
   it('enables Create when the project is chosen after the title is typed', async () => {
@@ -305,6 +316,75 @@ describe('TaskFormDialog opened from the sidebar (no project yet)', () => {
       task: { project_id: 'project-1', title: 'Fix the thing' },
       repos: [{ repo_id: 'repo-1', target_branch: 'main' }],
     });
+  });
+
+  it('warns that uncommitted work in the repo is not what the agent will see', async () => {
+    workingCopies = {
+      'repo-1': {
+        uncommitted_count: 1,
+        untracked_count: 1,
+        has_remote: true,
+      },
+    };
+    renderApp();
+    TaskFormDialog.show({ mode: 'create' });
+
+    await titleInput();
+    pickProject();
+    act(deliverBranches);
+
+    expect(
+      await screen.findByText('workingCopyWarnings.uncommitted')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('workingCopyWarnings.noRemote')
+    ).not.toBeInTheDocument();
+  });
+
+  it('warns before the work starts that a repo with no remote cannot open a PR', async () => {
+    workingCopies = {
+      'repo-1': {
+        uncommitted_count: 0,
+        untracked_count: 0,
+        has_remote: false,
+      },
+    };
+    renderApp();
+    TaskFormDialog.show({ mode: 'create' });
+
+    await titleInput();
+    pickProject();
+    act(deliverBranches);
+
+    expect(
+      await screen.findByText('workingCopyWarnings.noRemote')
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing when the repo is clean and has a remote', async () => {
+    workingCopies = {
+      'repo-1': {
+        uncommitted_count: 0,
+        untracked_count: 0,
+        has_remote: true,
+      },
+    };
+    renderApp();
+    TaskFormDialog.show({ mode: 'create' });
+
+    fireEvent.change(await titleInput(), {
+      target: { value: 'Fix the thing' },
+    });
+    pickProject();
+    act(deliverBranches);
+
+    await waitFor(() => expect(createButton()).toBeEnabled());
+    expect(
+      screen.queryByText('workingCopyWarnings.uncommitted')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('workingCopyWarnings.noRemote')
+    ).not.toBeInTheDocument();
   });
 
   it('opens again after being closed with unsaved changes discarded', async () => {

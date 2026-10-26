@@ -21,6 +21,7 @@ import WYSIWYGEditor from '@/components/ui/wysiwyg';
 import type { LocalImageMetadata } from '@/components/ui/wysiwyg/context/task-attempt-context';
 import BranchSelector from '@/components/tasks/BranchSelector';
 import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
+import { WorkingCopyWarnings } from '@/components/tasks/WorkingCopyWarnings';
 import { AgentRunControls } from '@/components/tasks/AgentRunControls';
 import { firstRunSelection } from '@/utils/agentRun';
 import { useUserSystem } from '@/contexts/UserSystemContext';
@@ -731,6 +732,11 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                     );
                   }}
                 </form.Field>
+              )}
+
+              {/* What the source repo's own checkout means for the run about to start */}
+              {!editMode && repoBranchConfigs.length > 0 && (
+                <WorkingCopyWarnings repos={repoBranchConfigs} />
               )}
 
               {/* Actions */}

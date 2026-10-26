@@ -18,6 +18,7 @@ export { useGitOperations } from './useGitOperations';
 export { useTask } from './useTask';
 export { useAttempt } from './useAttempt';
 export { useRepoBranches } from './useRepoBranches';
+export { useRepoWorkingCopy } from './useRepoWorkingCopy';
 export { useProjectRepos } from './useProjectRepos';
 export { useHasDevServerScript } from './useHasDevServerScript';
 export { useRepoBranchSelection } from './useRepoBranchSelection';

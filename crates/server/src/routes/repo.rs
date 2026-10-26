@@ -105,6 +105,40 @@ pub async fn get_repo_remotes(
     Ok(ResponseJson(ApiResponse::success(remotes)))
 }
 
+/// What the repo's own checkout looks like right now, for warnings shown before a task
+/// runs. A task runs in a worktree branched from HEAD, so anything counted here is work
+/// the agent will not see.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct RepoWorkingCopy {
+    /// Tracked files with uncommitted modifications.
+    pub uncommitted_count: usize,
+    /// Untracked files.
+    pub untracked_count: usize,
+    /// False when the repo has no git remote, so Kablan cannot push or open a pull request.
+    pub has_remote: bool,
+}
+
+pub async fn get_repo_working_copy(
+    State(deployment): State<DeploymentImpl>,
+    Path(repo_id): Path<Uuid>,
+) -> Result<ResponseJson<ApiResponse<RepoWorkingCopy>>, ApiError> {
+    let repo = deployment
+        .repo()
+        .get_by_id(&deployment.db().pool, repo_id)
+        .await?;
+
+    let (uncommitted_count, untracked_count) =
+        deployment.git().get_worktree_change_counts(&repo.path)?;
+    let has_remote = !deployment.git().list_remotes(&repo.path)?.is_empty();
+
+    Ok(ResponseJson(ApiResponse::success(RepoWorkingCopy {
+        uncommitted_count,
+        untracked_count,
+        has_remote,
+    })))
+}
+
 pub async fn get_repos_batch(
     State(deployment): State<DeploymentImpl>,
     ResponseJson(payload): ResponseJson<BatchRepoRequest>,
@@ -384,6 +418,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/repos/{repo_id}", get(get_repo).put(update_repo))
         .route("/repos/{repo_id}/branches", get(get_repo_branches))
         .route("/repos/{repo_id}/remotes", get(get_repo_remotes))
+        .route("/repos/{repo_id}/working-copy", get(get_repo_working_copy))
         .route(
             "/repos/{repo_id}/env-files",
             get(get_repo_env_files).put(save_repo_env_file),

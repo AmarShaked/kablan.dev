@@ -389,6 +389,11 @@ impl IntoResponse for ApiError {
                     msg
                 ),
             ),
+            // Not a server fault, and the "Git operation failed" prefix adds nothing to a
+            // message that already says what to do.
+            ApiError::GitService(e @ git::GitServiceError::NoRemoteConfigured) => {
+                ErrorInfo::bad_request("GitServiceError", e.to_string())
+            }
             ApiError::GitService(e) => ErrorInfo::with_status(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "GitServiceError",
