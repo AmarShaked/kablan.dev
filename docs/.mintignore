@@ -1,2 +1,10 @@
 AGENTS.md
 CLAUDE.md
+
+# Upstream pages for capabilities this fork does not ship. Kept on disk so they can be
+# restored page-by-page if the Release & Onboarding Engineer confirms support, but not
+# built or published — the site must not document features Kablan does not have.
+cloud/
+workspaces/
+settings-beta/
+integrations/vscode-extension.mdx

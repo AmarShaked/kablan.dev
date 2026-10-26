@@ -94,3 +94,5 @@ vibe-kanban-cloud/
 /target
 
 .worktrees/
+docs/_site/
+docs/export.zip
