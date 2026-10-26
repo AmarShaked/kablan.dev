@@ -352,7 +352,10 @@ impl LinearClient {
         query: LinearIssueQuery,
     ) -> Result<LinearIssuesResponse, LinearError> {
         let viewer = self.validate().await?;
-        let first = query.first.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE);
+        let first = query
+            .first
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .clamp(1, MAX_PAGE_SIZE);
         let filter = build_issue_filter(&query, &viewer.id);
         let term = query
             .q
@@ -851,10 +854,9 @@ fn map_priority(priority: Option<i32>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        NamedNode, build_issue_filter, map_priority, named_optional, LinearIssueQuery,
-    };
     use serde_json::json;
+
+    use super::{LinearIssueQuery, NamedNode, build_issue_filter, map_priority, named_optional};
 
     #[test]
     fn priority_labels_match_linear() {
@@ -933,9 +935,6 @@ mod tests {
             },
             "viewer-1",
         );
-        assert_eq!(
-            filter["assignee"],
-            json!({ "id": { "eq": "user-42" } })
-        );
+        assert_eq!(filter["assignee"], json!({ "id": { "eq": "user-42" } }));
     }
 }

@@ -880,11 +880,8 @@ impl TaskServer {
             }
         });
 
-        let agent_selection = executors::selection::selection_from_legacy(
-            base_executor,
-            variant.as_deref(),
-            None,
-        );
+        let agent_selection =
+            executors::selection::selection_from_legacy(base_executor, variant.as_deref(), None);
 
         let workspace_repos: Vec<WorkspaceRepoInput> = repos
             .into_iter()

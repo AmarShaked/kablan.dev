@@ -27,9 +27,7 @@ use utils::{response::ApiResponse, shell::resolve_executable_path};
 use uuid::Uuid;
 
 use crate::{
-    DeploymentImpl,
-    error::ApiError,
-    pocketbase::PocketBaseClient,
+    DeploymentImpl, error::ApiError, pocketbase::PocketBaseClient,
     routes::task_attempts::WorkspaceRepoInput,
 };
 
@@ -56,13 +54,12 @@ pub async fn agent_turn(
     Path(chat_id): Path<String>,
     Json(payload): Json<AgentTurnRequest>,
 ) -> Result<ResponseJson<ApiResponse<AgentTurnResponse>>, ApiError> {
-    let agent = BaseCodingAgent::from_str_loose(&payload.agent).map_err(|e| {
-        ApiError::BadRequest(format!("Unknown agent '{}': {e}", payload.agent))
-    })?;
+    let agent = BaseCodingAgent::from_str_loose(&payload.agent)
+        .map_err(|e| ApiError::BadRequest(format!("Unknown agent '{}': {e}", payload.agent)))?;
 
-    let pb = PocketBaseClient::from_env().await.map_err(|e| {
-        ApiError::BadRequest(format!("PocketBase service auth failed: {e}"))
-    })?;
+    let pb = PocketBaseClient::from_env()
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("PocketBase service auth failed: {e}")))?;
 
     let trigger = pb
         .get_message(&payload.message_id)
@@ -134,13 +131,7 @@ async fn run_agent_turn(
 ) -> anyhow::Result<()> {
     let agent_name = agent.to_string();
     let status = pb
-        .create_agent_message(
-            &chat_id,
-            &agent_name,
-            "Working on it…",
-            None,
-            None,
-        )
+        .create_agent_message(&chat_id, &agent_name, "Working on it…", None, None)
         .await?;
     let status_id = status.id;
 
@@ -174,9 +165,7 @@ async fn run_agent_turn(
 
         match decision {
             AgentDecision::Reply(text) => {
-                let _ = pb
-                    .update_agent_message(&status_id, &text, None, None)
-                    .await;
+                let _ = pb.update_agent_message(&status_id, &text, None, None).await;
                 return Ok(());
             }
             AgentDecision::ListProjects => {
@@ -529,7 +518,9 @@ fn format_pinned_project_reply(notes: &str) -> String {
             } else if let Some(rest) = line.strip_prefix("- ") {
                 // "- Name path=`…` default_branch=`…` repo_id=`…`"
                 if let (Some(path), Some(branch)) = (
-                    rest.split("path=`").nth(1).and_then(|s| s.split('`').next()),
+                    rest.split("path=`")
+                        .nth(1)
+                        .and_then(|s| s.split('`').next()),
                     rest.split("default_branch=`")
                         .nth(1)
                         .and_then(|s| s.split('`').next()),
@@ -566,10 +557,7 @@ async fn load_pinned_project_context(
     } else {
         lines.push("Repositories:".into());
         for repo in &repos {
-            let branch = repo
-                .default_target_branch
-                .as_deref()
-                .unwrap_or("main");
+            let branch = repo.default_target_branch.as_deref().unwrap_or("main");
             let label = if repo.display_name.trim().is_empty() {
                 repo.name.as_str()
             } else {
@@ -594,8 +582,7 @@ fn extract_uuid(s: &str) -> Option<Uuid> {
         r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
     )
     .ok()?;
-    re.find(s)
-        .and_then(|m| Uuid::parse_str(m.as_str()).ok())
+    re.find(s).and_then(|m| Uuid::parse_str(m.as_str()).ok())
 }
 
 fn title_from_message(s: &str) -> String {

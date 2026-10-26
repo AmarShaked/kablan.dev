@@ -154,8 +154,9 @@ impl Default for Config {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use executors::{profile::ExecutorProfileId, selection::PermissionLevel};
+
+    use super::*;
 
     #[test]
     fn v8_plan_profile_without_a_profiles_file_becomes_plan() {

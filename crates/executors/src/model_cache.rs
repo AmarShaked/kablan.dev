@@ -221,12 +221,10 @@ pub fn fetch_agent_models(agent: BaseCodingAgent) -> Result<Vec<ListedModel>, St
 }
 
 fn read_claude_catalog() -> Result<Vec<ListedModel>, String> {
-    let dir = claude_catalog_dir().ok_or_else(|| {
-        "Claude has not written a model catalog yet".to_string()
-    })?;
-    let newest = newest_catalog_file(&dir).ok_or_else(|| {
-        "Claude has not written a model catalog yet".to_string()
-    })?;
+    let dir = claude_catalog_dir()
+        .ok_or_else(|| "Claude has not written a model catalog yet".to_string())?;
+    let newest = newest_catalog_file(&dir)
+        .ok_or_else(|| "Claude has not written a model catalog yet".to_string())?;
     let raw = fs::read_to_string(&newest).map_err(|err| err.to_string())?;
     parse_claude_catalog(&raw)
 }
@@ -242,11 +240,7 @@ fn newest_catalog_file(dir: &Path) -> Option<PathBuf> {
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
         .filter(|path| path.is_file())
-        .max_by_key(|path| {
-            fs::metadata(path)
-                .and_then(|meta| meta.modified())
-                .ok()
-        })
+        .max_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok())
 }
 
 #[cfg(test)]
@@ -341,7 +335,9 @@ mod tests {
 
     #[test]
     fn a_flat_list_has_no_more_models_row() {
-        let models = parse_cursor_model_list("Available models\n\nauto - Auto\ncomposer-2.5 - Composer 2.5\n");
+        let models = parse_cursor_model_list(
+            "Available models\n\nauto - Auto\ncomposer-2.5 - Composer 2.5\n",
+        );
         assert_eq!(models.len(), 2);
         assert!(models.iter().all(|model| model.featured));
         assert!(!has_more_models(&models));

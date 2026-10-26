@@ -83,11 +83,9 @@ impl Executable for CodingAgentFollowUpRequest {
 
         #[cfg(not(feature = "qa-mode"))]
         {
-            let mut agent = resolve_coding_agent(
-                self.agent_selection.as_ref(),
-                &self.executor_profile_id,
-            )
-            .map_err(ExecutorError::UnknownExecutorType)?;
+            let mut agent =
+                resolve_coding_agent(self.agent_selection.as_ref(), &self.executor_profile_id)
+                    .map_err(ExecutorError::UnknownExecutorType)?;
             let attach_approvals = self
                 .agent_selection
                 .as_ref()
