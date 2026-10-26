@@ -18,7 +18,17 @@
   "empty": {
     "noTasks": "Aucune tâche trouvée pour ce projet.",
     "createFirst": "Créer la première tâche",
-    "noSearchResults": "Aucune tâche ne correspond à votre recherche."
+    "noSearchResults": "Aucune tâche ne correspond à votre recherche.",
+    "eyebrow": "AUCUNE TÂCHE POUR L'INSTANT",
+    "headline": "Donnez quelque chose à faire à l'agent.",
+    "body": "Une tâche est un travail que vous confiez à un agent de code. Elle s'exécute sur sa propre branche : rien de ce qu'elle fait ne touche votre copie de travail tant que vous ne l'avez pas relue.",
+    "steps": {
+      "describe": "Décrivez ce que vous voulez modifier, en langage simple.",
+      "isolate": "L'agent travaille sur sa propre branche et son propre worktree.",
+      "review": "Relisez le diff, puis fusionnez-le ou jetez-le."
+    },
+    "noSearchResultsHint": "Essayez une autre recherche ou effacez les filtres pour tout afficher.",
+    "clearFilters": "Effacer les filtres"
   },
   "actions": {
     "addTask": "Ajouter une tâche"
@@ -38,7 +48,9 @@
       "upstreamPlaceholder": "Sélectionner une branche amont",
       "targetLabel": "Branche cible",
       "targetPlaceholder": "Sélectionner une branche cible",
-      "advanced": "Avancé"
+      "advanced": "Avancé",
+      "title": "Rebaser la tâche",
+      "description": "Choisissez une nouvelle branche de base sur laquelle rebaser cette tâche."
     },
     "status": {
       "inProgress": "Rebasage en cours{{counts}}",
@@ -52,7 +64,8 @@
         "title": "Changer la branche cible",
         "placeholder": "Sélectionner une branche cible",
         "action": "Changer de branche",
-        "inProgress": "Changement en cours..."
+        "inProgress": "Changement en cours...",
+        "description": "Choisissez une nouvelle branche cible pour la tâche."
       }
     }
   },
@@ -162,7 +175,25 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "Aucune tâche sélectionnée"
+    "noTaskSelected": "Aucune tâche sélectionnée",
+    "empty": {
+      "eyebrow": "PAS ENCORE DÉMARRÉE",
+      "headline": "Rien n'a encore été exécuté pour cette tâche.",
+      "body": "Démarrer la tâche lui donne sa propre branche et son propre worktree, puis la confie à un agent de code. Votre copie de travail reste intacte jusqu'à ce que vous relisiez le résultat.",
+      "start": "Démarrer la tâche",
+      "steps": {
+        "worktree": "Un worktree est créé à partir de la branche de base.",
+        "agent": "L'agent y travaille, sur sa propre branche.",
+        "review": "Relisez le diff, puis fusionnez-le ou jetez-le."
+      },
+      "starting": "Démarrage…",
+      "noRepos": "Ce projet n'a pas encore de dépôt. Ajoutez-en un dans les paramètres du projet avant de démarrer une tâche.",
+      "error": "Impossible de démarrer cette tâche. Veuillez réessayer.",
+      "preparing": "Vérification des branches…",
+      "noBranches": "Aucune branche n'a pu être résolue pour {{repos}}. Vérifiez le dépôt avant de démarrer.",
+      "noAgent": "Aucun agent par défaut n'est configuré. Choisissez-en un dans les paramètres avant de démarrer."
+    },
+    "parentTask": "Tâche parente :"
   },
   "processes": {
     "noLogsAvailable": "Aucun log disponible",
@@ -181,7 +212,9 @@
     "loadingDetails": "Chargement des détails du processus...",
     "errorLoadingDetails": "Échec du chargement des détails du processus. Veuillez réessayer.",
     "copyLogs": "Copier les logs",
-    "logsCopied": "Copié !"
+    "logsCopied": "Copié !",
+    "noProcesses": "Aucun processus d'exécution trouvé pour cette tâche.",
+    "selectTask": "Sélectionnez une tâche pour voir ses processus d'exécution."
   },
   "taskHeader": {
     "editTask": "Modifier la tâche",
@@ -209,7 +242,18 @@
     "noSetupScript": "Aucun script de configuration configuré pour ce projet",
     "noCleanupScript": "Aucun script de nettoyage configuré pour ce projet",
     "noArchiveScript": "Aucun script d'archivage configuré pour ce projet",
-    "scriptsDisabledWhileRunning": "Impossible d'exécuter les scripts pendant qu'un processus est en cours"
+    "scriptsDisabledWhileRunning": "Impossible d'exécuter les scripts pendant qu'un processus est en cours",
+    "queuedCount": "En file · {{count}}",
+    "clearAll": "Tout effacer",
+    "next": "Suivant",
+    "removeQueued": "Retirer le message en file d'attente",
+    "menu": {
+      "label": "Ajouter au message",
+      "uploadImages": "Téléverser des images",
+      "model": "Modèle",
+      "mode": "Mode",
+      "tags": "Tags"
+    }
   },
   "todos": {
     "title_one": "À faire ({{count}})",
@@ -326,7 +370,23 @@
     "gitActions": "Actions Git",
     "runSetup": "Exécuter la configuration",
     "setupHelpText": "{{agent}} n'est pas configuré correctement. Cliquez sur 'Exécuter la configuration' pour l'installer et vous connecter.",
-    "devScriptMissingTooltip": "Pour démarrer le serveur de développement, ajoutez un script de développement à ce projet"
+    "devScriptMissingTooltip": "Pour démarrer le serveur de développement, ajoutez un script de développement à ce projet",
+    "tryAgain": "Réessayer dans une nouvelle tâche",
+    "claudeAuth": {
+      "signIn": "Se connecter à Claude",
+      "title": "Reconnectez-vous à Claude",
+      "description": "Claude n'est plus connecté, la tâche s'est donc arrêtée. Une page de navigateur va s'ouvrir. Connectez-vous, revenez ici, puis démarrez une nouvelle tâche.",
+      "expiredHelp": "Claude n'est plus connecté, la tâche s'est donc arrêtée.\n\n1. Cliquez sur « Se connecter à Claude ». Votre navigateur s'ouvre — connectez-vous.\n2. Revenez ici et cliquez sur « Réessayer dans une nouvelle tâche ».",
+      "summary": "Connectez-vous d'abord à Claude, puis démarrez une nouvelle tâche.",
+      "opening": "Ouverture de la page de connexion Claude…",
+      "waiting": "Connectez-vous sur la page qui s'est ouverte. Cette fenêtre se met à jour une fois que c'est fait.",
+      "visit": "Si le navigateur ne s'est pas ouvert, utilisez ce lien :",
+      "signedIn": "Connecté en tant que {{email}}.",
+      "signedInNoEmail": "Claude est connecté.",
+      "signedInHint": "Fermez cette fenêtre, puis cliquez sur « Réessayer dans une nouvelle tâche ».",
+      "retry": "Réessayer",
+      "close": "Fermer"
+    }
   },
   "git": {
     "labels": {
@@ -363,7 +423,9 @@
       "forcePush": "Push forcé",
       "forcePushing": "Push forcé en cours...",
       "creating": "Création en cours...",
-      "createPr": "Créer une PR"
+      "createPr": "Créer une PR",
+      "pulling": "Pull en cours…",
+      "pullCount": "Pull {{count}}"
     },
     "errors": {
       "changeTargetBranch": "Échec du changement de branche cible",
@@ -432,7 +494,8 @@
       "title": "Titre",
       "description": "Description",
       "status": "Statut"
-    }
+    },
+    "empty": "Aucune tâche liée à cette tâche"
   },
   "attemptHeaderActions": {
     "diffs": "Diffs"
@@ -446,7 +509,8 @@
     "startReview": "Démarrer la révision",
     "startingReview": "Démarrage de la révision...",
     "task": "Tâche",
-    "duplicate": "Dupliquer"
+    "duplicate": "Dupliquer",
+    "run": "Exécuter"
   },
   "editBranchName": {
     "dialog": {
@@ -519,7 +583,8 @@
       "title": "Connectez-vous pour créer une pull request",
       "description": "Vous devez vous connecter avant de pouvoir ouvrir une pull request pour cette tâche. Nous vous amènerons à la page de connexion.",
       "action": "Se connecter"
-    }
+    },
+    "description": "Créez une pull request pour cette tâche."
   },
   "prComments": {
     "dialog": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "Chargement des branches...",
     "selectBranch": "Sélectionner une branche"
-  }
+  },
+  "navigateToParent": "Aller à la tâche parente"
 }

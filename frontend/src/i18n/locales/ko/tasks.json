@@ -30,7 +30,8 @@
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
     "startReview": "리뷰 시작",
-    "startingReview": "리뷰 시작 중..."
+    "startingReview": "리뷰 시작 중...",
+    "run": "실행"
   },
   "editBranchName": {
     "dialog": {
@@ -65,7 +66,23 @@
     "viewDevLogs": "View dev server logs",
     "runSetup": "설정 실행",
     "setupHelpText": "{{agent}}이(가) 올바르게 설정되지 않았습니다. '설정 실행'을 클릭하여 설치하고 로그인하세요.",
-    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
+    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project",
+    "tryAgain": "새 작업으로 다시 시도",
+    "claudeAuth": {
+      "signIn": "Claude에 로그인",
+      "title": "Claude에 다시 로그인하세요",
+      "description": "Claude가 로그아웃되어 이 작업이 중단되었습니다. 브라우저 페이지가 열립니다. 거기서 로그인한 뒤 돌아와 새 작업을 시작하세요.",
+      "expiredHelp": "Claude가 로그아웃되어 이 작업이 중단되었습니다.\n\n1. 'Claude에 로그인'을 클릭하세요. 브라우저가 열리면 거기서 로그인합니다.\n2. 여기로 돌아와 '새 작업으로 다시 시도'를 클릭하세요.",
+      "summary": "먼저 Claude에 로그인한 뒤 새 작업을 시작하세요.",
+      "opening": "Claude 로그인 페이지를 여는 중…",
+      "waiting": "열린 페이지에서 로그인하세요. 완료되면 이 창이 업데이트됩니다.",
+      "visit": "브라우저가 열리지 않았다면 이 링크를 사용하세요:",
+      "signedIn": "{{email}}(으)로 로그인했습니다.",
+      "signedInNoEmail": "Claude에 로그인되어 있습니다.",
+      "signedInHint": "이 창을 닫은 뒤 '새 작업으로 다시 시도'를 클릭하세요.",
+      "retry": "다시 시도",
+      "close": "닫기"
+    }
   },
   "resolveConflicts": {
     "dialog": {
@@ -119,7 +136,8 @@
       "title": "Pull Request를 만들려면 로그인하세요",
       "description": "이 작업에 대해 풀 리퀘스트를 열기 전에 로그인해야 합니다. 로그인 페이지로 이동합니다.",
       "action": "로그인"
-    }
+    },
+    "description": "이 작업에 대한 Pull Request를 생성합니다."
   },
   "attemptHeaderActions": {
     "diffs": "Diffs"
@@ -130,7 +148,8 @@
         "action": "브랜치 변경",
         "inProgress": "변경 중...",
         "placeholder": "대상 브랜치 선택",
-        "title": "대상 브랜치 변경"
+        "title": "대상 브랜치 변경",
+        "description": "작업의 새 대상 브랜치를 선택하세요."
       }
     }
   },
@@ -174,7 +193,17 @@
   "empty": {
     "createFirst": "첫 번째 작업 생성",
     "noSearchResults": "검색 결과와 일치하는 작업이 없습니다.",
-    "noTasks": "이 프로젝트에 대한 작업을 찾을 수 없습니다."
+    "noTasks": "이 프로젝트에 대한 작업을 찾을 수 없습니다.",
+    "eyebrow": "아직 작업이 없습니다",
+    "headline": "에이전트에게 할 일을 주세요.",
+    "body": "작업은 코딩 에이전트에게 맡기는 일감입니다. 자체 브랜치에서 실행되므로, 검토하기 전까지는 작업 중인 복사본에 아무 영향도 주지 않습니다.",
+    "steps": {
+      "describe": "변경하고 싶은 내용을 쉬운 말로 설명합니다.",
+      "isolate": "에이전트는 자체 브랜치와 워크트리에서 작업합니다.",
+      "review": "diff를 검토한 뒤 병합하거나 버립니다."
+    },
+    "noSearchResultsHint": "다른 검색어를 사용하거나 필터를 지우면 전체를 볼 수 있습니다.",
+    "clearFilters": "필터 지우기"
   },
   "followUp": {
     "clearReviewComments": "Clear Review Comments",
@@ -194,7 +223,18 @@
     "noSetupScript": "이 프로젝트에 설정 스크립트가 구성되어 있지 않습니다",
     "noCleanupScript": "이 프로젝트에 정리 스크립트가 구성되어 있지 않습니다",
     "noArchiveScript": "이 프로젝트에 아카이브 스크립트가 구성되어 있지 않습니다",
-    "scriptsDisabledWhileRunning": "프로세스가 실행 중일 때는 스크립트를 실행할 수 없습니다"
+    "scriptsDisabledWhileRunning": "프로세스가 실행 중일 때는 스크립트를 실행할 수 없습니다",
+    "queuedCount": "대기 중 · {{count}}",
+    "clearAll": "모두 지우기",
+    "next": "다음",
+    "removeQueued": "대기 중인 메시지 제거",
+    "menu": {
+      "label": "메시지에 추가",
+      "uploadImages": "이미지 업로드",
+      "model": "모델",
+      "mode": "모드",
+      "tags": "태그"
+    }
   },
   "git": {
     "labels": {
@@ -231,7 +271,9 @@
       "forcePush": "강제 푸시",
       "forcePushing": "강제 푸시 중...",
       "creating": "생성 중...",
-      "createPr": "PR 생성"
+      "createPr": "PR 생성",
+      "pulling": "풀 하는 중…",
+      "pullCount": "풀 {{count}}"
     },
     "errors": {
       "changeTargetBranch": "대상 브랜치를 변경하지 못했습니다",
@@ -375,7 +417,9 @@
     "reconnecting": "Reconnecting...",
     "started": "Started: {{date}}",
     "copyLogs": "로그 복사",
-    "logsCopied": "복사됨!"
+    "logsCopied": "복사됨!",
+    "noProcesses": "이 작업에 대한 실행 프로세스를 찾을 수 없습니다.",
+    "selectTask": "실행 프로세스를 보려면 작업을 선택하세요."
   },
   "rebase": {
     "common": {
@@ -388,7 +432,9 @@
       "targetLabel": "대상 브랜치",
       "targetPlaceholder": "대상 브랜치 선택",
       "upstreamLabel": "업스트림 브랜치",
-      "upstreamPlaceholder": "업스트림 브랜치 선택"
+      "upstreamPlaceholder": "업스트림 브랜치 선택",
+      "title": "작업 리베이스",
+      "description": "이 작업을 리베이스할 새 기준 브랜치를 선택하세요."
     },
     "status": {
       "dirtyMarker": " (수정됨)",
@@ -402,7 +448,25 @@
     "editTask": "Edit task"
   },
   "taskPanel": {
-    "noTaskSelected": "No task selected"
+    "noTaskSelected": "No task selected",
+    "empty": {
+      "eyebrow": "아직 시작하지 않았습니다",
+      "headline": "이 작업에서는 아직 아무것도 실행되지 않았습니다.",
+      "body": "시작하면 이 작업에 자체 브랜치와 워크트리가 생기고, 코딩 에이전트에게 전달됩니다. 결과를 검토하기 전까지 작업 중인 복사본은 그대로 유지됩니다.",
+      "start": "작업 시작",
+      "steps": {
+        "worktree": "기준 브랜치에서 워크트리가 생성됩니다.",
+        "agent": "에이전트는 그 안에서 자체 브랜치로 작업합니다.",
+        "review": "diff를 검토한 뒤 병합하거나 버립니다."
+      },
+      "starting": "시작하는 중…",
+      "noRepos": "이 프로젝트에는 아직 저장소가 없습니다. 작업을 시작하기 전에 프로젝트 설정에서 추가하세요.",
+      "error": "이 작업을 시작하지 못했습니다. 다시 시도해 주세요.",
+      "preparing": "브랜치를 확인하는 중…",
+      "noBranches": "{{repos}}의 브랜치를 확인할 수 없습니다. 시작하기 전에 저장소를 점검하세요.",
+      "noAgent": "기본 에이전트가 구성되어 있지 않습니다. 시작하기 전에 설정에서 선택하세요."
+    },
+    "parentTask": "상위 작업:"
   },
   "todos": {
     "title_one": "Todos ({{count}})",
@@ -427,7 +491,8 @@
       "title": "Title",
       "description": "Description",
       "status": "Status"
-    }
+    },
+    "empty": "이 작업과 관련된 작업이 없습니다"
   },
   "projects": {
     "create": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
-  }
+  },
+  "navigateToParent": "상위 작업으로 이동"
 }

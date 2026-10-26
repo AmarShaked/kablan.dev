@@ -66,7 +66,8 @@
         "description": "Choisissez l'agent de codage par défaut pour les tâches.",
         "executor": {
           "label": "Configuration d'agent par défaut",
-          "placeholder": "Sélectionner un profil"
+          "placeholder": "Sélectionner un profil",
+          "helper": "Choisissez la configuration d'agent par défaut à utiliser au démarrage d'une tâche."
         },
         "variant": "PAR DÉFAUT",
         "defaultLabel": "Par défaut"
@@ -185,7 +186,8 @@
         "customPrompt": {
           "useCustom": "Utiliser un prompt personnalisé",
           "helper": "Prompt personnalisé pour le rappel de commit. Le statut git sera ajouté automatiquement."
-        }
+        },
+        "description": "Configurer le comportement des commits sur les branches de tâche"
       },
       "notifications": {
         "title": "Notifications",
@@ -194,10 +196,12 @@
           "label": "Notifications sonores",
           "fileLabel": "Son",
           "filePlaceholder": "Sélectionner un son",
-          "fileHelper": "Choisissez le son à jouer lorsque les tâches sont terminées. Cliquez sur le bouton volume pour prévisualiser."
+          "fileHelper": "Choisissez le son à jouer lorsque les tâches sont terminées. Cliquez sur le bouton volume pour prévisualiser.",
+          "helper": "Jouer un son lorsque les tâches finissent de s'exécuter."
         },
         "push": {
-          "label": "Notifications push"
+          "label": "Notifications push",
+          "helper": "Afficher des notifications système lorsque les tâches finissent de s'exécuter."
         }
       },
       "messageInput": {
@@ -333,6 +337,26 @@
       "deleteConfigDialog": {
         "title": "Supprimer la configuration ?",
         "description": "Cela supprimera définitivement \"{{configName}}\" de l'exécuteur {{executorType}}. Cette action est irréversible."
+      },
+      "addAgent": "Ajouter un agent",
+      "empty": "Aucun agent configuré pour l'instant. Ajoutez-en un pour commencer à l'utiliser dans vos tâches.",
+      "connected": "Connecté",
+      "notConnected": "Non connecté",
+      "notConnectedHint": "N'apparaîtra pas dans le sélecteur d'agents tant qu'il n'est pas installé ou connecté.",
+      "configurationsCount_one": "{{count}} configuration",
+      "configurationsCount_other": "{{count}} configurations",
+      "removeAgent": "Retirer",
+      "removeConfirm": {
+        "title": "Retirer {{agent}} ?",
+        "message": "Il quittera votre liste. Vous pourrez le rajouter plus tard. Les tâches existantes ne sont pas affectées."
+      },
+      "wizard": {
+        "title": "Ajouter un agent",
+        "chooseHint": "Choisissez l'agent de code que vous voulez ajouter.",
+        "connectHint": "Nous vérifierons si cet agent est installé sur votre machine.",
+        "allConfigured": "Tous les agents disponibles figurent déjà dans votre liste.",
+        "ready": "Cet agent est connecté et apparaîtra dans le sélecteur de tâches.",
+        "notFound": "Nous n'avons pas trouvé cet agent en local. Vous pouvez quand même l'ajouter ici et terminer la configuration plus tard — il n'apparaîtra pas dans le sélecteur de tâches tant qu'il n'est pas connecté."
       }
     },
     "mcp": {

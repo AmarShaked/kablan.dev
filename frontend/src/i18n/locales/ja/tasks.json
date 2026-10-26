@@ -30,7 +30,8 @@
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
     "startReview": "レビューを開始",
-    "startingReview": "レビューを開始中..."
+    "startingReview": "レビューを開始中...",
+    "run": "実行"
   },
   "editBranchName": {
     "dialog": {
@@ -65,7 +66,23 @@
     "viewDevLogs": "View dev server logs",
     "runSetup": "セットアップを実行",
     "setupHelpText": "{{agent}}が正しく設定されていません。「セットアップを実行」をクリックしてインストールとログインを行ってください。",
-    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
+    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project",
+    "tryAgain": "新しいタスクで再試行",
+    "claudeAuth": {
+      "signIn": "Claude にサインイン",
+      "title": "Claude に再度サインインしてください",
+      "description": "Claude のサインインが切れたため、このタスクは停止しました。ブラウザのページが開きます。そこでログインしてからここに戻り、新しいタスクを開始してください。",
+      "expiredHelp": "Claude のサインインが切れたため、このタスクは停止しました。\n\n1.「Claude にサインイン」をクリックします。ブラウザが開くので、そこでログインしてください。\n2. ここに戻って「新しいタスクで再試行」をクリックします。",
+      "summary": "まず Claude にサインインしてから、新しいタスクを開始してください。",
+      "opening": "Claude のサインインページを開いています…",
+      "waiting": "開いたページでログインしてください。完了するとこのウィンドウが更新されます。",
+      "visit": "ブラウザが開かなかった場合は、このリンクを使ってください:",
+      "signedIn": "{{email}} でサインインしています。",
+      "signedInNoEmail": "Claude はサインイン済みです。",
+      "signedInHint": "これを閉じてから、「新しいタスクで再試行」をクリックしてください。",
+      "retry": "再試行",
+      "close": "閉じる"
+    }
   },
   "resolveConflicts": {
     "dialog": {
@@ -119,7 +136,8 @@
       "title": "プルリクエストを作成するにはサインインしてください",
       "description": "このタスクでプルリクエストを開く前にサインインが必要です。サインインページに移動します。",
       "action": "サインイン"
-    }
+    },
+    "description": "このタスクのプルリクエストを作成します。"
   },
   "attemptHeaderActions": {
     "diffs": "Diffs"
@@ -130,7 +148,8 @@
         "action": "ブランチを変更",
         "inProgress": "変更中...",
         "placeholder": "ターゲットブランチを選択",
-        "title": "ターゲットブランチを変更"
+        "title": "ターゲットブランチを変更",
+        "description": "タスクの新しいターゲットブランチを選びます。"
       }
     }
   },
@@ -174,7 +193,17 @@
   "empty": {
     "createFirst": "最初のタスクを作成",
     "noSearchResults": "検索条件に一致するタスクがありません。",
-    "noTasks": "このプロジェクトにタスクが見つかりません。"
+    "noTasks": "このプロジェクトにタスクが見つかりません。",
+    "eyebrow": "タスクがまだありません",
+    "headline": "エージェントに仕事を与えましょう。",
+    "body": "タスクとは、コーディングエージェントに渡す作業のひとつです。専用のブランチで実行されるため、レビューするまで作業コピーには一切影響しません。",
+    "steps": {
+      "describe": "変更したい内容を、ふつうの言葉で書きます。",
+      "isolate": "エージェントは専用のブランチとワークツリーで作業します。",
+      "review": "diff をレビューして、マージするか破棄します。"
+    },
+    "noSearchResultsHint": "別のキーワードで検索するか、フィルターをクリアするとすべて表示されます。",
+    "clearFilters": "フィルターをクリア"
   },
   "followUp": {
     "clearReviewComments": "Clear Review Comments",
@@ -194,7 +223,18 @@
     "noSetupScript": "このプロジェクトにセットアップスクリプトが設定されていません",
     "noCleanupScript": "このプロジェクトにクリーンアップスクリプトが設定されていません",
     "noArchiveScript": "このプロジェクトにアーカイブスクリプトが設定されていません",
-    "scriptsDisabledWhileRunning": "プロセス実行中はスクリプトを実行できません"
+    "scriptsDisabledWhileRunning": "プロセス実行中はスクリプトを実行できません",
+    "queuedCount": "キュー · {{count}}",
+    "clearAll": "すべてクリア",
+    "next": "次へ",
+    "removeQueued": "キュー内のメッセージを削除",
+    "menu": {
+      "label": "メッセージに追加",
+      "uploadImages": "画像をアップロード",
+      "model": "モデル",
+      "mode": "モード",
+      "tags": "タグ"
+    }
   },
   "git": {
     "branch": {
@@ -275,7 +315,9 @@
       "forcePush": "強制プッシュ",
       "forcePushing": "強制プッシュ中...",
       "rebase": "リベース",
-      "rebasing": "リベース中..."
+      "rebasing": "リベース中...",
+      "pulling": "プルしています…",
+      "pullCount": "プル {{count}}"
     },
     "status": {
       "ahead": "先行",
@@ -375,7 +417,9 @@
     "reconnecting": "Reconnecting...",
     "started": "Started: {{date}}",
     "copyLogs": "ログをコピー",
-    "logsCopied": "コピーしました！"
+    "logsCopied": "コピーしました！",
+    "noProcesses": "このタスクの実行プロセスは見つかりませんでした。",
+    "selectTask": "タスクを選択すると実行プロセスが表示されます。"
   },
   "rebase": {
     "common": {
@@ -388,7 +432,9 @@
       "targetLabel": "ターゲットブランチ",
       "targetPlaceholder": "ターゲットブランチを選択",
       "upstreamLabel": "アップストリームブランチ",
-      "upstreamPlaceholder": "アップストリームブランチを選択"
+      "upstreamPlaceholder": "アップストリームブランチを選択",
+      "title": "タスクをリベース",
+      "description": "このタスクをリベースする新しいベースブランチを選びます。"
     },
     "status": {
       "dirtyMarker": " （未コミットあり）",
@@ -402,7 +448,25 @@
     "editTask": "Edit task"
   },
   "taskPanel": {
-    "noTaskSelected": "No task selected"
+    "noTaskSelected": "No task selected",
+    "empty": {
+      "eyebrow": "まだ開始していません",
+      "headline": "このタスクではまだ何も実行されていません。",
+      "body": "開始すると、このタスクに専用のブランチとワークツリーが作られ、コーディングエージェントに渡されます。返ってきた内容をレビューするまで、作業コピーはそのままです。",
+      "start": "タスクを開始",
+      "steps": {
+        "worktree": "ベースブランチからワークツリーが作成されます。",
+        "agent": "エージェントはその中で、専用のブランチで作業します。",
+        "review": "diff をレビューして、マージするか破棄します。"
+      },
+      "starting": "開始しています…",
+      "noRepos": "このプロジェクトにはまだリポジトリがありません。タスクを開始する前に、プロジェクト設定で追加してください。",
+      "error": "このタスクを開始できませんでした。もう一度お試しください。",
+      "preparing": "ブランチを確認しています…",
+      "noBranches": "{{repos}} のブランチを解決できませんでした。開始する前にリポジトリを確認してください。",
+      "noAgent": "既定のエージェントが設定されていません。開始する前に設定で選んでください。"
+    },
+    "parentTask": "親タスク:"
   },
   "todos": {
     "title_one": "Todos ({{count}})",
@@ -442,7 +506,8 @@
       "title": "Title",
       "description": "Description",
       "status": "Status"
-    }
+    },
+    "empty": "このタスクに関連するタスクはありません"
   },
   "prComments": {
     "dialog": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
-  }
+  },
+  "navigateToParent": "親タスクへ移動"
 }

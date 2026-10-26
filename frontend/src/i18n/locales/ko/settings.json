@@ -66,7 +66,8 @@
         "description": "작업의 기본 코딩 에이전트를 선택하세요.",
         "executor": {
           "label": "기본 에이전트 구성",
-          "placeholder": "프로필 선택"
+          "placeholder": "프로필 선택",
+          "helper": "작업을 시작할 때 사용할 기본 에이전트 구성을 선택하세요."
         },
         "variant": "DEFAULT",
         "defaultLabel": "기본"
@@ -185,7 +186,8 @@
         "customPrompt": {
           "useCustom": "사용자 정의 프롬프트 사용",
           "helper": "커밋 알림용 사용자 정의 프롬프트. git 상태가 자동으로 추가됩니다."
-        }
+        },
+        "description": "작업 브랜치의 커밋 동작을 구성합니다"
       },
       "notifications": {
         "title": "알림",
@@ -194,10 +196,12 @@
           "label": "소리 알림",
           "fileLabel": "소리",
           "filePlaceholder": "소리 선택",
-          "fileHelper": "작업이 완료될 때 재생할 소리를 선택하세요. 볼륨 버튼을 클릭하여 미리 들을 수 있습니다."
+          "fileHelper": "작업이 완료될 때 재생할 소리를 선택하세요. 볼륨 버튼을 클릭하여 미리 들을 수 있습니다.",
+          "helper": "작업 실행이 끝나면 소리를 재생합니다."
         },
         "push": {
-          "label": "푸시 알림"
+          "label": "푸시 알림",
+          "helper": "작업 실행이 끝나면 시스템 알림을 표시합니다."
         }
       },
       "messageInput": {
@@ -333,6 +337,26 @@
       "deleteConfigDialog": {
         "title": "구성을 삭제하시겠습니까?",
         "description": "{{executorType}} 실행자에서 \"{{configName}}\"을(를) 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다."
+      },
+      "addAgent": "에이전트 추가",
+      "empty": "아직 구성된 에이전트가 없습니다. 하나를 추가하면 작업에서 사용할 수 있습니다.",
+      "connected": "연결됨",
+      "notConnected": "연결되지 않음",
+      "notConnectedHint": "설치하거나 로그인하기 전까지는 에이전트 선택기에 표시되지 않습니다.",
+      "configurationsCount_one": "설정 {{count}}개",
+      "configurationsCount_other": "설정 {{count}}개",
+      "removeAgent": "제거",
+      "removeConfirm": {
+        "title": "{{agent}}을(를) 제거할까요?",
+        "message": "목록에서 제거됩니다. 나중에 다시 추가할 수 있습니다. 기존 작업에는 영향이 없습니다."
+      },
+      "wizard": {
+        "title": "에이전트 추가",
+        "chooseHint": "추가할 코딩 에이전트를 선택하세요.",
+        "connectHint": "이 에이전트가 사용자의 컴퓨터에 설치되어 있는지 확인합니다.",
+        "allConfigured": "사용 가능한 모든 에이전트가 이미 목록에 있습니다.",
+        "ready": "이 에이전트는 연결되어 있으며 작업 선택기에 표시됩니다.",
+        "notFound": "이 에이전트를 로컬에서 찾지 못했습니다. 여기서 추가한 뒤 나중에 설정을 마칠 수 있습니다. 연결되기 전까지는 작업 선택기에 표시되지 않습니다."
       }
     },
     "mcp": {

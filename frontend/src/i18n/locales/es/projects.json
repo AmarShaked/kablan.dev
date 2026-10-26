@@ -17,7 +17,15 @@
   "empty": {
     "title": "Aún no hay proyectos",
     "description": "Comienza creando tu primer proyecto.",
-    "createFirst": "Crear tu primer proyecto"
+    "createFirst": "Crear tu primer proyecto",
+    "eyebrow": "AÚN NO HAY PROYECTOS",
+    "headline": "Apunta Kablan a un repositorio.",
+    "body": "Un proyecto es uno o más repositorios git en los que quieres que trabajen los agentes. Agrega uno y podrás empezar a asignarle tareas de inmediato.",
+    "steps": {
+      "point": "Agrega un proyecto que apunte a un repositorio de esta máquina.",
+      "describe": "Crea una tarea describiendo qué quieres cambiar.",
+      "review": "Revisa el diff del agente y luego fusiónalo o descártalo."
+    }
   },
   "projectNotFound": "El proyecto que buscas no existe o ha sido eliminado.",
   "viewProject": "Ver Proyecto",
