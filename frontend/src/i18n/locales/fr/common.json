@@ -15,7 +15,8 @@
     "replay": "Rejouer",
     "discard": "Abandonner",
     "addItem": "Ajouter un élément",
-    "reply": "Répondre"
+    "reply": "Répondre",
+    "back": "Retour"
   },
   "form": {
     "notSpecified": "Non spécifié",
@@ -61,7 +62,9 @@
     "fixScript": "Corriger le script",
     "subagent": {
       "defaultType": "Sous-agent"
-    }
+    },
+    "toolCallCount": "{{count}} appels d'outils",
+    "changeCount": "{{count}} modifications"
   },
   "folderPicker": {
     "legend": "Cliquez sur les noms de dossiers pour naviguer • Utilisez les boutons d'action pour sélectionner",

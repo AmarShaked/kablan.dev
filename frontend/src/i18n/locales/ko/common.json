@@ -37,7 +37,8 @@
     "save": "저장",
     "send": "보내기",
     "addItem": "항목 추가",
-    "reply": "답장"
+    "reply": "답장",
+    "back": "뒤로"
   },
   "form": {
     "notSpecified": "지정되지 않음",
@@ -72,7 +73,9 @@
     "fixScript": "스크립트 수정",
     "subagent": {
       "defaultType": "서브에이전트"
-    }
+    },
+    "toolCallCount": "도구 호출 {{count}}건",
+    "changeCount": "변경 {{count}}건"
   },
   "language": {
     "browserDefault": "브라우저 기본값"

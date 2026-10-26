@@ -17,7 +17,15 @@
   "empty": {
     "title": "Aucun projet pour le moment",
     "description": "Commencez par créer votre premier projet.",
-    "createFirst": "Créer votre premier projet"
+    "createFirst": "Créer votre premier projet",
+    "eyebrow": "AUCUN PROJET POUR L'INSTANT",
+    "headline": "Pointez Kablan vers un dépôt.",
+    "body": "Un projet regroupe un ou plusieurs dépôts git dans lesquels vous voulez que les agents travaillent. Ajoutez-en un et vous pourrez lui confier des tâches immédiatement.",
+    "steps": {
+      "point": "Ajoutez un projet pointant vers un dépôt présent sur cette machine.",
+      "describe": "Créez une tâche décrivant ce que vous voulez modifier.",
+      "review": "Relisez le diff de l'agent, puis fusionnez-le ou jetez-le."
+    }
   },
   "projectNotFound": "Le projet que vous recherchez n'existe pas ou a été supprimé.",
   "viewProject": "Voir le projet",

@@ -37,7 +37,8 @@
     "save": "保存",
     "send": "送信",
     "addItem": "項目を追加",
-    "reply": "返信"
+    "reply": "返信",
+    "back": "戻る"
   },
   "form": {
     "notSpecified": "指定なし",
@@ -72,7 +73,9 @@
     "fixScript": "スクリプトを修正",
     "subagent": {
       "defaultType": "サブエージェント"
-    }
+    },
+    "toolCallCount": "{{count}} 件のツール呼び出し",
+    "changeCount": "{{count}} 件の変更"
   },
   "language": {
     "browserDefault": "ブラウザ設定"

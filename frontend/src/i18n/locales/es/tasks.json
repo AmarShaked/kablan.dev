@@ -30,7 +30,8 @@
     "viewProcesses": "View processes",
     "viewRelatedTasks": "View related tasks",
     "startReview": "Iniciar revisión",
-    "startingReview": "Iniciando revisión..."
+    "startingReview": "Iniciando revisión...",
+    "run": "Ejecutar"
   },
   "editBranchName": {
     "dialog": {
@@ -65,7 +66,23 @@
     "viewDevLogs": "View dev server logs",
     "runSetup": "Ejecutar Configuración",
     "setupHelpText": "{{agent}} no está configurado correctamente. Haz clic en 'Ejecutar Configuración' para instalarlo e iniciar sesión.",
-    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project"
+    "devScriptMissingTooltip": "To start the dev server, add a dev script to this project",
+    "tryAgain": "Reintentar en una tarea nueva",
+    "claudeAuth": {
+      "signIn": "Iniciar sesión en Claude",
+      "title": "Vuelve a iniciar sesión en Claude",
+      "description": "Claude ya no tiene la sesión iniciada, por eso esta tarea se detuvo. Se abrirá una página del navegador. Inicia sesión allí, vuelve aquí y empieza una tarea nueva.",
+      "expiredHelp": "Claude ya no tiene la sesión iniciada, por eso esta tarea se detuvo.\n\n1. Haz clic en «Iniciar sesión en Claude». Se abrirá tu navegador: inicia sesión allí.\n2. Vuelve aquí y haz clic en «Reintentar en una tarea nueva».",
+      "summary": "Inicia sesión en Claude y luego empieza una tarea nueva.",
+      "opening": "Abriendo la página de inicio de sesión de Claude…",
+      "waiting": "Inicia sesión en la página que se abrió. Esta ventana se actualizará cuando termines.",
+      "visit": "Si el navegador no se abrió, usa este enlace:",
+      "signedIn": "Sesión iniciada como {{email}}.",
+      "signedInNoEmail": "Claude tiene la sesión iniciada.",
+      "signedInHint": "Cierra esto y luego haz clic en «Reintentar en una tarea nueva».",
+      "retry": "Reintentar",
+      "close": "Cerrar"
+    }
   },
   "resolveConflicts": {
     "dialog": {
@@ -119,7 +136,8 @@
       "title": "Inicia sesión para crear un pull request",
       "description": "Debes iniciar sesión antes de poder abrir un pull request para esta tarea. Te llevaremos a la página de inicio de sesión.",
       "action": "Iniciar sesión"
-    }
+    },
+    "description": "Crea una pull request para esta tarea."
   },
   "attemptHeaderActions": {
     "diffs": "Diffs"
@@ -130,7 +148,8 @@
         "action": "Cambiar rama",
         "inProgress": "Cambiando...",
         "placeholder": "Selecciona una rama de destino",
-        "title": "Cambiar rama de destino"
+        "title": "Cambiar rama de destino",
+        "description": "Elige una nueva rama de destino para la tarea."
       }
     }
   },
@@ -174,7 +193,17 @@
   "empty": {
     "createFirst": "Crear Primera Tarea",
     "noSearchResults": "Ninguna tarea coincide con tu búsqueda.",
-    "noTasks": "No se encontraron tareas para este proyecto."
+    "noTasks": "No se encontraron tareas para este proyecto.",
+    "eyebrow": "AÚN NO HAY TAREAS",
+    "headline": "Dale algo que hacer al agente.",
+    "body": "Una tarea es un trabajo que le entregas a un agente de código. Se ejecuta en su propia rama, así que nada de lo que haga toca tu copia de trabajo hasta que lo revises.",
+    "steps": {
+      "describe": "Describe qué quieres cambiar, en lenguaje sencillo.",
+      "isolate": "El agente trabaja en su propia rama y worktree.",
+      "review": "Revisa el diff y luego fusiónalo o descártalo."
+    },
+    "noSearchResultsHint": "Prueba otra búsqueda o limpia los filtros para verlo todo.",
+    "clearFilters": "Limpiar filtros"
   },
   "followUp": {
     "clearReviewComments": "Clear Review Comments",
@@ -194,7 +223,18 @@
     "noSetupScript": "No hay script de configuración configurado para este proyecto",
     "noCleanupScript": "No hay script de limpieza configurado para este proyecto",
     "noArchiveScript": "No hay script de archivo configurado para este proyecto",
-    "scriptsDisabledWhileRunning": "No se pueden ejecutar scripts mientras un proceso está en ejecución"
+    "scriptsDisabledWhileRunning": "No se pueden ejecutar scripts mientras un proceso está en ejecución",
+    "queuedCount": "En cola · {{count}}",
+    "clearAll": "Limpiar todo",
+    "next": "Siguiente",
+    "removeQueued": "Quitar mensaje en cola",
+    "menu": {
+      "label": "Agregar al mensaje",
+      "uploadImages": "Subir imágenes",
+      "model": "Modelo",
+      "mode": "Modo",
+      "tags": "Etiquetas"
+    }
   },
   "git": {
     "branch": {
@@ -275,7 +315,9 @@
       "pushing": "Enviando...",
       "pushFailed": "Falló",
       "rebase": "Rebase",
-      "rebasing": "Rebaseando..."
+      "rebasing": "Rebaseando...",
+      "pulling": "Trayendo…",
+      "pullCount": "Traer {{count}}"
     },
     "status": {
       "ahead": "adelante",
@@ -375,7 +417,9 @@
     "reconnecting": "Reconnecting...",
     "started": "Started: {{date}}",
     "copyLogs": "Copiar registros",
-    "logsCopied": "¡Copiado!"
+    "logsCopied": "¡Copiado!",
+    "noProcesses": "No se encontraron procesos de ejecución para esta tarea.",
+    "selectTask": "Selecciona una tarea para ver sus procesos de ejecución."
   },
   "rebase": {
     "common": {
@@ -388,7 +432,9 @@
       "targetLabel": "Rama de destino",
       "targetPlaceholder": "Selecciona una rama de destino",
       "upstreamLabel": "Rama upstream",
-      "upstreamPlaceholder": "Selecciona una rama upstream"
+      "upstreamPlaceholder": "Selecciona una rama upstream",
+      "title": "Rebasar tarea",
+      "description": "Elige una nueva rama base sobre la que rebasar esta tarea."
     },
     "status": {
       "dirtyMarker": " (sucio)",
@@ -402,7 +448,25 @@
     "editTask": "Edit task"
   },
   "taskPanel": {
-    "noTaskSelected": "No task selected"
+    "noTaskSelected": "No task selected",
+    "empty": {
+      "eyebrow": "AÚN NO INICIADA",
+      "headline": "Todavía no se ha ejecutado nada para esta tarea.",
+      "body": "Al iniciarla, esta tarea obtiene su propia rama y worktree, y luego se entrega a un agente de código. Tu copia de trabajo queda intacta hasta que revises lo que devuelva.",
+      "start": "Iniciar tarea",
+      "steps": {
+        "worktree": "Se crea un worktree a partir de la rama base.",
+        "agent": "El agente trabaja en él, en su propia rama.",
+        "review": "Revisa el diff y luego fusiónalo o descártalo."
+      },
+      "starting": "Iniciando…",
+      "noRepos": "Este proyecto aún no tiene repositorios. Agrega uno en los ajustes del proyecto antes de iniciar una tarea.",
+      "error": "No se pudo iniciar esta tarea. Inténtalo de nuevo.",
+      "preparing": "Comprobando ramas…",
+      "noBranches": "No se pudo resolver ninguna rama para {{repos}}. Revisa el repositorio antes de empezar.",
+      "noAgent": "No hay ningún agente predeterminado configurado. Elige uno en los ajustes antes de empezar."
+    },
+    "parentTask": "Tarea principal:"
   },
   "todos": {
     "title_one": "Todos ({{count}})",
@@ -442,7 +506,8 @@
       "title": "Title",
       "description": "Description",
       "status": "Status"
-    }
+    },
+    "empty": "No hay tareas relacionadas con esta tarea"
   },
   "prComments": {
     "dialog": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
-  }
+  },
+  "navigateToParent": "Ir a la tarea principal"
 }

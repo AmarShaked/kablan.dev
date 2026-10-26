@@ -66,7 +66,8 @@
         "description": "タスクのデフォルトコーディングエージェントを選択します。",
         "executor": {
           "label": "デフォルトエージェント設定",
-          "placeholder": "プロファイルを選択"
+          "placeholder": "プロファイルを選択",
+          "helper": "タスクを開始するときに使う既定のエージェント設定を選びます。"
         },
         "variant": "デフォルト",
         "defaultLabel": "デフォルト"
@@ -185,7 +186,8 @@
         "customPrompt": {
           "useCustom": "カスタムプロンプトを使用",
           "helper": "コミットリマインダー用のカスタムプロンプト。gitステータスは自動的に追加されます。"
-        }
+        },
+        "description": "タスクブランチのコミット動作を設定します"
       },
       "notifications": {
         "title": "通知",
@@ -194,10 +196,12 @@
           "label": "音声通知",
           "fileLabel": "音声",
           "filePlaceholder": "音声を選択",
-          "fileHelper": "タスク完了時に再生する音声を選択してください。音量ボタンをクリックしてプレビューできます。"
+          "fileHelper": "タスク完了時に再生する音声を選択してください。音量ボタンをクリックしてプレビューできます。",
+          "helper": "タスクの実行が終わったら音を鳴らします。"
         },
         "push": {
-          "label": "プッシュ通知"
+          "label": "プッシュ通知",
+          "helper": "タスクの実行が終わったらシステム通知を表示します。"
         }
       },
       "messageInput": {
@@ -333,6 +337,26 @@
       "deleteConfigDialog": {
         "title": "設定を削除しますか？",
         "description": "「{{configName}}」を{{executorType}}エグゼキューターから完全に削除します。この操作は元に戻せません。"
+      },
+      "addAgent": "エージェントを追加",
+      "empty": "設定済みのエージェントはまだありません。追加するとタスクで使えるようになります。",
+      "connected": "接続済み",
+      "notConnected": "未接続",
+      "notConnectedHint": "インストールまたはサインインするまで、エージェントの選択肢には表示されません。",
+      "configurationsCount_one": "{{count}} 件の設定",
+      "configurationsCount_other": "{{count}} 件の設定",
+      "removeAgent": "削除",
+      "removeConfirm": {
+        "title": "{{agent}} を削除しますか？",
+        "message": "一覧から削除されます。あとで再度追加できます。既存のタスクには影響しません。"
+      },
+      "wizard": {
+        "title": "エージェントを追加",
+        "chooseHint": "追加したいコーディングエージェントを選びます。",
+        "connectHint": "このエージェントがマシンにインストールされているか確認します。",
+        "allConfigured": "利用できるエージェントはすべて一覧に追加済みです。",
+        "ready": "このエージェントは接続済みで、タスクの選択肢に表示されます。",
+        "notFound": "このエージェントはローカルで見つかりませんでした。ここで追加して、あとでセットアップを完了することもできます。接続されるまで、タスクの選択肢には表示されません。"
       }
     },
     "mcp": {

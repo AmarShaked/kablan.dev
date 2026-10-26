@@ -66,7 +66,8 @@
         "description": "Elige el agente de código predeterminado para las tareas.",
         "executor": {
           "label": "Configuración predeterminada del Agente",
-          "placeholder": "Seleccionar perfil"
+          "placeholder": "Seleccionar perfil",
+          "helper": "Elige la configuración de agente predeterminada que se usará al iniciar una tarea."
         },
         "variant": "PREDETERMINADO",
         "defaultLabel": "Predeterminado"
@@ -185,7 +186,8 @@
         "customPrompt": {
           "useCustom": "Usar prompt personalizado",
           "helper": "Prompt personalizado para el recordatorio de commit. El estado de git se añadirá automáticamente."
-        }
+        },
+        "description": "Configura el comportamiento de los commits en las ramas de tarea"
       },
       "notifications": {
         "title": "Notificaciones",
@@ -194,10 +196,12 @@
           "label": "Notificaciones de Sonido",
           "fileLabel": "Sonido",
           "filePlaceholder": "Seleccionar sonido",
-          "fileHelper": "Elige el sonido que se reproducirá al completar las tareas. Haz clic en el botón de volumen para escucharlo."
+          "fileHelper": "Elige el sonido que se reproducirá al completar las tareas. Haz clic en el botón de volumen para escucharlo.",
+          "helper": "Reproduce un sonido cuando las tareas terminan de ejecutarse."
         },
         "push": {
-          "label": "Notificaciones Push"
+          "label": "Notificaciones Push",
+          "helper": "Muestra notificaciones del sistema cuando las tareas terminan de ejecutarse."
         }
       },
       "messageInput": {
@@ -333,6 +337,26 @@
       "deleteConfigDialog": {
         "title": "¿Eliminar configuración?",
         "description": "Esto eliminará permanentemente \"{{configName}}\" del ejecutor {{executorType}}. Esta acción no se puede deshacer."
+      },
+      "addAgent": "Agregar agente",
+      "empty": "Todavía no hay agentes configurados. Agrega uno para empezar a usarlo en tareas.",
+      "connected": "Conectado",
+      "notConnected": "No conectado",
+      "notConnectedHint": "No aparecerá en el selector de agentes hasta que esté instalado o hayas iniciado sesión.",
+      "configurationsCount_one": "{{count}} configuración",
+      "configurationsCount_other": "{{count}} configuraciones",
+      "removeAgent": "Quitar",
+      "removeConfirm": {
+        "title": "¿Quitar {{agent}}?",
+        "message": "Saldrá de tu lista. Puedes volver a agregarlo más tarde. Las tareas existentes no se ven afectadas."
+      },
+      "wizard": {
+        "title": "Agregar agente",
+        "chooseHint": "Elige el agente de código que quieres agregar.",
+        "connectHint": "Comprobaremos si este agente está instalado en tu máquina.",
+        "allConfigured": "Todos los agentes disponibles ya están en tu lista.",
+        "ready": "Este agente está conectado y aparecerá en el selector de tareas.",
+        "notFound": "No encontramos este agente en tu máquina. Puedes agregarlo igualmente y terminar la configuración más tarde: no aparecerá en el selector de tareas hasta que esté conectado."
       }
     },
     "mcp": {

@@ -18,7 +18,17 @@
   "empty": {
     "noTasks": "未找到此项目的任务。",
     "createFirst": "创建第一个任务",
-    "noSearchResults": "没有任务匹配您的搜索。"
+    "noSearchResults": "没有任务匹配您的搜索。",
+    "eyebrow": "还没有任务",
+    "headline": "给代理分配一些工作。",
+    "body": "任务是你交给编码代理的一项工作。它在自己的分支上运行，因此在你审查之前，不会影响你的工作副本。",
+    "steps": {
+      "describe": "用平实的语言描述你想要修改的内容。",
+      "isolate": "代理在自己的分支和工作树中工作。",
+      "review": "查看差异，然后合并或丢弃。"
+    },
+    "noSearchResultsHint": "换个搜索词，或清除筛选以查看全部。",
+    "clearFilters": "清除筛选"
   },
   "actions": {
     "addTask": "添加任务"
@@ -38,7 +48,9 @@
       "upstreamPlaceholder": "选择上游分支",
       "targetLabel": "目标分支",
       "targetPlaceholder": "选择目标分支",
-      "advanced": "高级"
+      "advanced": "高级",
+      "title": "变基任务",
+      "description": "选择要将该任务变基到的新基础分支。"
     },
     "status": {
       "inProgress": "变基进行中{{counts}}",
@@ -52,7 +64,8 @@
         "title": "更改目标分支",
         "placeholder": "选择目标分支",
         "action": "更改分支",
-        "inProgress": "更改中..."
+        "inProgress": "更改中...",
+        "description": "为该任务选择一个新的目标分支。"
       }
     }
   },
@@ -165,7 +178,25 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "未选择任务"
+    "noTaskSelected": "未选择任务",
+    "empty": {
+      "eyebrow": "尚未开始",
+      "headline": "该任务还没有运行过任何内容。",
+      "body": "启动后，该任务会获得自己的分支和工作树，然后交给编码代理。在你审查结果之前，你的工作副本不会被改动。",
+      "start": "开始任务",
+      "steps": {
+        "worktree": "从基础分支创建一个工作树。",
+        "agent": "代理在其中、在自己的分支上工作。",
+        "review": "查看差异，然后合并或丢弃。"
+      },
+      "starting": "正在启动…",
+      "noRepos": "该项目还没有仓库。请先在项目设置中添加一个，再开始任务。",
+      "error": "无法启动该任务。请重试。",
+      "preparing": "正在检查分支…",
+      "noBranches": "无法为 {{repos}} 解析分支。请先检查仓库再开始。",
+      "noAgent": "尚未配置默认代理。请先在设置中选择一个再开始。"
+    },
+    "parentTask": "父任务："
   },
   "processes": {
     "noLogsAvailable": "没有可用的日志",
@@ -184,7 +215,9 @@
     "loadingDetails": "加载进程详情中...",
     "errorLoadingDetails": "加载进程详情失败。请重试。",
     "copyLogs": "复制日志",
-    "logsCopied": "已复制！"
+    "logsCopied": "已复制！",
+    "noProcesses": "未找到该任务的执行进程。",
+    "selectTask": "选择一个任务以查看执行进程。"
   },
   "taskHeader": {
     "editTask": "编辑任务",
@@ -212,7 +245,18 @@
     "noSetupScript": "未为此项目配置设置脚本",
     "noCleanupScript": "未为此项目配置清理脚本",
     "noArchiveScript": "未为此项目配置归档脚本",
-    "scriptsDisabledWhileRunning": "进程运行时无法运行脚本"
+    "scriptsDisabledWhileRunning": "进程运行时无法运行脚本",
+    "queuedCount": "排队中 · {{count}}",
+    "clearAll": "全部清除",
+    "next": "下一步",
+    "removeQueued": "移除排队的消息",
+    "menu": {
+      "label": "添加到消息",
+      "uploadImages": "上传图片",
+      "model": "模型",
+      "mode": "模式",
+      "tags": "标签"
+    }
   },
   "todos": {
     "title_one": "待办事项（{{count}}）",
@@ -252,7 +296,23 @@
     "gitActions": "Git 操作",
     "runSetup": "运行设置",
     "setupHelpText": "{{agent}} 未正确设置。点击运行设置以安装并登录。",
-    "devScriptMissingTooltip": "要启动开发服务器，请为此项目添加开发脚本"
+    "devScriptMissingTooltip": "要启动开发服务器，请为此项目添加开发脚本",
+    "tryAgain": "在新任务中重试",
+    "claudeAuth": {
+      "signIn": "登录 Claude",
+      "title": "重新登录 Claude",
+      "description": "Claude 已退出登录，因此该任务已停止。浏览器页面将会打开。请在那里登录，回到这里，然后开始一个新任务。",
+      "expiredHelp": "Claude 已退出登录，因此该任务已停止。\n\n1. 点击「登录 Claude」。浏览器会打开——请在那里登录。\n2. 回到这里，点击「在新任务中重试」。",
+      "summary": "请先登录 Claude，然后开始一个新任务。",
+      "opening": "正在打开 Claude 登录页面…",
+      "waiting": "请在打开的页面中登录。完成后此窗口会自动更新。",
+      "visit": "如果浏览器没有打开，请使用此链接：",
+      "signedIn": "已以 {{email}} 登录。",
+      "signedInNoEmail": "Claude 已登录。",
+      "signedInHint": "关闭此窗口，然后点击「在新任务中重试」。",
+      "retry": "重试",
+      "close": "关闭"
+    }
   },
   "git": {
     "labels": {
@@ -289,7 +349,9 @@
       "forcePush": "强制推送",
       "forcePushing": "强制推送中...",
       "creating": "创建中...",
-      "createPr": "创建 PR"
+      "createPr": "创建 PR",
+      "pulling": "正在拉取…",
+      "pullCount": "拉取 {{count}}"
     },
     "errors": {
       "changeTargetBranch": "更改目标分支失败",
@@ -355,7 +417,8 @@
       "title": "标题",
       "description": "描述",
       "status": "状态"
-    }
+    },
+    "empty": "该任务没有相关任务"
   },
   "attemptHeaderActions": {
     "diffs": "差异"
@@ -369,7 +432,8 @@
     "task": "任务",
     "duplicate": "复制",
     "startReview": "开始审查",
-    "startingReview": "正在开始审查..."
+    "startingReview": "正在开始审查...",
+    "run": "运行"
   },
   "editBranchName": {
     "dialog": {
@@ -442,7 +506,8 @@
       "title": "登录以创建拉取请求",
       "description": "您需要登录才能为此任务打开拉取请求。我们将带您到登录页面。",
       "action": "登录"
-    }
+    },
+    "description": "为该任务创建拉取请求。"
   },
   "prComments": {
     "dialog": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "加载分支中...",
     "selectBranch": "选择分支"
-  }
+  },
+  "navigateToParent": "转到父任务"
 }

@@ -18,7 +18,17 @@
   "empty": {
     "noTasks": "找不到此專案的任務。",
     "createFirst": "建立第一個任務",
-    "noSearchResults": "沒有任務符合您的搜尋。"
+    "noSearchResults": "沒有任務符合您的搜尋。",
+    "eyebrow": "尚未有任務",
+    "headline": "給代理指派一些工作。",
+    "body": "任務是你交給程式撰寫代理的一項工作。它在自己的分支上執行，因此在你檢視之前，不會影響你的工作副本。",
+    "steps": {
+      "describe": "用平實的語言描述你想要修改的內容。",
+      "isolate": "代理在自己的分支和工作樹中工作。",
+      "review": "檢視差異，然後合併或捨棄。"
+    },
+    "noSearchResultsHint": "換個搜尋詞，或清除篩選以檢視全部。",
+    "clearFilters": "清除篩選"
   },
   "actions": {
     "addTask": "新增任務"
@@ -38,7 +48,9 @@
       "upstreamPlaceholder": "選擇上游分支",
       "targetLabel": "目標分支",
       "targetPlaceholder": "選擇目標分支",
-      "advanced": "進階"
+      "advanced": "進階",
+      "title": "重基底任務",
+      "description": "選擇要將該任務重基底到的新基礎分支。"
     },
     "status": {
       "inProgress": "重基底進行中{{counts}}",
@@ -52,7 +64,8 @@
         "title": "變更目標分支",
         "placeholder": "選擇目標分支",
         "action": "變更分支",
-        "inProgress": "變更中..."
+        "inProgress": "變更中...",
+        "description": "為該任務選擇一個新的目標分支。"
       }
     }
   },
@@ -165,7 +178,25 @@
     }
   },
   "taskPanel": {
-    "noTaskSelected": "未選擇任務"
+    "noTaskSelected": "未選擇任務",
+    "empty": {
+      "eyebrow": "尚未開始",
+      "headline": "該任務還沒有執行過任何內容。",
+      "body": "啟動後，該任務會取得自己的分支和工作樹，然後交給程式撰寫代理。在你檢視結果之前，你的工作副本不會被更動。",
+      "start": "開始任務",
+      "steps": {
+        "worktree": "從基礎分支建立一個工作樹。",
+        "agent": "代理在其中、在自己的分支上工作。",
+        "review": "檢視差異，然後合併或捨棄。"
+      },
+      "starting": "正在啟動…",
+      "noRepos": "該專案還沒有儲存庫。請先在專案設定中新增一個，再開始任務。",
+      "error": "無法啟動該任務。請重試。",
+      "preparing": "正在檢查分支…",
+      "noBranches": "無法為 {{repos}} 解析分支。請先檢查儲存庫再開始。",
+      "noAgent": "尚未設定預設代理。請先在設定中選擇一個再開始。"
+    },
+    "parentTask": "父任務："
   },
   "processes": {
     "noLogsAvailable": "沒有可用的日誌",
@@ -184,7 +215,9 @@
     "loadingDetails": "載入程序詳情中...",
     "errorLoadingDetails": "載入程序詳情失敗。請重試。",
     "copyLogs": "複製日誌",
-    "logsCopied": "已複製！"
+    "logsCopied": "已複製！",
+    "noProcesses": "找不到該任務的執行程序。",
+    "selectTask": "選擇一個任務以檢視執行程序。"
   },
   "taskHeader": {
     "editTask": "編輯任務",
@@ -212,7 +245,18 @@
     "noSetupScript": "未為此專案設定設定腳本",
     "noCleanupScript": "未為此專案設定清理腳本",
     "noArchiveScript": "未為此專案設定封存腳本",
-    "scriptsDisabledWhileRunning": "程序執行時無法執行腳本"
+    "scriptsDisabledWhileRunning": "程序執行時無法執行腳本",
+    "queuedCount": "佇列中 · {{count}}",
+    "clearAll": "全部清除",
+    "next": "下一步",
+    "removeQueued": "移除佇列中的訊息",
+    "menu": {
+      "label": "新增至訊息",
+      "uploadImages": "上傳圖片",
+      "model": "模型",
+      "mode": "模式",
+      "tags": "標籤"
+    }
   },
   "todos": {
     "title_one": "待辦事項（{{count}}）",
@@ -252,7 +296,23 @@
     "gitActions": "Git 操作",
     "runSetup": "執行設定",
     "setupHelpText": "{{agent}} 未正確設定。點擊執行設定以安裝並登入。",
-    "devScriptMissingTooltip": "要啟動開發伺服器，請為此專案新增開發腳本"
+    "devScriptMissingTooltip": "要啟動開發伺服器，請為此專案新增開發腳本",
+    "tryAgain": "在新任務中重試",
+    "claudeAuth": {
+      "signIn": "登入 Claude",
+      "title": "重新登入 Claude",
+      "description": "Claude 已登出，因此該任務已停止。瀏覽器頁面將會開啟。請在那裡登入，回到這裡，然後開始一個新任務。",
+      "expiredHelp": "Claude 已登出，因此該任務已停止。\n\n1. 點擊「登入 Claude」。瀏覽器會開啟——請在那裡登入。\n2. 回到這裡，點擊「在新任務中重試」。",
+      "summary": "請先登入 Claude，然後開始一個新任務。",
+      "opening": "正在開啟 Claude 登入頁面…",
+      "waiting": "請在開啟的頁面中登入。完成後此視窗會自動更新。",
+      "visit": "如果瀏覽器沒有開啟，請使用此連結：",
+      "signedIn": "已以 {{email}} 登入。",
+      "signedInNoEmail": "Claude 已登入。",
+      "signedInHint": "關閉此視窗，然後點擊「在新任務中重試」。",
+      "retry": "重試",
+      "close": "關閉"
+    }
   },
   "git": {
     "labels": {
@@ -289,7 +349,9 @@
       "forcePush": "強制推送",
       "forcePushing": "強制推送中...",
       "creating": "建立中...",
-      "createPr": "建立 PR"
+      "createPr": "建立 PR",
+      "pulling": "正在拉取…",
+      "pullCount": "拉取 {{count}}"
     },
     "errors": {
       "changeTargetBranch": "變更目標分支失敗",
@@ -355,7 +417,8 @@
       "title": "標題",
       "description": "描述",
       "status": "狀態"
-    }
+    },
+    "empty": "該任務沒有相關任務"
   },
   "attemptHeaderActions": {
     "diffs": "差異"
@@ -369,7 +432,8 @@
     "task": "任務",
     "duplicate": "複製",
     "startReview": "開始審查",
-    "startingReview": "正在開始審查..."
+    "startingReview": "正在開始審查...",
+    "run": "執行"
   },
   "editBranchName": {
     "dialog": {
@@ -442,7 +506,8 @@
       "title": "登入以建立 PR",
       "description": "您需要登入才能為此任務建立 PR。我們會將您導向登入頁面。",
       "action": "登入"
-    }
+    },
+    "description": "為該任務建立 PR。"
   },
   "prComments": {
     "dialog": {
@@ -667,5 +732,6 @@
   "taskForm": {
     "loadingBranches": "載入分支中...",
     "selectBranch": "選擇分支"
-  }
+  },
+  "navigateToParent": "前往父任務"
 }

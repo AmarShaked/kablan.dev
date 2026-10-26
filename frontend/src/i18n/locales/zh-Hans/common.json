@@ -15,7 +15,8 @@
     "replay": "重播",
     "discard": "放弃",
     "addItem": "添加项目",
-    "reply": "回复"
+    "reply": "回复",
+    "back": "返回"
   },
   "form": {
     "notSpecified": "未指定",
@@ -61,7 +62,9 @@
     "fixScript": "修复脚本",
     "subagent": {
       "defaultType": "子代理"
-    }
+    },
+    "toolCallCount": "{{count}} 次工具调用",
+    "changeCount": "{{count}} 处更改"
   },
   "folderPicker": {
     "legend": "点击文件夹名称进行导航 • 使用操作按钮进行选择",
