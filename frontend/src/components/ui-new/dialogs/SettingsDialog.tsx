@@ -15,7 +15,12 @@ import type { Icon } from '@phosphor-icons/react';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import { usePortalContainer } from '@/contexts/PortalContainerContext';
+import { REMOTE_API_URL } from '@/lib/remoteApi';
 import { cn } from '@/lib/utils';
+import {
+  visibleSettingsSections,
+  resolveInitialSection,
+} from './settings/sections';
 import { SettingsSection } from './settings/SettingsSection';
 import type {
   SettingsSectionType,
@@ -27,17 +32,16 @@ import {
 } from './settings/SettingsDirtyContext';
 import { ConfirmDialog } from './ConfirmDialog';
 
-const SETTINGS_SECTIONS: {
-  id: SettingsSectionType;
-  icon: Icon;
-}[] = [
-  { id: 'general', icon: GearIcon },
-  { id: 'repos', icon: GitBranchIcon },
-  { id: 'organizations', icon: BuildingsIcon },
-  { id: 'remote-projects', icon: CloudIcon },
-  { id: 'agents', icon: CpuIcon },
-  { id: 'mcp', icon: PlugIcon },
-];
+const SECTION_ICONS: Record<SettingsSectionType, Icon> = {
+  general: GearIcon,
+  repos: GitBranchIcon,
+  organizations: BuildingsIcon,
+  'remote-projects': CloudIcon,
+  agents: CpuIcon,
+  mcp: PlugIcon,
+};
+
+const SETTINGS_SECTIONS = visibleSettingsSections(!!REMOTE_API_URL);
 
 export interface SettingsDialogProps {
   initialSection?: SettingsSectionType;
@@ -58,11 +62,11 @@ function SettingsDialogContent({
   const { t } = useTranslation('settings');
   const { isDirty } = useSettingsDirty();
   const [activeSection, setActiveSection] = useState<SettingsSectionType>(
-    initialSection || 'general'
+    resolveInitialSection(initialSection, SETTINGS_SECTIONS)
   );
   // On mobile, null means show the nav menu, a section means show that section
   const [mobileShowContent, setMobileShowContent] = useState(
-    initialSection ? true : false
+    initialSection ? SETTINGS_SECTIONS.includes(initialSection) : false
   );
   const isConfirmingRef = useRef(false);
 
@@ -165,13 +169,13 @@ function SettingsDialogContent({
             </div>
             {/* Navigation */}
             <nav className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto">
-              {SETTINGS_SECTIONS.map((section) => {
-                const Icon = section.icon;
-                const isActive = activeSection === section.id;
+              {SETTINGS_SECTIONS.map((sectionId) => {
+                const Icon = SECTION_ICONS[sectionId];
+                const isActive = activeSection === sectionId;
                 return (
                   <button
-                    key={section.id}
-                    onClick={() => handleSectionSelect(section.id)}
+                    key={sectionId}
+                    onClick={() => handleSectionSelect(sectionId)}
                     className={cn(
                       'flex items-center gap-3 text-left px-3 py-2 rounded-sm text-sm transition-colors',
                       isActive
@@ -181,7 +185,7 @@ function SettingsDialogContent({
                   >
                     <Icon className="size-icon-sm shrink-0" weight="bold" />
                     <span className="truncate">
-                      {t(`settings.layout.nav.${section.id}`)}
+                      {t(`settings.layout.nav.${sectionId}`)}
                     </span>
                   </button>
                 );

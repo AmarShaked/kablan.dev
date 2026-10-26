@@ -63,7 +63,7 @@ import {
 } from '@/stores/useUiPreferencesStore';
 
 import { attemptsApi, tasksApi, repoApi } from '@/lib/api';
-import { bulkUpdateIssues } from '@/lib/remoteApi';
+import { bulkUpdateIssues, REMOTE_API_URL } from '@/lib/remoteApi';
 import { attemptKeys } from '@/hooks/useAttempt';
 import { taskKeys } from '@/hooks/useTask';
 import { workspaceSummaryKeys } from '@/components/ui-new/hooks/useWorkspaces';
@@ -542,7 +542,7 @@ export const Actions = {
     label: 'Project Settings',
     icon: GearIcon,
     requiresTarget: ActionTargetType.NONE,
-    isVisible: (ctx) => ctx.layoutMode === 'kanban',
+    isVisible: (ctx) => ctx.layoutMode === 'kanban' && !!REMOTE_API_URL,
     execute: async (ctx) => {
       await SettingsDialog.show({
         initialSection: 'remote-projects',

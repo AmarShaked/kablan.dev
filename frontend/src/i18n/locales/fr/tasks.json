@@ -521,35 +521,6 @@
       "action": "Se connecter"
     }
   },
-  "showcases": {
-    "taskPanel": {
-      "companion": {
-        "title": "Kablan Companion - Pointer et cliquer",
-        "description": "Cliquez sur n'importe quel composant d'interface dans la fenêtre d'aperçu pour le sélectionner précisément. L'agent de codage reçoit les sélecteurs DOM exacts et la hiérarchie des composants, éliminant les retours ambigus."
-      },
-      "installation": {
-        "title": "Installation du serveur de développement et du Companion",
-        "description": "Définissez une commande de serveur de développement pour les aperçus, avec un script de configuration paramétrable dans les options. Utilisez un agent de codage pour installer automatiquement le web companion Kablan."
-      },
-      "codeReview": {
-        "title": "Révision de code intégrée",
-        "description": "Ajoutez des commentaires spécifiques aux lignes directement dans la vue des diffs avec l'icône plus. Tous les retours sont collectés et envoyés comme une révision complète à l'agent de codage."
-      },
-      "pullRequest": {
-        "title": "Créer une PR depuis la tâche",
-        "description": "Fusionnez vos modifications ou créez des pull requests directement depuis les tentatives de tâches. La boîte de dialogue PR pré-remplit le titre et la description à partir des détails de votre tâche pour des workflows simplifiés."
-      },
-      "tags": {
-        "title": "Tags de prompts personnalisés",
-        "description": "Enregistrez des prompts personnalisés comme tags et intégrez-les dans de nouvelles tâches ou messages de suivi. Réutilisez les instructions courantes pour maintenir la cohérence de votre workflow."
-      }
-    },
-    "buttons": {
-      "previous": "Précédent",
-      "next": "Suivant",
-      "finish": "Terminer"
-    }
-  },
   "prComments": {
     "dialog": {
       "title": "Sélectionner les commentaires de la PR",

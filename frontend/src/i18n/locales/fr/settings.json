@@ -277,13 +277,6 @@
           "description": "Réinitialiser le flux d'intégration.",
           "button": "Réinitialiser"
         }
-      },
-      "beta": {
-        "title": "Fonctionnalités bêta",
-        "description": "Essayez les fonctionnalités expérimentales avant leur sortie.",
-        "workspaces": {
-          "label": "Activer la bêta des espaces de travail"
-        }
       }
     },
     "agents": {

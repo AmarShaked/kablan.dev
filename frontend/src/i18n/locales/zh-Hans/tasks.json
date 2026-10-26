@@ -444,35 +444,6 @@
       "action": "登录"
     }
   },
-  "showcases": {
-    "taskPanel": {
-      "companion": {
-        "title": "Kablan Companion 点选功能",
-        "description": "点击预览窗口中的任何 UI 组件以精确选择它。编码代理接收确切的 DOM 选择器和组件层次结构，消除模糊的反馈。"
-      },
-      "installation": {
-        "title": "开发服务器和 Companion 安装",
-        "description": "为预览设置开发服务器命令，在设置中可配置设置脚本。使用编码代理自动安装 Kablan Web Companion。"
-      },
-      "codeReview": {
-        "title": "内置代码审查",
-        "description": "使用加号图标直接在差异视图中添加特定行的评论。所有反馈都被收集并作为完整审查发送给编码代理。"
-      },
-      "pullRequest": {
-        "title": "从任务创建 PR",
-        "description": "直接从任务尝试合并您的更改或创建拉取请求。PR 对话框会从您的任务详情预填充标题和描述，以简化工作流程。"
-      },
-      "tags": {
-        "title": "自定义提示标签",
-        "description": "将自定义提示保存为标签，并将其嵌入到新任务或后续消息中。重用常见说明以保持工作流程的一致性。"
-      }
-    },
-    "buttons": {
-      "previous": "上一个",
-      "next": "下一个",
-      "finish": "完成"
-    }
-  },
   "prComments": {
     "dialog": {
       "title": "选择 PR 评论",

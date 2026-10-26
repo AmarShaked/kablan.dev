@@ -55,10 +55,6 @@ pub struct Config {
     pub pr_auto_description_enabled: bool,
     #[serde(default)]
     pub pr_auto_description_prompt: Option<String>,
-    #[serde(default)]
-    pub beta_workspaces: bool,
-    #[serde(default)]
-    pub beta_workspaces_invitation_sent: bool,
     #[serde(default = "default_commit_reminder_enabled")]
     pub commit_reminder_enabled: bool,
     #[serde(default)]
@@ -100,8 +96,6 @@ impl Config {
             showcases: old.showcases,
             pr_auto_description_enabled: old.pr_auto_description_enabled,
             pr_auto_description_prompt: old.pr_auto_description_prompt,
-            beta_workspaces: old.beta_workspaces,
-            beta_workspaces_invitation_sent: old.beta_workspaces_invitation_sent,
             commit_reminder_enabled: old.commit_reminder_enabled,
             commit_reminder_prompt: old.commit_reminder_prompt,
             send_message_shortcut: old.send_message_shortcut,
@@ -147,8 +141,6 @@ impl Default for Config {
             showcases: ShowcaseState::default(),
             pr_auto_description_enabled: true,
             pr_auto_description_prompt: None,
-            beta_workspaces: false,
-            beta_workspaces_invitation_sent: false,
             commit_reminder_enabled: true,
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),

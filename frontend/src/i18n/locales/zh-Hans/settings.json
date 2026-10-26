@@ -277,13 +277,6 @@
           "description": "重置入门流程。",
           "button": "重置"
         }
-      },
-      "beta": {
-        "title": "Beta 功能",
-        "description": "在正式发布前试用实验性功能。",
-        "workspaces": {
-          "label": "启用工作区 Beta"
-        }
       }
     },
     "agents": {
