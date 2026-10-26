@@ -78,15 +78,26 @@ opens in your browser.
 
 ### Platforms
 
-Verified: **macOS on Apple Silicon**. A cold start on a clean machine downloads 15MB, is
-listening in about six seconds, and opens the browser itself.
+Verified on clean machines — downloaded, checksum-checked, launched and serving:
+**macOS on Apple Silicon**, **Linux x64** and **Windows x64**. The macOS cold start
+downloads 15MB, is listening in about six seconds, and opens the browser itself.
 
-Builds for macOS x64, Linux x64 and Windows x64 are published and checksum correctly, but
-nobody has run them on a clean machine yet — treat them as untested rather than supported.
+Linux x64 needs **glibc 2.34 or newer**. Ubuntu 22.04 and 24.04, Debian 12, Rocky 9 and
+Amazon Linux 2023 all run the shipped binary. Ubuntu 20.04, Debian 11, RHEL/Rocky 8 and
+Amazon Linux 2 do not — the binary will not start. Alpine and other musl distros fail with a
+`not found` that points at the file you can plainly see is there.
 
-There is no ARM64 Linux or ARM64 Windows build in the release, so Graviton, Raspberry Pi, an
-ARM Linux container and Snapdragon/Surface ARM machines get a 404 on the download. If that is
-you, [open an issue](https://github.com/AmarShaked/kablan.dev/issues) — it moves the decision.
+Windows was verified on Windows Server 2022, which already carries the Visual C++ runtime.
+The binary imports `VCRUNTIME140.dll`, so a bare Windows install may need the
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe). That one has
+not been tested either way.
+
+The macOS Intel build is published and checksums correctly, but has not been run on a clean
+machine yet.
+
+There is no ARM64 Linux or ARM64 Windows build in v0.11.6 — they are being added for the
+next release. Until they land, Graviton, Raspberry Pi, an ARM Linux container and
+Snapdragon/Surface ARM machines get a 404 on the download.
 
 ### As a Mac app
 
