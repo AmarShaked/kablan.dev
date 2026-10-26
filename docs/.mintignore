@@ -1,2 +1,8 @@
 AGENTS.md
 CLAUDE.md
+
+# Upstream pages for capabilities this fork does not ship were removed outright in KAB-18,
+# once the Release & Onboarding Engineer confirmed each one against npx kablan@0.11.6:
+# cloud/, workspaces/, integrations/vscode-extension.mdx. The settings-beta/ pages described
+# a dialog that does ship, so their content was folded into the live pages that already
+# cover those topics rather than kept as a second set of nav entries.

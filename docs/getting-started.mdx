@@ -1,28 +1,89 @@
 ---
-title: "Install & Run Vibe Kanban"
-description: "Complete installation guide for Vibe Kanban on macOS, Linux, and Windows"
+title: "Install & Run Kablan"
+description: "How to install and run Kablan, and which platforms are verified"
 sidebarTitle: "Installation"
 ---
 
 ## Supported Systems
 
-We build and test Vibe Kanban on the following systems:
+Kablan v0.11.6 publishes binaries for four of the six platform targets the installer knows
+about. Three of the four have now been run on clean machines. The honest state:
 
-- macOS (Intel and Apple Silicon)
-- Linux
-- Windows
+| Platform | Binary published | Run on a clean machine |
+|---|---|---|
+| macOS arm64 (Apple Silicon) | yes | **yes — verified** |
+| Linux x64, glibc 2.34+ | yes | **yes — verified** |
+| Windows x64 | yes | **yes — verified** |
+| macOS x64 (Intel) | yes | not yet |
+| Linux x64, glibc below 2.34 | yes | **no — will not start** |
+| Linux arm64 | **no** | — |
+| Windows arm64 | **no** | — |
+
+"Verified" means a machine that had never seen Kablan ran `npx kablan` and got the whole
+install path: download, checksum, extract, launch, and a UI served on the port it printed. It
+does not mean every feature past that point is exercised on every platform.
+
+"Not yet" means the binary is published and checksums correctly, but nobody has started it on a
+machine that did not already have Kablan on it. Expect rough edges, and
+[tell us](https://github.com/AmarShaked/kablan.dev/issues) what you hit.
+
+### Linux needs glibc 2.34 or newer
+
+The shipped Linux binary is built against glibc 2.34. Measured against the published
+v0.11.6 asset:
+
+| Distribution | glibc | Runs |
+|---|---|---|
+| Ubuntu 24.04 | 2.39 | yes |
+| Ubuntu 22.04 LTS | 2.35 | yes |
+| Debian 12 bookworm | 2.36 | yes |
+| Rocky Linux 9 | 2.34 | yes |
+| Amazon Linux 2023 | 2.34 | yes |
+| Ubuntu 20.04 LTS | 2.31 | **no** |
+| Debian 11 bullseye | 2.31 | **no** |
+| RHEL / Rocky 8 | 2.28 | **no** |
+| Amazon Linux 2 | 2.26 | **no** |
+| Alpine (musl) | none | **no** |
+
+<Warning>
+On a distribution below the glibc 2.34 floor there is no workaround short of a newer
+distribution or building from source. On Alpine and other musl systems the error is worse than
+it is wrong: the kernel cannot find the ELF interpreter, so the shell reports `not found` for a
+file that is plainly there.
+</Warning>
+
+<Note>
+Windows x64 was verified on Windows Server 2022, which already ships the Visual C++ runtime.
+`kablan.exe` imports `VCRUNTIME140.dll`, so a bare Windows install that has never had Visual
+Studio or a redistributable on it may show "The code execution cannot proceed because
+VCRUNTIME140.dll was not found." If you hit that, install the
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and
+[tell us](https://github.com/AmarShaked/kablan.dev/issues) — we have not been able to test a
+machine without it.
+</Note>
+
+<Warning>
+There is no ARM64 Linux or ARM64 Windows build in v0.11.6. On AWS Graviton, a Raspberry Pi,
+an ARM Linux container (including one running on an Apple Silicon Mac), or a Snapdragon/Surface
+ARM machine, `npx kablan` fails with a download 404 today. Both targets have been added to the
+release pipeline and will ship with the next release.
+</Warning>
 
 ## Prerequisites
 
-Before installing Vibe Kanban, ensure you have:
+Before installing Kablan, ensure you have:
 
-- **Node.js**: Latest LTS version recommended
-- **Coding agent authentication**: Authenticate with your preferred coding agents outside of Vibe Kanban
+- **Node.js 18 or newer** — the version the npx wrapper requires.
+- **git** — every task is checked out into its own worktree, so git does the real work.
+- **A coding agent CLI, installed and already signed in.** This is the one that actually
+  catches people out. Kablan launches your agent's own CLI and holds no model credentials, so
+  if `claude` or `codex` is installed but not authenticated, your first task will fail. Sign in
+  outside Kablan first — see [supported coding agents](/supported-coding-agents).
 
 ## Safety Notice
 
 <Warning>
-Vibe Kanban runs AI agents with --dangerously-skip-permissions/--yolo flags by default so they can work autonomously without constant approval prompts. Each task runs in an isolated git worktree, preventing agents from interfering with each other.
+Kablan runs AI agents with --dangerously-skip-permissions/--yolo flags by default so they can work autonomously without constant approval prompts. Each task runs in an isolated git worktree, preventing agents from interfering with each other.
 Agents can still perform system-level actions, so review their work and keep backups.
 </Warning>
 
@@ -30,14 +91,14 @@ Agents can still perform system-level actions, so review their work and keep bac
 
 <Steps>
 <Step title="Authenticate with a coding agent">
-  Before launching Vibe Kanban, ensure you're authenticated with at least one [supported coding agent](/supported-coding-agents). Follow the installation and authentication instructions for your preferred agent.
+  Before launching Kablan, ensure you're authenticated with at least one [supported coding agent](/supported-coding-agents). Follow the installation and authentication instructions for your preferred agent.
 </Step>
 
-<Step title="Install and launch Vibe Kanban">
+<Step title="Install and launch Kablan">
   Open a terminal and run:
 
   ```bash
-  npx vibe-kanban
+  npx kablan
   ```
 
   <Check>
@@ -58,14 +119,14 @@ Agents can still perform system-level actions, so review their work and keep bac
 </Step>
 
 <Step title="Optional: GitHub integration">
-  Vibe Kanban uses the [GitHub CLI](https://cli.github.com/) for creating pull requests. Ensure `gh` is installed and authenticated on your system, or follow the setup prompts when creating your first pull request.
+  Kablan uses the [GitHub CLI](https://cli.github.com/) for creating pull requests. Ensure `gh` is installed and authenticated on your system, or follow the setup prompts when creating your first pull request.
 </Step>
 
 <Step title="Optional: Set up MCP integration">
-  Streamline task creation with coding agents by [setting up MCP integration](/integrations/vibe-kanban-mcp-server).
+  Streamline task creation with coding agents by [setting up MCP integration](/integrations/kablan-mcp-server).
 </Step>
 </Steps>
 
 <Tip>
-To use a fixed port, specify the `PORT` environment variable: `PORT=8080 npx vibe-kanban`
+To use a fixed port, specify the `PORT` environment variable: `PORT=8080 npx kablan`
 </Tip>

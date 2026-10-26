@@ -1,11 +1,23 @@
 # Kablan
 
-Come in, start a task, and let the coding agent you already pay for — Claude Code, Codex,
-Gemini, Cursor, and others — work against your own repositories.
+[![npm](https://img.shields.io/npm/v/kablan?color=E67300&label=npm)](https://www.npmjs.com/package/kablan)
+[![downloads](https://img.shields.io/npm/dm/kablan?color=E67300&label=downloads)](https://www.npmjs.com/package/kablan)
+[![license](https://img.shields.io/badge/license-Apache--2.0-E67300)](LICENSE)
 
-Each task gets its own git worktree and its own branch, so several agents can run at once
-without standing on each other. You follow the conversation, review the diff, start the
-project's dev server, and merge or open a PR when it looks right.
+**Run several coding agents at once — each task in its own git worktree and branch.**
+
+Start a task and let the agent you already pay for — Claude Code, Codex, Gemini, Cursor and
+others — work against your own repositories. Because every task is checked out onto its own
+branch, agents never stand on each other. You follow the conversation, review the diff, run
+the app, and merge or open a PR when it looks right.
+
+```bash
+npx kablan
+```
+
+No install step and no account. Kablan opens in your browser and drives each agent's own CLI,
+so it uses the subscription you already have and never sees your model credentials — which
+also means you need that agent installed and signed in first. See [Install](#install).
 
 <p align="center">
   <img src="landing/images/task-view.png" alt="Kablan task view: the project’s tasks on the left, the agent conversation in the middle, and attempt details on the right" />
@@ -51,12 +63,41 @@ See [NOTICE](NOTICE) for what this fork changes.
 
 ## Install
 
+You need Node 18 or newer, git, and a coding agent CLI that is **already installed and signed
+in** — `claude`, `codex`, or whichever you use. Kablan drives the agent's own CLI and holds no
+model credentials of its own, so a task started against an agent you have not authenticated
+will fail.
+
 ```bash
 npx kablan
 ```
 
-Nothing to install: the wrapper downloads the binary for your platform from this repository's
-latest release, caches it under `~/.kablan/bin`, and runs it. Kablan opens in your browser.
+The wrapper downloads the binary for your platform from this repository's latest release,
+checks it against the published checksum, caches it under `~/.kablan/bin`, and runs it. Kablan
+opens in your browser.
+
+### Platforms
+
+Verified on clean machines — downloaded, checksum-checked, launched and serving:
+**macOS on Apple Silicon**, **Linux x64** and **Windows x64**. The macOS cold start
+downloads 15MB, is listening in about six seconds, and opens the browser itself.
+
+Linux x64 needs **glibc 2.34 or newer**. Ubuntu 22.04 and 24.04, Debian 12, Rocky 9 and
+Amazon Linux 2023 all run the shipped binary. Ubuntu 20.04, Debian 11, RHEL/Rocky 8 and
+Amazon Linux 2 do not — the binary will not start. Alpine and other musl distros fail with a
+`not found` that points at the file you can plainly see is there.
+
+Windows was verified on Windows Server 2022, which already carries the Visual C++ runtime.
+The binary imports `VCRUNTIME140.dll`, so a bare Windows install may need the
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe). That one has
+not been tested either way.
+
+The macOS Intel build is published and checksums correctly, but has not been run on a clean
+machine yet.
+
+There is no ARM64 Linux or ARM64 Windows build in v0.11.6 — they are being added for the
+next release. Until they land, Graviton, Raspberry Pi, an ARM Linux container and
+Snapdragon/Surface ARM machines get a 404 on the download.
 
 ### As a Mac app
 

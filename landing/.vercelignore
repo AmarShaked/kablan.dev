@@ -1,0 +1,5 @@
+# Demo capture tooling — build-time only, never served.
+demo/
+node_modules/
+# Source for the GitHub social preview; the rendered PNG ships, this does not.
+social-preview.html

@@ -1,23 +1,23 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Vibe Kanban",
-  "description": "A kanban board for developers to track coding tasks with AI coding agents",
+  "name": "Kablan",
+  "description": "Run several coding agents at once — each task gets its own git worktree and branch.",
   "appearance": {
     "default": "light"
   },
   "colors": {
-    "primary": "#000000",
-    "light": "#fefefe",
-    "dark": "#121212"
+    "primary": "#E67300",
+    "light": "#FF8C00",
+    "dark": "#E67300"
   },
   "background": {
     "color": {
-      "light": "#FAF9F5",
-      "dark": "#2F2F2D"
+      "light": "#FAF8F2",
+      "dark": "#141414"
     }
   },
-  "favicon": "/logo/v-192.png",
+  "favicon": "/logo/favicon.svg",
   "navigation": {
     "groups": [
       {
@@ -64,42 +64,6 @@
         ]
       },
       {
-        "group": "Workspaces (Beta)",
-        "pages": [
-          "workspaces/index",
-          "workspaces/creating-workspaces",
-          "workspaces/managing-workspaces",
-          "workspaces/repositories",
-          "workspaces/sessions",
-          "workspaces/chat-interface",
-          "workspaces/slash-commands",
-          "workspaces/interface",
-          "workspaces/command-bar",
-          "workspaces/multi-repo-sessions",
-          "workspaces/preview",
-          "workspaces/changes",
-          "workspaces/git-operations"
-        ]
-      },
-      {
-        "group": "Cloud (Beta)",
-        "pages": [
-          "cloud/index",
-          "cloud/getting-started",
-          "cloud/migration",
-          "cloud/authentication",
-          "cloud/organizations",
-          "cloud/team-members",
-          "cloud/projects",
-          "cloud/issues",
-          "cloud/kanban-board",
-          "cloud/list-view",
-          "cloud/filtering",
-          "cloud/customisation",
-          "cloud/troubleshooting"
-        ]
-      },
-      {
         "group": "Configuration & Customisation",
         "pages": [
           "configuration-customisation/global-settings",
@@ -109,31 +73,12 @@
         ]
       },
       {
-        "group": "Settings (Beta)",
-        "pages": [
-          "settings-beta/index",
-          {
-            "group": "General",
-            "pages": [
-              "settings-beta/general",
-              "settings-beta/creating-task-tags"
-            ]
-          },
-          "settings-beta/projects-repositories",
-          "settings-beta/organization-settings",
-          "settings-beta/remote-projects",
-          "settings-beta/agent-configurations",
-          "settings-beta/mcp-servers"
-        ]
-      },
-      {
         "group": "Integrations",
         "pages": [
           "integrations/github-integration",
           "integrations/azure-repos-integration",
-          "integrations/vscode-extension",
           "integrations/mcp-server-configuration",
-          "integrations/vibe-kanban-mcp-server"
+          "integrations/kablan-mcp-server"
         ]
       },
       {
@@ -152,13 +97,13 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/BloopAI/vibe-kanban"
+        "href": "https://github.com/AmarShaked/kablan.dev"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Get Started",
-      "href": "https://vibekanban.com/docs"
+      "label": "Get started",
+      "href": "/getting-started"
     }
   },
   "contextual": {
@@ -173,16 +118,9 @@
       "vscode"
     ]
   },
-  "integrations": {
-    "posthog": {
-      "apiKey": "phc_V5XpxUvgOfEWk38iGHr0Kve2oZTmWFjDe3mIwTCXzx0",
-      "apiHost": "https://eu.i.posthog.com"
-    }
-  },
   "footer": {
     "socials": {
-      "github": "https://github.com/BloopAI/vibe-kanban",
-      "x": "https://x.com/vibekanban"
+      "github": "https://github.com/AmarShaked/kablan.dev"
     }
   }
 }
