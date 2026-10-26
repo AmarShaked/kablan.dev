@@ -21,9 +21,29 @@ env:
   NODE_VERSION: 22
   PNPM_VERSION: 10.13.1
   RUST_TOOLCHAIN: nightly-2025-12-04
-  RUNNER_LABEL: &runner_label blacksmith-16vcpu-ubuntu-2404
+  # This repo has no self-hosted or third-party runners registered. Any label other
+  # than a GitHub-hosted one leaves every job queued forever instead of failing.
+  RUNNER_LABEL: &runner_label ubuntu-latest
 
 jobs:
+  # `secrets` cannot be read from a job-level `if`, so expose presence as an output.
+  secret-availability:
+    runs-on: *runner_label
+    outputs:
+      has_vk_deploy_key: ${{ steps.probe.outputs.has_vk_deploy_key }}
+    steps:
+      - name: Check for private dependency deploy key
+        id: probe
+        env:
+          VK_PRIVATE_DEPLOY_KEY: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
+        run: |
+          if [ -n "$VK_PRIVATE_DEPLOY_KEY" ]; then
+            echo "has_vk_deploy_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_vk_deploy_key=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VK_PRIVATE_DEPLOY_KEY is not set; skipping backend-remote-checks."
+          fi
+
   frontend-checks:
     runs-on: *runner_label
     steps:
@@ -75,8 +95,11 @@ jobs:
       - name: Sqlx checks
         run: npm run prepare-db:check
 
+  # crates/remote pulls `billing` from BloopAI/vibe-kanban-private over SSH. Without that
+  # deploy key the job cannot check out its dependencies, so skip it rather than fail red.
   backend-remote-checks:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: secret-availability
+    if: ${{ needs.secret-availability.outputs.has_vk_deploy_key == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: *runner_label
     env:
       SCCACHE_GHA_ENABLED: "true"
