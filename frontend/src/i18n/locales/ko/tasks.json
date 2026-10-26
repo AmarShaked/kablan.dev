@@ -153,17 +153,20 @@
     "label": "기본 브랜치"
   },
   "diff": {
-    "collapseAll": "Collapse all diffs",
-    "errorLoadingDiff": "Failed to load diff: {{error}}",
-    "expandAll": "Expand all diffs",
-    "ignoreWhitespace": "공백 변경 무시",
-    "filesChanged_one": "{{count}} file changed",
-    "filesChanged_other": "{{count}} files changed",
-    "noChanges": "No changes have been made yet",
     "viewModes": {
       "inline": "Inline view",
       "split": "Split view"
     },
+    "ignoreWhitespace": "공백 변경 무시",
+    "errorLoadingDiff": "Failed to load diff: {{error}}",
+    "expandAll": "Expand all diffs",
+    "collapseAll": "Collapse all diffs",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "noChanges": "No changes have been made yet",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "큰 파일",
       "linesChanged": "{{count}} 줄 변경됨",
@@ -484,7 +487,10 @@
       "description": "저장하지 않은 변경사항이 있습니다. 정말 버리시겠습니까?",
       "continueEditing": "계속 수정",
       "discardChanges": "변경사항 버리기"
-    }
+    },
+    "startAnyway": "Start anyway",
+    "start": "Start",
+    "startingShort": "Starting"
   },
   "terminal": {
     "selectWorkspace": "터미널을 열려면 작업 공간을 선택하세요"

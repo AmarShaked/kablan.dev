@@ -22,6 +22,11 @@ import type { LocalImageMetadata } from '@/components/ui/wysiwyg/context/task-at
 import BranchSelector from '@/components/tasks/BranchSelector';
 import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
 import { AgentRunControls } from '@/components/tasks/AgentRunControls';
+import { AgentAvailabilityIndicator } from '@/components/AgentAvailabilityIndicator';
+import {
+  isAgentKnownNotReady,
+  useAgentAvailability,
+} from '@/hooks/useAgentAvailability';
 import { firstRunSelection } from '@/utils/agentRun';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useProjects } from '@/hooks/useProjects';
@@ -285,6 +290,16 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
   const isDirty = useStore(form.store, (state) => state.isDirty);
   const canSubmit = useStore(form.store, (state) => state.canSubmit);
+
+  // Readiness is read once here rather than inside the row, because the row and the submit
+  // button have to agree: the button says "Start anyway" exactly when the row is amber.
+  const selectedExecutor = useStore(
+    form.store,
+    (state) => state.values.agentSelection.executor
+  );
+  const { availability: agentAvailability, recheck: recheckAgent } =
+    useAgentAvailability(selectedExecutor);
+  const agentNotReady = isAgentKnownNotReady(agentAvailability);
 
   // Branches arrive late — from the sidebar / Linear, not until a project has been picked,
   // usually after the form already has a title. TanStack Form re-applies `defaultValues` only
@@ -687,6 +702,14 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                             </form.Field>
                           )}
                         </div>
+                        {/* The last moment before a worktree and a branch get created, which is
+                            why the row shows in every state here rather than only when it's bad. */}
+                        <AgentAvailabilityIndicator
+                          availability={agentAvailability}
+                          agent={selectedExecutor}
+                          onRecheck={recheckAgent}
+                          className="mt-2"
+                        />
                         {!isSingleRepo && (
                           <form.Field name="repoBranches">
                             {(field) => {
@@ -784,6 +807,14 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                     })}
                   >
                     {({ canSubmit, isSubmitting, values }) => {
+                      // Warn, don't block. Readiness is one `stat` on a credentials file and
+                      // nothing checks the binary, so a hard block would turn every false
+                      // negative into a user who cannot use Kablan at all — a worse failure
+                      // than the one being fixed, because it has no remedy inside the product.
+                      // The label changes; the button stays live.
+                      const startingAnyway =
+                        !editMode && values.autoStart && agentNotReady;
+
                       const buttonText = editMode
                         ? isSubmitting
                           ? t('taskFormDialog.updating')
@@ -792,14 +823,21 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                           ? values.autoStart
                             ? t('taskFormDialog.starting')
                             : t('taskFormDialog.creating')
-                          : t('taskFormDialog.create');
+                          : startingAnyway
+                            ? t('taskFormDialog.startAnyway')
+                            : t('taskFormDialog.create');
 
                       return (
                         <Button
                           onClick={form.handleSubmit}
                           // A task has to land somewhere: without a project there is nothing
-                          // to create it in.
+                          // to create it in. Readiness is deliberately not in this condition.
                           disabled={!canSubmit || !projectId}
+                          className={cn(
+                            startingAnyway &&
+                              !isSubmitting &&
+                              'bg-warning text-warning-foreground hover:bg-warning/90'
+                          )}
                         >
                           {buttonText}
                         </Button>

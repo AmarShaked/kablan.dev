@@ -314,14 +314,24 @@
         "unsavedChanges": "• You have unsaved changes"
       },
       "availability": {
-        "checking": "Checking...",
+        "checking": "Checking {{agent}}…",
         "checkingAvailability": "Checking availability...",
         "available": "Agent available",
-        "notFoundSimple": "Agent not found",
-        "loginDetected": "Recent Usage Detected",
-        "loginDetectedTooltip": "Recent authentication credentials found for this agent",
-        "installationFound": "Previous Usage Detected",
-        "installationFoundTooltip": "Agent configuration found. You may need to log in to use it."
+        "loginDetected": "{{agent}} is set up",
+        "loginDetectedTooltip": "Found saved credentials on this machine. If a run fails with a sign-in error, run <cmd>{{command}}</cmd> in a terminal and sign in again.",
+        "loginDetectedTooltip_noCommand": "Found saved credentials on this machine. If a run fails with a sign-in error, sign in to {{agent}} from a terminal.",
+        "installationFound": "{{agent}} is installed",
+        "installationFoundTooltip": "Kablan hasn't seen it signed in. Run <cmd>{{command}}</cmd> in a terminal and sign in.",
+        "installationFoundTooltip_noCommand": "Kablan hasn't seen it signed in. Sign in to {{agent}} from a terminal.",
+        "notFound": "{{agent}} isn't ready",
+        "notFoundTooltip": "Kablan runs the {{agent}} CLI on this machine and can't find a signed-in one. Open a terminal, run <cmd>{{command}}</cmd>, and sign in.",
+        "notFoundTooltip_noCommand": "Kablan runs the {{agent}} CLI on this machine and can't find a signed-in one. Sign in to {{agent}} from a terminal.",
+        "checkFailed": "Couldn't check {{agent}}",
+        "checkFailedTooltip": "Kablan couldn't tell whether your agent is ready. You can continue — if a run fails with a sign-in error, run <cmd>{{command}}</cmd> in a terminal.",
+        "checkFailedTooltip_noCommand": "Kablan couldn't tell whether your agent is ready. You can continue — if a run fails with a sign-in error, sign in to {{agent}} from a terminal.",
+        "recheck": "Recheck",
+        "rechecking": "Rechecking…",
+        "install": "Install {{agent}}"
       },
       "editor": {
         "formLabel": "Edit JSON",

@@ -153,17 +153,20 @@
     "label": "ベースブランチ"
   },
   "diff": {
-    "collapseAll": "Collapse all diffs",
-    "errorLoadingDiff": "Failed to load diff: {{error}}",
-    "expandAll": "Expand all diffs",
-    "ignoreWhitespace": "空白の変更を無視",
-    "filesChanged_one": "{{count}} file changed",
-    "filesChanged_other": "{{count}} files changed",
-    "noChanges": "No changes have been made yet",
     "viewModes": {
       "inline": "Inline view",
       "split": "Split view"
     },
+    "ignoreWhitespace": "空白の変更を無視",
+    "errorLoadingDiff": "Failed to load diff: {{error}}",
+    "expandAll": "Expand all diffs",
+    "collapseAll": "Collapse all diffs",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "noChanges": "No changes have been made yet",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "大きなファイル",
       "linesChanged": "{{count}} 行が変更されました",
@@ -484,7 +487,10 @@
       "description": "未保存の変更があります。本当に破棄してもよろしいですか？",
       "continueEditing": "編集を続ける",
       "discardChanges": "変更を破棄"
-    }
+    },
+    "startAnyway": "Start anyway",
+    "start": "Start",
+    "startingShort": "Starting"
   },
   "terminal": {
     "selectWorkspace": "ターミナルを開くにはワークスペースを選択してください"

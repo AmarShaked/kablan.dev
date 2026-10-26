@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, SearchX } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AgentReadinessRow } from '@/components/AgentReadinessRow';
 
 /**
  * Empty states for the task board.
@@ -23,6 +24,12 @@ export function NoTasksEmptyState({ onCreate }: { onCreate: () => void }) {
 
   return (
     <div className="mx-auto mt-16 max-w-2xl px-6 text-center">
+      {/* The three steps below are right as they stand; what they assume is an agent that can
+          run. That assumption only gets stated when it's false. */}
+      <AgentReadinessRow
+        onlyWhenNotReady
+        className="mx-auto mb-8 max-w-md text-left"
+      />
       <p className="font-ibm-plex-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
         {t('empty.eyebrow')}
       </p>

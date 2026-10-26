@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BaseCodingAgent } from 'shared/types';
 import { configApi } from '../lib/api';
 
@@ -7,13 +7,50 @@ export type AgentAvailabilityState =
   | { status: 'login_detected' }
   | { status: 'installation_found' }
   | { status: 'not_found' }
+  // The check itself failed. Distinct from `not_found`: we don't know the answer,
+  // rather than knowing the answer is no. Before this existed both rendered nothing.
+  | { status: 'error' }
   | null;
+
+export interface AgentAvailabilityResult {
+  availability: AgentAvailabilityState;
+  /**
+   * Re-run the check. The remedy for `not_found` is to sign in from a terminal, so
+   * the user has to be able to come back and ask again without restarting Kablan.
+   */
+  recheck: () => void;
+}
+
+/** The two states in which Kablan has seen credentials or an installation. */
+export function isAgentReady(availability: AgentAvailabilityState): boolean {
+  return (
+    availability?.status === 'login_detected' ||
+    availability?.status === 'installation_found'
+  );
+}
+
+/**
+ * The two states that warrant warning the user, which is **not** the negation of
+ * `isAgentReady`. While the check is still in flight we have no answer yet, and relabelling
+ * the start button on a state that resolves in a moment would make it flicker and would be
+ * claiming something we don't know.
+ */
+export function isAgentKnownNotReady(
+  availability: AgentAvailabilityState
+): boolean {
+  return (
+    availability?.status === 'not_found' || availability?.status === 'error'
+  );
+}
 
 export function useAgentAvailability(
   agent: BaseCodingAgent | null | undefined
-): AgentAvailabilityState {
+): AgentAvailabilityResult {
   const [availability, setAvailability] =
     useState<AgentAvailabilityState>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  const recheck = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
     if (!agent) {
@@ -21,10 +58,13 @@ export function useAgentAvailability(
       return;
     }
 
+    let cancelled = false;
+
     const checkAvailability = async () => {
       setAvailability({ status: 'checking' });
       try {
         const info = await configApi.checkAgentAvailability(agent);
+        if (cancelled) return;
 
         // Map backend enum to frontend state
         switch (info.type) {
@@ -39,13 +79,18 @@ export function useAgentAvailability(
             break;
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Failed to check agent availability:', error);
-        setAvailability(null);
+        setAvailability({ status: 'error' });
       }
     };
 
     checkAvailability();
-  }, [agent]);
 
-  return availability;
+    return () => {
+      cancelled = true;
+    };
+  }, [agent, attempt]);
+
+  return { availability, recheck };
 }

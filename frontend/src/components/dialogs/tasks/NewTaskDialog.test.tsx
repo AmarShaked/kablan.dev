@@ -7,7 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import NiceModal from '@ebay/nice-modal-react';
 
 const repos = [
@@ -23,6 +23,23 @@ const deliverBranches = () => {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  // The readiness row under the agent picker renders its detail line through `Trans` so the
+  // sign-in command can be marked up as a literal. Key is enough to assert against here.
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
+}));
+
+// Readiness drives the submit button's label, so it has to be pinned here — otherwise these
+// tests go through the real hook, the fetch fails, and every button reads "Start anyway".
+const agentAvailability = vi.hoisted(() => ({
+  current: { status: 'login_detected' } as { status: string },
+}));
+
+vi.mock('@/hooks/useAgentAvailability', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAgentAvailability')>()),
+  useAgentAvailability: () => ({
+    availability: agentAvailability.current,
+    recheck: vi.fn(),
+  }),
 }));
 
 vi.mock('@/contexts/UserSystemContext', () => ({
@@ -139,7 +156,9 @@ describe('NewTaskDialog', () => {
       target: { value: 'Fix the thing' },
     });
     act(deliverBranches);
-    const start = await screen.findByRole('button', { name: 'Start' });
+    const start = await screen.findByRole('button', {
+      name: 'taskFormDialog.start',
+    });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
 
@@ -147,6 +166,56 @@ describe('NewTaskDialog', () => {
     expect(createAndStart.mock.calls[0][0]).toMatchObject({
       task: { project_id: 'project-1', title: 'Fix the thing' },
       repos: [{ repo_id: 'repo-1', target_branch: 'main' }],
+    });
+  });
+
+  // Shaked's call, 26 Oct 2026: warn, never block. Readiness is one `stat` on a credentials
+  // file and nothing checks the binary, so a hard block would turn any false negative into a
+  // user who cannot use Kablan at all — with no remedy inside the product.
+  describe('when the agent is not ready', () => {
+    afterEach(() => {
+      agentAvailability.current = { status: 'login_detected' };
+    });
+
+    it.each([['not_found'], ['error']])(
+      'relabels Start to Start anyway on %s, and leaves it clickable',
+      async (status) => {
+        agentAvailability.current = { status };
+        renderApp();
+        NewTaskDialog.show({ mode: 'create', projectId: 'project-1' });
+
+        fireEvent.change(await screen.findByLabelText('Task title'), {
+          target: { value: 'Fix the thing' },
+        });
+        act(deliverBranches);
+
+        const start = await screen.findByRole('button', {
+          name: 'taskFormDialog.startAnyway',
+        });
+        await waitFor(() => expect(start).toBeEnabled());
+
+        expect(
+          screen.queryByRole('button', { name: 'taskFormDialog.start' })
+        ).toBeNull();
+
+        fireEvent.click(start);
+        await waitFor(() => expect(createAndStart).toHaveBeenCalled());
+      }
+    );
+
+    it('still says Start while the check is in flight', async () => {
+      agentAvailability.current = { status: 'checking' };
+      renderApp();
+      NewTaskDialog.show({ mode: 'create', projectId: 'project-1' });
+
+      fireEvent.change(await screen.findByLabelText('Task title'), {
+        target: { value: 'Fix the thing' },
+      });
+      act(deliverBranches);
+
+      expect(
+        await screen.findByRole('button', { name: 'taskFormDialog.start' })
+      ).toBeTruthy();
     });
   });
 
@@ -180,7 +249,9 @@ describe('NewTaskDialog', () => {
     fireEvent.change(await screen.findByLabelText('Task title'), {
       target: { value: 'Fix the thing' },
     });
-    const start = await screen.findByRole('button', { name: 'Start' });
+    const start = await screen.findByRole('button', {
+      name: 'taskFormDialog.start',
+    });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
 

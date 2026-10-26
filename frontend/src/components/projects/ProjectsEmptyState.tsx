@@ -2,19 +2,25 @@ import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AgentReadinessRow } from '@/components/AgentReadinessRow';
 
 /**
  * Shown when no projects exist yet.
  *
  * Same treatment as the task board's empty state: a mono wide-tracked eyebrow, a tight-tracked
  * headline, hairline rules rather than a filled panel, and a squared action. The numbered rows
- * describe a real sequence — point at a repo, then hand work to an agent — so the numbering
- * carries meaning instead of decorating the list.
+ * describe a real sequence — sign in to an agent, point at a repo, then hand work to it — so the
+ * numbering carries meaning instead of decorating the list.
+ *
+ * Signing in is step one because it is the one step that happens outside Kablan, and the one the
+ * app cannot do on the user's behalf. The readiness row above the headline only appears when that
+ * step hasn't happened.
  */
 export function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
   const { t } = useTranslation('projects');
 
   const steps = [
+    t('empty.steps.signin'),
     t('empty.steps.point'),
     t('empty.steps.describe'),
     t('empty.steps.review'),
@@ -22,6 +28,10 @@ export function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
 
   return (
     <div className="mx-auto mt-16 max-w-2xl px-6 text-center">
+      <AgentReadinessRow
+        onlyWhenNotReady
+        className="mx-auto mb-8 max-w-md text-left"
+      />
       <p className="font-ibm-plex-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
         {t('empty.eyebrow')}
       </p>

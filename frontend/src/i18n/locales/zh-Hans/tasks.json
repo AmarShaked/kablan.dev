@@ -157,6 +157,9 @@
     "filesChanged_one": "{{count}} 个文件已更改",
     "filesChanged_other": "{{count}} 个文件已更改",
     "noChanges": "尚未进行任何更改",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "大文件",
       "linesChanged": "{{count}} 行已更改",
@@ -484,7 +487,10 @@
       "description": "您有未保存的更改。您确定要放弃它们吗？",
       "continueEditing": "继续编辑",
       "discardChanges": "放弃更改"
-    }
+    },
+    "startAnyway": "Start anyway",
+    "start": "Start",
+    "startingShort": "Starting"
   },
   "terminal": {
     "selectWorkspace": "选择一个工作区以打开终端"

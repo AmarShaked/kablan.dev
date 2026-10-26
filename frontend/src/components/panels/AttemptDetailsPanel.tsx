@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bot,
   Check,
@@ -126,6 +127,7 @@ export function AttemptDetailsPanel({
   onOpenDiffs,
   onOpenEnv,
 }: AttemptDetailsPanelProps) {
+  const { t } = useTranslation('tasks');
   const { project, projectId } = useProject();
 
   const { isAttemptRunning, stopExecution, isStopping } = useAttemptExecution(
@@ -367,7 +369,7 @@ export function AttemptDetailsPanel({
         <span className="inline-flex w-full items-center gap-1.5">
           <span className="min-w-0 flex-1 truncate">
             {fileCount === 0
-              ? 'No changes yet'
+              ? t('diff.noChanges')
               : `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
           </span>
           {fileCount > 0 && (

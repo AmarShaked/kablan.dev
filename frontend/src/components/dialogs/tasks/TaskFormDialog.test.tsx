@@ -37,6 +37,23 @@ const deliverBranches = () => {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  // The readiness row under the agent picker renders its detail line through `Trans` so the
+  // sign-in command can be marked up as a literal. Key is enough to assert against here.
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
+}));
+
+// Readiness drives the submit button's label, so it has to be pinned here — otherwise these
+// tests go through the real hook, the fetch fails, and every button reads "Start anyway".
+const agentAvailability = vi.hoisted(() => ({
+  current: { status: 'login_detected' } as { status: string },
+}));
+
+vi.mock('@/hooks/useAgentAvailability', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAgentAvailability')>()),
+  useAgentAvailability: () => ({
+    availability: agentAvailability.current,
+    recheck: vi.fn(),
+  }),
 }));
 
 vi.mock('@/contexts/UserSystemContext', () => ({
