@@ -215,12 +215,80 @@ pub trait ContainerService {
         action.next_action.is_none()
     }
 
-    /// Finalize task execution by updating status to InReview and sending notifications
-    async fn finalize_task(&self, ctx: &ExecutionContext) {
-        if let Err(e) =
-            Task::update_status(&self.db().pool, ctx.task.id, TaskStatus::InReview).await
+    /// Whether the task branch holds anything a reviewer could open: a commit the target
+    /// branch does not have, or edits still sitting in a worktree.
+    ///
+    /// Errors count as "yes". Being wrong in that direction parks the task in In Review,
+    /// which is the old behaviour; being wrong the other way hides real work.
+    async fn has_reviewable_work(&self, workspace: &Workspace) -> bool {
+        let repos = match WorkspaceRepo::find_repos_with_target_branch_for_workspace(
+            &self.db().pool,
+            workspace.id,
+        )
+        .await
         {
-            tracing::error!("Failed to update task status to InReview: {e}");
+            Ok(repos) => repos,
+            Err(e) => {
+                tracing::warn!("Could not load workspace repos to check for a diff: {e}");
+                return true;
+            }
+        };
+
+        let workspace_dir = self.workspace_to_current_dir(workspace);
+
+        for repo in &repos {
+            let worktree_path = workspace_dir.join(&repo.repo.name);
+
+            match self.git().get_worktree_change_counts(&worktree_path) {
+                Ok((tracked, untracked)) if tracked > 0 || untracked > 0 => return true,
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Could not read worktree status for repo '{}': {e}",
+                        repo.repo.name
+                    );
+                    return true;
+                }
+            }
+
+            match self.git().get_branch_status(
+                &worktree_path,
+                &workspace.branch,
+                &repo.target_branch,
+            ) {
+                Ok((ahead, _behind)) if ahead > 0 => return true,
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Could not compare '{}' to '{}' in repo '{}': {e}",
+                        workspace.branch,
+                        repo.target_branch,
+                        repo.repo.name
+                    );
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Finalize task execution by updating status and sending notifications.
+    ///
+    /// Normally that means In Review. A run that failed without producing anything is the
+    /// exception: there is nothing in that column to review, so the task goes back to To Do
+    /// where it reads as "still needs doing". The card keeps its failed marker either way.
+    async fn finalize_task(&self, ctx: &ExecutionContext) {
+        let status = if matches!(ctx.execution_process.status, ExecutionProcessStatus::Failed)
+            && !self.has_reviewable_work(&ctx.workspace).await
+        {
+            TaskStatus::Todo
+        } else {
+            TaskStatus::InReview
+        };
+
+        if let Err(e) = Task::update_status(&self.db().pool, ctx.task.id, status.clone()).await {
+            tracing::error!("Failed to update task status to {status}: {e}");
         }
 
         // Skip notification if process was intentionally killed by user
@@ -301,7 +369,9 @@ pub trait ContainerService {
             }
             // Process marked as failed
             tracing::info!("Marked orphaned execution process {} as failed", process.id);
-            // Update task status to InReview for coding agent and setup script failures
+            // Move coding agent and script failures out of In Progress. An orphan that got
+            // far enough to produce something goes to In Review; one that produced nothing
+            // goes back to To Do, for the same reason as in `finalize_task`.
             if matches!(
                 process.run_reason,
                 ExecutionProcessRunReason::CodingAgent
@@ -312,13 +382,18 @@ pub trait ContainerService {
                 && let Ok(Some(workspace)) =
                     Workspace::find_by_id(&self.db().pool, session.workspace_id).await
                 && let Ok(Some(task)) = workspace.parent_task(&self.db().pool).await
-                && let Err(e) =
-                    Task::update_status(&self.db().pool, task.id, TaskStatus::InReview).await
             {
-                tracing::error!(
-                    "Failed to update task status to InReview for orphaned session: {}",
-                    e
-                );
+                let status = if self.has_reviewable_work(&workspace).await {
+                    TaskStatus::InReview
+                } else {
+                    TaskStatus::Todo
+                };
+                if let Err(e) = Task::update_status(&self.db().pool, task.id, status.clone()).await
+                {
+                    tracing::error!(
+                        "Failed to update task status to {status} for orphaned session: {e}"
+                    );
+                }
             }
         }
         Ok(())
