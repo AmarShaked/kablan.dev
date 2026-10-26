@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   Group,
@@ -244,7 +244,12 @@ function LinearInbox() {
     return () => window.clearTimeout(handle);
   }, [searchInput]);
 
-  const issues = issuesQuery.data?.issues ?? [];
+  // Memoised so the empty-data case keeps one array identity; the selection
+  // effect below depends on it and would otherwise re-run on every render.
+  const issues = useMemo(
+    () => issuesQuery.data?.issues ?? [],
+    [issuesQuery.data?.issues]
+  );
   const viewerName =
     issuesQuery.data?.viewer?.name ?? metaQuery.data?.viewer.name ?? null;
   const viewerId =
@@ -284,6 +289,8 @@ function LinearInbox() {
   const listRef = useRef<HTMLUListElement | null>(null);
   const sentinelRef = useRef<HTMLLIElement | null>(null);
 
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = issuesQuery;
+
   useEffect(() => {
     const root = listRef.current;
     const sentinel = sentinelRef.current;
@@ -293,22 +300,17 @@ function LinearInbox() {
       (entries) => {
         if (
           entries.some((entry) => entry.isIntersecting) &&
-          issuesQuery.hasNextPage &&
-          !issuesQuery.isFetchingNextPage
+          hasNextPage &&
+          !isFetchingNextPage
         ) {
-          void issuesQuery.fetchNextPage();
+          void fetchNextPage();
         }
       },
       { root, rootMargin: '120px' }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [
-    issuesQuery.hasNextPage,
-    issuesQuery.isFetchingNextPage,
-    issuesQuery.fetchNextPage,
-    issues.length,
-  ]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, issues.length]);
 
   const existing = selected
     ? tasks.find(

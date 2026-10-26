@@ -54,7 +54,7 @@ export const useConversationHistoryOld = ({
   useEffect(() => {
     onEntriesUpdatedRef.current = onEntriesUpdated;
     onTokenUsageRef.current = onTokenUsage;
-  }, [onEntriesUpdated]);
+  }, [onEntriesUpdated, onTokenUsage]);
 
   // Keep executionProcesses up to date
   useEffect(() => {
@@ -613,23 +613,28 @@ export const useConversationHistoryOld = ({
   // Reset before any load/stream effect for this attempt, so a late patch from
   // the previous chat is dropped and the new chat starts empty.
   useEffect(() => {
+    // Both refs hold a collection created once and only ever mutated, so the
+    // local alias is the same object the cleanup would have read.
+    const liveControllers = liveControllersRef.current;
+    const streamingProcessIds = streamingProcessIdsRef.current;
+
     streamGenerationRef.current += 1;
-    for (const controller of liveControllersRef.current.values()) {
+    for (const controller of liveControllers.values()) {
       controller.close();
     }
-    liveControllersRef.current.clear();
+    liveControllers.clear();
     displayedExecutionProcesses.current = {};
     loadedInitialEntries.current = false;
-    streamingProcessIdsRef.current.clear();
+    streamingProcessIds.clear();
     emitEntries(displayedExecutionProcesses.current, 'initial', true);
 
     return () => {
       streamGenerationRef.current += 1;
-      for (const controller of liveControllersRef.current.values()) {
+      for (const controller of liveControllers.values()) {
         controller.close();
       }
-      liveControllersRef.current.clear();
-      streamingProcessIdsRef.current.clear();
+      liveControllers.clear();
+      streamingProcessIds.clear();
     };
   }, [attempt.id, emitEntries]);
 
