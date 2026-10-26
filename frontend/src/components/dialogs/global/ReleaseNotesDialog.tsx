@@ -1,101 +1,73 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, ExternalLink } from 'lucide-react';
+import { ExternalLink, Sparkles } from 'lucide-react';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
-import { useTheme } from '@/components/ThemeProvider';
-import { getActualTheme } from '@/utils/theme';
+import { useUserSystem } from '@/contexts/UserSystemContext';
 import { defineModal, type NoProps } from '@/lib/modals';
 
 // Kablan fork: upstream embedded their own release-notes site in an iframe here. Pointed at
 // Kablan's releases instead, so the app never loads content from the original owner.
-const RELEASE_NOTES_BASE_URL =
-  'https://github.com/AmarShaked/kablan.dev/releases';
+//
+// The notes are not embedded: github.com serves `x-frame-options: deny`, so an iframe of a
+// releases page is blocked by the browser every time, and a blocked frame fires `load` rather
+// than `error` — the old code sat on a blank pane for five seconds before admitting it. The
+// release notes open in the user's browser instead, and only when they ask for them. Nothing
+// here makes a network request.
+const RELEASES_URL = 'https://github.com/AmarShaked/kablan.dev/releases';
 
 const ReleaseNotesDialogImpl = NiceModal.create<NoProps>(() => {
   const modal = useModal();
-  const [iframeError, setIframeError] = useState(false);
-  const { theme } = useTheme();
+  const { config } = useUserSystem();
 
-  const releaseNotesUrl = useMemo(() => {
-    const actualTheme = getActualTheme(theme);
-    const url = new URL(RELEASE_NOTES_BASE_URL);
-    url.searchParams.set('theme', actualTheme);
-    return url.toString();
-  }, [theme]);
+  // The server writes the running APP_VERSION into `last_app_version` during start-up, before it
+  // serves any config, so this is the version the user is on now — not the one they came from.
+  const version = config?.last_app_version ?? null;
+
+  const releaseNotesUrl = useMemo(
+    () => (version ? `${RELEASES_URL}/tag/v${version}` : RELEASES_URL),
+    [version]
+  );
 
   const handleOpenInBrowser = () => {
-    window.open(releaseNotesUrl, '_blank');
+    window.open(releaseNotesUrl, '_blank', 'noopener,noreferrer');
     modal.resolve();
-  };
-
-  const handleIframeError = () => {
-    setIframeError(true);
   };
 
   return (
     <Dialog
       open={modal.visible}
       onOpenChange={(open) => !open && modal.resolve()}
-      className="h-[calc(100%-4rem)]"
     >
-      <DialogContent className="flex flex-col w-full h-full max-w-7xl max-h-[calc(100dvh-1rem)] p-0">
-        <DialogHeader className="p-4 border-b flex-shrink-0">
-          <DialogTitle className="text-xl font-semibold">
-            We've updated Kablan! Check out what's new...
-          </DialogTitle>
-        </DialogHeader>
-
-        {iframeError ? (
-          <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4 p-4">
-            <AlertCircle className="h-12 w-12 text-muted-foreground" />
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">
-                Unable to load release notes
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-md">
-                We couldn't display the release notes in this window. Click
-                below to view them in your browser.
-              </p>
-            </div>
-            <Button onClick={handleOpenInBrowser} className="mt-4">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Open Release Notes in Browser
-            </Button>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <DialogTitle>
+              {version
+                ? `Kablan is now on ${version}`
+                : 'Kablan has been updated'}
+            </DialogTitle>
           </div>
-        ) : (
-          <iframe
-            src={releaseNotesUrl}
-            className="flex-1 w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-popups"
-            referrerPolicy="no-referrer"
-            title="Release Notes"
-            onError={handleIframeError}
-            onLoad={(e) => {
-              // Check if iframe content loaded successfully
-              try {
-                const iframe = e.target as HTMLIFrameElement;
-                // If iframe is accessible but empty, it might indicate loading issues
-                if (iframe.contentDocument?.body?.children.length === 0) {
-                  setTimeout(() => setIframeError(true), 5000); // Wait 5s then show fallback
-                }
-              } catch {
-                // Cross-origin access blocked (expected), iframe loaded successfully
-              }
-            }}
-          />
-        )}
-
-        <DialogFooter className="p-4 border-t flex-shrink-0">
-          <Button variant="outline" onClick={handleOpenInBrowser}>
+          <DialogDescription className="text-left pt-2">
+            The release notes for this version live on GitHub. They open in your
+            browser — Kablan does not load them in the app.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => modal.resolve()}>
+            Not now
+          </Button>
+          <Button onClick={handleOpenInBrowser}>
             <ExternalLink className="h-4 w-4 mr-2" />
-            Open in Browser
+            See what's new
           </Button>
         </DialogFooter>
       </DialogContent>
