@@ -1,3 +1,12 @@
+# Only `utils` and `server` carry the release version — `utils` because APP_VERSION is
+# `env!("CARGO_PKG_VERSION")` and is what the running app reports, `server` because it is the
+# binary. `./scripts/set-version.sh` sets those two and the release workflow fails a tag that
+# disagrees with them.
+#
+# The rest keep their own versions on purpose. Nothing is published to crates.io, every internal
+# dependency is `{ path = ... }` with no version, and `crates/remote` is not even a member — so
+# their version numbers are read by nobody. Making nine inert numbers move on every release would
+# add churn to each release diff and buy no accuracy anywhere a user can see.
 [workspace]
 resolver = "3"
 members = [

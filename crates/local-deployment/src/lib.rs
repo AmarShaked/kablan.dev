@@ -80,13 +80,16 @@ impl Deployment for LocalDeployment {
 
         // Check if app version has changed and set release notes flag
         {
-            let current_version = utils::version::APP_VERSION;
-            let stored_version = raw_config.last_app_version.as_deref();
+            use utils::version::{APP_VERSION, VersionChange, classify_change};
 
-            if stored_version != Some(current_version) {
-                // Show release notes only if this is an upgrade (not first install)
-                raw_config.show_release_notes = stored_version.is_some();
-                raw_config.last_app_version = Some(current_version.to_string());
+            let change = classify_change(raw_config.last_app_version.as_deref(), APP_VERSION);
+            if change != VersionChange::Unchanged {
+                // Only ever raise the flag here. The frontend lowers it once the dialog has been
+                // seen, so a version move must not swallow notes the user has not read yet.
+                if change.shows_release_notes() {
+                    raw_config.show_release_notes = true;
+                }
+                raw_config.last_app_version = Some(APP_VERSION.to_string());
             }
         }
 
