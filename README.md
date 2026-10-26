@@ -72,6 +72,11 @@ it, so there is no "unidentified developer" prompt and nothing to notarise.
 
 Update with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.
 
+Uninstalling removes the app and nothing else. It prints what is left and how large it is: the
+binary cache in `~/.kablan/bin`, and your projects, tasks and database in
+`~/Library/Application Support/dev.kablan.Kablan`. Deleting the second one deletes your Kablan
+history; see [npx-cli/README.md](npx-cli/README.md#uninstalling-and-what-it-leaves).
+
 Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
 not hold your model credentials.
 

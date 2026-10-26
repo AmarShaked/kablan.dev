@@ -4,8 +4,17 @@ const { execSync, spawn } = require("child_process");
 const AdmZip = require("adm-zip");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { ensureBinary, BINARY_TAG, CACHE_DIR, LOCAL_DEV_MODE, LOCAL_DIST_DIR, getLatestVersion } = require("./download");
-const { installMacApp, uninstallMacApp, appDir } = require("./install-app");
+const {
+  installMacApp,
+  uninstallMacApp,
+  appDir,
+  describeLeftovers,
+  dataDir,
+  tildePath,
+  APP_NAME,
+} = require("./install-app");
 const { createInstallLogger, installLogPath } = require("./install-log");
 
 const CLI_VERSION = require("../package.json").version;
@@ -72,23 +81,74 @@ function getBinaryName(base) {
   return platform === "win32" ? `${base}.exe` : base;
 }
 
-const platformDir = getPlatformDir();
-// In local dev mode, extract directly to dist directory; otherwise use global cache
-const versionCacheDir = LOCAL_DEV_MODE
-  ? path.join(LOCAL_DIST_DIR, platformDir)
-  : path.join(CACHE_DIR, BINARY_TAG, platformDir);
+// Resolved on demand, not at load: getPlatformDir() exits the process on a platform we do not
+// publish for, and `--help` and `--version` have to work there too — telling someone their
+// platform is unsupported is most of what those two are for on such a machine.
+let resolvedPlatformDir = null;
+function platformDir() {
+  if (!resolvedPlatformDir) resolvedPlatformDir = getPlatformDir();
+  return resolvedPlatformDir;
+}
 
-function showProgress(downloaded, total) {
-  const percent = total ? Math.round((downloaded / total) * 100) : 0;
-  const mb = (downloaded / (1024 * 1024)).toFixed(1);
-  const totalMb = total ? (total / (1024 * 1024)).toFixed(1) : "?";
-  process.stderr.write(`\r   Downloading: ${mb}MB / ${totalMb}MB (${percent}%)`);
+// In local dev mode, extract directly to dist directory; otherwise use global cache
+function versionCacheDir() {
+  return LOCAL_DEV_MODE
+    ? path.join(LOCAL_DIST_DIR, platformDir())
+    : path.join(CACHE_DIR, BINARY_TAG, platformDir());
+}
+
+/**
+ * Download progress, in a shape that suits where it is going.
+ *
+ * A terminal gets one line rewritten in place. Anything else — a CI log, a redirect to a file,
+ * a parent process capturing stderr — gets a handful of whole lines, because `\r` means nothing
+ * there and a 15MB download at one update per chunk wrote about 700 lines into the log.
+ *
+ * @param {object} [deps] injected by the tests; `isTTY` is the whole decision
+ */
+function createProgressReporter(deps = {}) {
+  const {
+    isTTY = Boolean(process.stderr.isTTY),
+    write = (text) => process.stderr.write(text),
+    stepPercent = 25,
+  } = deps;
+
+  const mb = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
+  let nextStep = stepPercent;
+  let lastDownloaded = 0;
+
+  return {
+    update(downloaded, total) {
+      lastDownloaded = downloaded;
+      const percent = total ? Math.round((downloaded / total) * 100) : 0;
+      const totalMb = total ? mb(total) : "?";
+
+      if (isTTY) {
+        write(`\r   Downloading: ${mb(downloaded)}MB / ${totalMb}MB (${percent}%)`);
+        return;
+      }
+
+      // 100% is left to done(), so the end is one line rather than two near-identical ones.
+      if (!total || percent >= 100 || percent < nextStep) return;
+      while (nextStep <= percent) nextStep += stepPercent;
+      write(`   Downloading: ${mb(downloaded)}MB / ${totalMb}MB (${percent}%)\n`);
+    },
+
+    done() {
+      if (isTTY) {
+        write("\n");
+        return;
+      }
+      if (lastDownloaded > 0) write(`   Downloaded ${mb(lastDownloaded)}MB\n`);
+    },
+  };
 }
 
 async function extractAndRun(baseName, launch) {
+  const cacheDir = versionCacheDir();
   const binName = getBinaryName(baseName);
-  const binPath = path.join(versionCacheDir, binName);
-  const zipPath = path.join(versionCacheDir, `${baseName}.zip`);
+  const binPath = path.join(cacheDir, binName);
+  const zipPath = path.join(cacheDir, `${baseName}.zip`);
 
   // Clean old binary if exists
   try {
@@ -104,9 +164,12 @@ async function extractAndRun(baseName, launch) {
   // Download if not cached
   if (!fs.existsSync(zipPath)) {
     console.error(`Downloading ${baseName}...`);
+    const progress = createProgressReporter();
     try {
-      await ensureBinary(platformDir, baseName, showProgress);
-      console.error(""); // newline after progress
+      await ensureBinary(platformDir(), baseName, (downloaded, total) =>
+        progress.update(downloaded, total)
+      );
+      progress.done();
     } catch (err) {
       console.error(`\nDownload failed: ${err.message}`);
       process.exit(1);
@@ -117,7 +180,7 @@ async function extractAndRun(baseName, launch) {
   if (!fs.existsSync(binPath)) {
     try {
       const zip = new AdmZip(zipPath);
-      zip.extractAllTo(versionCacheDir, true);
+      zip.extractAllTo(cacheDir, true);
     } catch (err) {
       console.error("Extraction failed:", err.message);
       try {
@@ -156,11 +219,73 @@ function summariseStopped(stopped) {
   return `Stopped ${stopped.length} running process${stopped.length === 1 ? "" : "es"}: ${detail}`;
 }
 
-async function main() {
-  fs.mkdirSync(versionCacheDir, { recursive: true });
+/**
+ * The help, which is also the only documentation some people will read.
+ *
+ * Both this and --version used to fall through to "start a server and open a browser", which is
+ * a surprising answer to the first two things anyone types at a CLI they do not know.
+ */
+function helpText() {
+  const home = os.homedir();
+  const bin = APP_NAME.toLowerCase();
+  const logs =
+    process.platform === "darwin"
+      ? `\n  Logs       ${tildePath(path.join(home, "Library", "Logs", APP_NAME), home)}`
+      : "";
 
+  return `${bin} ${CLI_VERSION} — run coding agents against your repositories from a board
+
+Usage
+  npx ${bin}               Start Kablan and open it in your browser
+  npx ${bin} --install     Install ${APP_NAME}.app into ~/Applications (macOS only)
+  npx ${bin} --uninstall   Remove ${APP_NAME}.app, and say what is left on disk
+  npx ${bin} --mcp         Run the MCP task server on stdin/stdout
+  npx ${bin} --version     Print the version of this wrapper
+  npx ${bin} --help        Print this
+
+What you need
+  Node 18 or newer, git, and a coding agent CLI you have already signed in to —
+  Kablan drives the agent's own CLI and never sees your model credentials.
+
+Where things go
+  Binaries   ${tildePath(path.join(CACHE_DIR, BINARY_TAG), home)}/<platform>
+  Data       ${tildePath(dataDir(), home)}
+             Projects, tasks, settings and the database.${logs}
+
+Environment
+  KABLAN_DEBUG=1   Print stack traces, and warn about cache problems
+  KABLAN_LOCAL=1   Use binaries built by ./local-build.sh instead of the release
+
+Bugs: https://github.com/AmarShaked/kablan.dev/issues`;
+}
+
+/** Flags this wrapper understands. Anything else is a typo worth saying so about. */
+const KNOWN_FLAGS = ["--mcp", "--install", "--uninstall", "--version", "-V", "--help", "-h"];
+
+async function main() {
   const args = process.argv.slice(2);
   const isMcpMode = args.includes("--mcp");
+
+  // Before anything touches the disk or the network: these answer from the package itself, and
+  // must work on a machine this wrapper publishes no binary for.
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(helpText());
+    return;
+  }
+
+  if (args.includes("--version") || args.includes("-V")) {
+    console.log(`${APP_NAME.toLowerCase()} ${CLI_VERSION}`);
+    return;
+  }
+
+  // The wrapper forwards no arguments to the server, so an unrecognised one was silently doing
+  // nothing at all — including a misspelt `--instal`, which started a server instead.
+  const unknown = args.filter((arg) => !KNOWN_FLAGS.includes(arg));
+  if (unknown.length > 0) {
+    console.error(`Unknown argument${unknown.length === 1 ? "" : "s"}: ${unknown.join(" ")}`);
+    console.error(`Run \`npx ${APP_NAME.toLowerCase()} --help\` for what this wrapper accepts.`);
+    process.exit(2);
+  }
 
   // `--install` puts a double-clickable app in ~/Applications and exits. It stops a running
   // Kablan first: the swap would otherwise leave the old process serving, and the update would
@@ -171,9 +296,11 @@ async function main() {
     const { app: removed, stopped } = uninstallMacApp(log);
     log(summariseStopped(stopped));
     log(removed ? `Removed ${removed}` : `Nothing installed at ${appDir()}`);
-    console.log("Cached binaries are still in ~/.kablan/bin; delete that to reclaim the space.");
+    for (const line of describeLeftovers()) console.log(line);
     return;
   }
+
+  fs.mkdirSync(versionCacheDir(), { recursive: true });
 
   if (args.includes("--install")) {
     await extractAndRun("kablan", (bin) => {
@@ -242,4 +369,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { summariseStopped };
+module.exports = { summariseStopped, createProgressReporter, helpText, KNOWN_FLAGS };

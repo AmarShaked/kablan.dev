@@ -124,9 +124,20 @@ function infoPlist(version) {
  * handle.
  *
  * Instead every process is examined and the ones that are ours are stopped — all of them, not
- * the first. "Ours" means the executable lives in a directory this CLI owns: the version cache
- * under ~/.kablan/bin, or the app bundle it builds. A server someone compiled themselves is
- * deliberately left alone: it is not what an update replaces.
+ * the first. "Ours" means two things, and both are required:
+ *
+ *   - the executable lives in a directory *this* install owns: the version cache under
+ *     $HOME/.kablan/bin, or an app bundle in $HOME/Applications (or /Applications, for a copy
+ *     dragged there);
+ *   - the process runs as the uid that invoked us.
+ *
+ * The scan stays machine-wide — reading the process table rather than a port file is what fixed
+ * the bug above — but a machine-wide scan with no ownership test signals servers that are none
+ * of our business: another account's, or the same account running under a different HOME. An
+ * install for one HOME must not stop a server installed under another, and it used to.
+ *
+ * A server someone compiled themselves is left alone for the same reason it always was: it is
+ * not what an update replaces.
  *
  * SIGTERM first, so the server closes its database cleanly; SIGKILL only for one that outstays
  * the grace period.
@@ -138,6 +149,10 @@ function infoPlist(version) {
 function stopRunningApps(deps = {}) {
   const {
     listProcesses = defaultListProcesses,
+    homeDir = os.homedir(),
+    // Windows has no getuid. There the path test stands alone, which gives up only the
+    // multi-user case — and `--install` does not run on Windows at all.
+    uid = typeof process.getuid === "function" ? process.getuid() : null,
     kill = (pid, signal) => process.kill(pid, signal),
     alive = (pid) => {
       try {
@@ -158,13 +173,21 @@ function stopRunningApps(deps = {}) {
   const stopped = [];
   const skipped = [];
 
-  for (const { pid, command } of listProcesses()) {
-    const kind = classify(command);
+  for (const { pid, command, uid: processUid } of listProcesses()) {
+    const kind = classify(command, homeDir);
     if (!kind) continue;
 
     // Signalling ourselves or the npx wrapper that spawned us would end the install midway.
     if (pid === selfPid || pid === parentPid) {
       skipped.push({ pid, reason: "self" });
+      continue;
+    }
+
+    // One of our paths, but under another account. `ps` reports a uid for every process it
+    // lists, so a missing one means the column was unavailable — not that the process is
+    // unowned — and then the path test above is the whole answer.
+    if (uid !== null && processUid !== null && processUid !== undefined && processUid !== uid) {
+      skipped.push({ pid, reason: "another user" });
       continue;
     }
 
@@ -202,20 +225,44 @@ function stopRunningApps(deps = {}) {
 }
 
 /**
+ * The directories an install under `homeDir` owns, and what a binary found in each one is.
+ *
+ * These are prefixes, matched against the executable path — not substrings of it. A substring
+ * match is what let an install under one HOME claim a server under another: every cache path
+ * ends in `/.kablan/bin/`, whoever's home it sits in.
+ *
+ * /Applications is included because a user can drag the bundle there, and an update that left
+ * that copy running would be the silent-old-version failure all of this exists to prevent. The
+ * uid test in stopRunningApps is what keeps another account's copy out.
+ */
+function ownedRoots(homeDir) {
+  const bin = APP_NAME.toLowerCase();
+  const bundle = path.join(`${APP_NAME}.app`, "Contents", "MacOS");
+  return [
+    { prefix: path.join(homeDir, `.${bin}`, "bin") + path.sep, kind: "cache" },
+    { prefix: path.join(homeDir, "Applications", bundle) + path.sep, kind: "bundle" },
+    { prefix: path.sep + path.join("Applications", bundle) + path.sep, kind: "bundle" },
+  ];
+}
+
+/**
  * Is this command line one of ours, and which kind? Anything else returns null and is left
- * running — including a server built from a checkout, which no update of ours replaces.
+ * running — including a server built from a checkout, which no update of ours replaces, and one
+ * cached under a different HOME, which this install does not manage.
  *
  * Only the executable is examined, never the arguments. `ps` prints the whole command line, so a
  * shell that launched a server, a `tail` on its log, or an editor with the path open all carry
  * our directory in their arguments; matching anywhere in the line would signal them.
  */
-function classify(command) {
+function classify(command, homeDir = os.homedir()) {
   const bin = APP_NAME.toLowerCase();
   const executable = executableOf(command);
-  if (executable.includes(`/.${bin}/bin/`)) {
+
+  for (const { prefix, kind } of ownedRoots(homeDir)) {
+    if (!executable.startsWith(prefix)) continue;
+    if (kind === "bundle") return "installed app";
     return executable.endsWith(`${bin}-mcp`) ? "MCP server" : "server";
   }
-  if (executable.includes(`/${APP_NAME}.app/Contents/MacOS/`)) return "installed app";
   return null;
 }
 
@@ -237,28 +284,48 @@ function versionFromPath(command) {
   return match ? match[1] : null;
 }
 
-/** Every process on the machine, as {pid, command}. */
+/**
+ * Every process on the machine, as {pid, uid, command}.
+ *
+ * The uid is what tells one account's server from another's. If `ps` will not give it — no
+ * platform we ship to refuses, but the fallback costs one line — the uid comes back undefined
+ * and the caller falls back to the path test alone rather than listing nothing.
+ */
 function defaultListProcesses() {
-  let out = "";
-  try {
-    out = execFileSync("/bin/ps", ["-axo", "pid=,command="], {
+  const run = (format) =>
+    execFileSync("/bin/ps", ["-axo", format], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 8 * 1024 * 1024,
     });
+
+  let out = "";
+  let hasUid = true;
+  try {
+    out = run("pid=,uid=,command=");
   } catch {
-    return [];
+    try {
+      out = run("pid=,command=");
+      hasUid = false;
+    } catch {
+      return [];
+    }
   }
+
+  const pattern = hasUid ? /^(\d+)\s+(\d+)\s+(.*)$/ : /^(\d+)\s+(.*)$/;
+
   return out
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const space = line.indexOf(" ");
-      if (space === -1) return null;
-      const pid = Number(line.slice(0, space));
+      const match = line.match(pattern);
+      if (!match) return null;
+      const pid = Number(match[1]);
       if (!Number.isInteger(pid)) return null;
-      return { pid, command: line.slice(space + 1).trim() };
+      return hasUid
+        ? { pid, uid: Number(match[2]), command: match[3].trim() }
+        : { pid, uid: undefined, command: match[2].trim() };
     })
     .filter(Boolean);
 }
@@ -331,13 +398,159 @@ function uninstallMacApp(log = () => {}) {
   return { app, stopped };
 }
 
+/**
+ * Where the server keeps your boards, tasks and settings.
+ *
+ * This mirrors `ProjectDirs::from("dev", "kablan", "Kablan").data_dir()` in
+ * crates/utils/src/assets.rs. If that ever moves, this is wrong, and what it is wrong about is
+ * a path printed next to the words "deleting this deletes your Kablan history" — so it is worth
+ * the duplication being written down rather than guessed at.
+ */
+function dataDir(homeDir = os.homedir(), platform = process.platform, env = process.env) {
+  if (platform === "darwin") {
+    return path.join(homeDir, "Library", "Application Support", "dev.kablan.Kablan");
+  }
+  if (platform === "win32") {
+    const appData = env.APPDATA || path.join(homeDir, "AppData", "Roaming");
+    return path.join(appData, "kablan", "Kablan", "data");
+  }
+  return path.join(env.XDG_DATA_HOME || path.join(homeDir, ".local", "share"), "kablan");
+}
+
+/** Bytes under `dir`, or null if it is not there. Symlinks are not followed and not counted. */
+function dirSize(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  let total = 0;
+  for (const entry of entries) {
+    const child = path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) total += dirSize(child) || 0;
+      else if (entry.isFile()) total += fs.statSync(child).size;
+    } catch {
+      // Raced us, or not readable. A size that is slightly low beats no answer at all.
+    }
+  }
+  return total;
+}
+
+function formatBytes(bytes) {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = unit === 0 || value >= 10 ? Math.round(value) : value.toFixed(1);
+  return `${rounded} ${units[unit]}`;
+}
+
+/** `~/.kablan/bin` to read, `"$HOME/.kablan/bin"` to paste into a shell. */
+function tildePath(target, homeDir) {
+  return target.startsWith(homeDir + path.sep) ? `~${target.slice(homeDir.length)}` : target;
+}
+
+function shellPath(target, homeDir) {
+  const expanded = target.startsWith(homeDir + path.sep)
+    ? `$HOME${target.slice(homeDir.length)}`
+    : target;
+  // Double quotes rather than single: the paths that need quoting are the ones with a space in
+  // them, and those are also the ones written relative to $HOME.
+  return `"${expanded.replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * What `--uninstall` leaves behind, with sizes, in order of how much space it is.
+ *
+ * Removing the app used to be followed by one line naming `~/.kablan/bin` and nothing else,
+ * which is the wrong half: the database under Application Support is usually the larger of the
+ * two by far, and someone uninstalling to reclaim disk was being sent to the smaller one and
+ * told that was all there was. Deleting the data directory also deletes every board and task,
+ * so it needs saying out loud rather than being left out.
+ *
+ * @returns {string[]} lines to print, or [] when nothing is left on disk
+ */
+function describeLeftovers(deps = {}) {
+  const {
+    homeDir = os.homedir(),
+    platform = process.platform,
+    env = process.env,
+    sizeOf = dirSize,
+  } = deps;
+
+  const bin = APP_NAME.toLowerCase();
+  const found = [
+    {
+      path: path.join(homeDir, `.${bin}`, "bin"),
+      note: "Cached binaries, one directory per version you have run. Safe to delete.",
+      keepsData: false,
+    },
+    {
+      path: dataDir(homeDir, platform, env),
+      note:
+        "Your projects, tasks, settings and database.\n" +
+        "Deleting this deletes your Kablan history.",
+      keepsData: true,
+    },
+    ...(platform === "darwin"
+      ? [
+          {
+            path: path.join(homeDir, "Library", "Logs", APP_NAME),
+            note: "Logs. Safe to delete.",
+            keepsData: false,
+          },
+        ]
+      : []),
+  ]
+    .map((entry) => ({ ...entry, size: sizeOf(entry.path) }))
+    .filter((entry) => entry.size !== null);
+
+  if (found.length === 0) return [];
+
+  const lines = ["", `${APP_NAME} still has this on disk:`, ""];
+  for (const entry of found) {
+    lines.push(`  ${formatBytes(entry.size).padStart(7)}  ${tildePath(entry.path, homeDir)}`);
+    for (const noteLine of entry.note.split("\n")) {
+      lines.push(`           ${noteLine}`);
+    }
+  }
+
+  // `rm -rf` is not a thing on Windows, and the paths above are enough to act on there.
+  if (platform === "win32") return lines;
+
+  const disposable = found.filter((e) => !e.keepsData);
+  const data = found.filter((e) => e.keepsData);
+
+  if (disposable.length > 0) {
+    lines.push("", "Reclaim the space, keep your boards and tasks:");
+    lines.push(`  rm -rf ${disposable.map((e) => shellPath(e.path, homeDir)).join(" ")}`);
+  }
+  if (data.length > 0) {
+    lines.push("", "Remove everything, boards and tasks included:");
+    lines.push(`  rm -rf ${found.map((e) => shellPath(e.path, homeDir)).join(" ")}`);
+  }
+
+  return lines;
+}
+
 module.exports = {
   installMacApp,
   uninstallMacApp,
   stopRunningApps,
   classify,
+  ownedRoots,
   executableOf,
   versionFromPath,
+  describeLeftovers,
+  dataDir,
+  formatBytes,
+  tildePath,
   appDir,
   APP_NAME,
 };
