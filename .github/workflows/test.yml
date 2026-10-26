@@ -68,14 +68,28 @@ jobs:
             "cd frontend && npm run format:check" \
             "cd frontend && npm run build"
 
+  # The install path gets its own job, and its own name on the checks list, because it is
+  # the only thing standing between `npx kablan` and a machine that is not ours. Inside
+  # frontend-checks the result was only visible by opening the log of a job that goes red
+  # for lint, i18n and formatting reasons the wrapper shares nothing with, and it could
+  # never be made a required status check on its own (KAB-43).
+  #
+  # Deliberately no frontend build here: these tests need the npx-cli workspace package
+  # and its adm-zip dependency installed, and nothing else (KAB-37).
+  npx-cli-checks:
+    runs-on: *runner_label
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node
+
+      - name: Install dependencies
+        run: pnpm install
+
       # The installer decides what to stop and what to leave alone; getting that wrong either
       # leaves the old version serving or signals a process that is not ours.
-      #
-      # Runs even when the frontend checks fail: these tests share nothing with lint, i18n,
-      # format or build, and sequencing them behind that step is what hid a broken
-      # `npm run test:cli` from us entirely (KAB-37).
       - name: Run npx CLI tests
-        if: ${{ !cancelled() }}
         run: npm run test:cli
 
   backend-schema-checks:
