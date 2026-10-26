@@ -49,13 +49,13 @@ jobs:
   # one failure no matter how many existed. On 26 Oct it hid three independent pre-existing
   # failures on main from each other — fmt (KAB-34), i18n (KAB-38) and lint (KAB-9) — and
   # every fix looked like it had not worked, because clearing one only surfaced the next
-  # (KAB-46). Four jobs also means four names on the checks list, so a PR author can see
-  # which of these is their change and which is inherited debt without opening a log.
+  # (KAB-46). A job per check also means a name per check on the checks list, so a PR author
+  # can see which of these is their change and which is inherited debt without opening a log.
   frontend-checks:
     name: frontend-checks (${{ matrix.check }})
     runs-on: *runner_label
     strategy:
-      # Independent checks: one going red must not cancel the other three. That is the
+      # Independent checks: one going red must not cancel the others. That is the
       # whole point of this job, and fail-fast defaults to true.
       fail-fast: false
       matrix:
@@ -68,6 +68,10 @@ jobs:
             run: cd frontend && npm run format:check
           - check: build
             run: cd frontend && npm run build
+          # 45 test files under frontend/src ran in no workflow before this leg. `build` type-checks
+          # them, which is why they stayed green-looking while nothing asserted their behaviour.
+          - check: test
+            run: cd frontend && npm run test
     steps:
       - uses: actions/checkout@v6
 
