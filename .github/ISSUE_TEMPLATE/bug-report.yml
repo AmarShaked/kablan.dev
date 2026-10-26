@@ -49,7 +49,6 @@ body:
         Kablan:
         OS:
         Browser:
-      render: text
     validations:
       required: true
 
