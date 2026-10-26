@@ -10,8 +10,10 @@ import {
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, FolderGit2, GitBranch, Paperclip, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type {
   AgentRunSelection,
+  BaseCodingAgent,
   Repo,
   Task,
   TaskWithAttemptStatus,
@@ -38,6 +40,9 @@ import {
 import { useProjects } from '@/hooks/useProjects';
 import { defineModal } from '@/lib/modals';
 import { repoKeys } from '@/lib/queryKeys';
+import { buildAgentPath } from '@/lib/routes/agentRoutes';
+import { agentLabel } from '@/utils/agentLabels';
+import { agentCanRun } from '@/utils/agentReady';
 import { firstRunSelection } from '@/utils/agentRun';
 import type { TaskFormDialogProps } from './TaskFormDialog';
 
@@ -126,6 +131,7 @@ const ChipButton = forwardRef<
 
 const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
   const modal = useModal();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { system } = useUserSystem();
   const { projects } = useProjects();
@@ -144,6 +150,9 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
   );
   const [images, setImages] = useState<Attachment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [blockedAgent, setBlockedAgent] = useState<BaseCodingAgent | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const agentTouched = useRef(false);
@@ -268,6 +277,16 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
     if (!trimmed || !projectId || !branchesReady || submitting) return;
     setSubmitting(true);
     setError(null);
+    setBlockedAgent(null);
+
+    // Ask before the branch exists. Starting anyway spends a worktree to learn what this answers
+    // in a millisecond, and the agent's own failure names `/login` — a command you cannot type here.
+    if (!(await agentCanRun(selection.executor))) {
+      setBlockedAgent(selection.executor);
+      setSubmitting(false);
+      return;
+    }
+
     const source = props.mode === 'create' ? props.source : undefined;
     const readyImages = images.filter((image) => image.path);
     const extra = readyImages
@@ -440,6 +459,26 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
               setSelection(next);
             }}
           />
+
+          {blockedAgent && (
+            // Amber, not destructive: a missing prerequisite that takes thirty seconds to fix,
+            // not a broken Kablan.
+            <p className="text-xs text-warning">
+              {agentLabel(blockedAgent)} is not signed in on this machine. It
+              takes one command in a terminal —{' '}
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => {
+                  modal.remove();
+                  navigate(buildAgentPath(blockedAgent));
+                }}
+              >
+                connect {agentLabel(blockedAgent)}
+              </button>
+              , then start the task again.
+            </p>
+          )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 

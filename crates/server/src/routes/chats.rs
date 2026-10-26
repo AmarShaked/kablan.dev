@@ -660,6 +660,9 @@ async fn create_and_start_task(
         ));
     }
 
+    // Same gate as create-and-start: no worktree for an agent that cannot sign in.
+    crate::routes::config::ensure_agent_available(agent)?;
+
     let repo_inputs: Vec<WorkspaceRepoInput> = repos
         .iter()
         .map(|r| WorkspaceRepoInput {

@@ -72,6 +72,10 @@ pub enum ApiError {
     RemoteClient(#[from] RemoteClientError),
     #[error("Unauthorized")]
     Unauthorized,
+    /// The coding agent this run would use is not installed or not signed in. Carries the
+    /// terminal commands that fix it.
+    #[error("{0}")]
+    AgentNotSignedIn(String),
     #[error("Bad request: {0}")]
     BadRequest(String),
     #[error("Conflict: {0}")]
@@ -439,6 +443,12 @@ impl IntoResponse for ApiError {
                 StatusCode::UNAUTHORIZED,
                 "Unauthorized",
                 "Unauthorized. Please sign in again.",
+            ),
+            // 424: the request is well formed, the machine it would run on is not ready.
+            ApiError::AgentNotSignedIn(msg) => ErrorInfo::with_status(
+                StatusCode::FAILED_DEPENDENCY,
+                "AgentNotSignedIn",
+                msg.clone(),
             ),
             ApiError::BadRequest(msg) => ErrorInfo::bad_request("BadRequest", msg.clone()),
             ApiError::Conflict(msg) => ErrorInfo::conflict("ConflictError", msg.clone()),

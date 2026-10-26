@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import NiceModal from '@ebay/nice-modal-react';
 
@@ -51,6 +52,9 @@ vi.mock('@/hooks/useProjects', () => ({
 
 const createAndStart = vi.fn().mockResolvedValue({ id: 'task-1' });
 const upload = vi.hoisted(() => vi.fn());
+const agentCanRun = vi.hoisted(() => vi.fn(async () => true));
+
+vi.mock('@/utils/agentReady', () => ({ agentCanRun }));
 
 vi.mock('@/hooks', () => ({
   useImageUpload: () => ({ upload, uploadForTask: vi.fn() }),
@@ -98,9 +102,11 @@ function renderApp() {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <NiceModal.Provider>
-        <button type="button">open</button>
-      </NiceModal.Provider>
+      <MemoryRouter>
+        <NiceModal.Provider>
+          <button type="button">open</button>
+        </NiceModal.Provider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -108,6 +114,7 @@ function renderApp() {
 describe('NewTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    agentCanRun.mockResolvedValue(true);
     branchesReady = false;
     localStorage.clear();
     URL.createObjectURL = vi.fn(() => 'blob:preview');
@@ -148,6 +155,30 @@ describe('NewTaskDialog', () => {
       task: { project_id: 'project-1', title: 'Fix the thing' },
       repos: [{ repo_id: 'repo-1', target_branch: 'main' }],
     });
+  });
+
+  it('does not spend a branch when the agent is not signed in', async () => {
+    agentCanRun.mockResolvedValue(false);
+    renderApp();
+    NewTaskDialog.show({ mode: 'create', projectId: 'project-1' });
+
+    fireEvent.change(await screen.findByLabelText('Task title'), {
+      target: { value: 'Fix the thing' },
+    });
+    act(deliverBranches);
+    const start = await screen.findByRole('button', { name: 'Start' });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+
+    expect(
+      await screen.findByText(/Claude Code is not signed in on this machine/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'connect Claude Code' })
+    ).toBeInTheDocument();
+    expect(createAndStart).not.toHaveBeenCalled();
+    // The dialog stays usable: sign in elsewhere, press Start again.
+    await waitFor(() => expect(start).toBeEnabled());
   });
 
   it('uploads an image pasted into the description', async () => {

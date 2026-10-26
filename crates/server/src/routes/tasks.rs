@@ -213,6 +213,10 @@ pub async fn create_task_and_start(
         ));
     }
 
+    // Before the task row, the workspace, and the branch: an agent that cannot sign in cannot
+    // do the work, and finding that out 18 seconds in costs a worktree to throw away.
+    crate::routes::config::ensure_agent_available(payload.agent_selection.executor)?;
+
     let pool = &deployment.db().pool;
 
     let task_id = Uuid::new_v4();

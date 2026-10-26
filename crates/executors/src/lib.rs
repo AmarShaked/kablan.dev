@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod approvals;
+pub mod availability;
 pub mod command;
 pub mod env;
 pub mod executors;

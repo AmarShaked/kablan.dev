@@ -19,7 +19,7 @@ use workspace_utils::msg_store::MsgStore;
 use crate::{
     env::ExecutionEnv,
     executors::{
-        ExecutorError, SpawnedChild, StandardCodingAgentExecutor,
+        AvailabilityInfo, ExecutorError, SpawnedChild, StandardCodingAgentExecutor,
         claude::{
             ClaudeContentItem, ClaudeJson, ClaudeMessage, ClaudeMessageContent, ClaudeToolData,
         },
@@ -100,6 +100,12 @@ impl StandardCodingAgentExecutor for QaMockExecutor {
 
     fn default_mcp_config_path(&self) -> Option<std::path::PathBuf> {
         None // QA mock doesn't need MCP config
+    }
+
+    /// Nothing to install and nothing to sign in to. Said out loud because the default reads
+    /// availability off the MCP config path, and task start refuses to run an unavailable agent.
+    fn get_availability_info(&self) -> AvailabilityInfo {
+        AvailabilityInfo::InstallationFound
     }
 }
 

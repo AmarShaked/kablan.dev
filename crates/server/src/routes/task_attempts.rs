@@ -236,6 +236,9 @@ pub async fn create_task_attempt(
         ));
     }
 
+    // Same gate as create-and-start: no worktree for an agent that cannot sign in.
+    crate::routes::config::ensure_agent_available(agent_selection.executor)?;
+
     let pool = &deployment.db().pool;
     let task = Task::find_by_id(&deployment.db().pool, payload.task_id)
         .await?

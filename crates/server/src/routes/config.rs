@@ -14,6 +14,7 @@ use axum::{
 };
 use deployment::{Deployment, DeploymentError};
 use executors::{
+    availability,
     executors::{
         AvailabilityInfo, BaseAgentCapability, BaseCodingAgent, StandardCodingAgentExecutor,
     },
@@ -479,19 +480,36 @@ pub struct CheckAgentAvailabilityQuery {
     executor: BaseCodingAgent,
 }
 
+/// What this machine knows about an agent: installed, signed in, or neither.
+pub fn agent_availability(executor: BaseCodingAgent) -> AvailabilityInfo {
+    let profiles = ExecutorConfigs::get_cached();
+    let profile_id = ExecutorProfileId::new(executor);
+
+    match profiles.get_coding_agent(&profile_id) {
+        Some(agent) => agent.get_availability_info(),
+        None => AvailabilityInfo::NotFound,
+    }
+}
+
+/// Refuse a run the agent cannot complete.
+///
+/// Starting anyway costs a worktree and a branch to learn what this check already knows, and the
+/// failure the agent reports — "Not logged in · Please run /login" — names a slash command that
+/// cannot be typed anywhere in Kablan. Called before anything is created.
+pub fn ensure_agent_available(executor: BaseCodingAgent) -> Result<(), ApiError> {
+    if agent_availability(executor).is_available() {
+        return Ok(());
+    }
+    Err(ApiError::AgentNotSignedIn(
+        availability::setup_hint(executor).not_ready_message(),
+    ))
+}
+
 async fn check_agent_availability(
     State(_deployment): State<DeploymentImpl>,
     Query(query): Query<CheckAgentAvailabilityQuery>,
 ) -> ResponseJson<ApiResponse<AvailabilityInfo>> {
-    let profiles = ExecutorConfigs::get_cached();
-    let profile_id = ExecutorProfileId::new(query.executor);
-
-    let info = match profiles.get_coding_agent(&profile_id) {
-        Some(agent) => agent.get_availability_info(),
-        None => AvailabilityInfo::NotFound,
-    };
-
-    ResponseJson(ApiResponse::success(info))
+    ResponseJson(ApiResponse::success(agent_availability(query.executor)))
 }
 
 #[derive(Debug, Deserialize)]
