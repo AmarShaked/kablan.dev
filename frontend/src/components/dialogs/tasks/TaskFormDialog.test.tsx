@@ -37,6 +37,9 @@ const deliverBranches = () => {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  // The readiness row under the agent picker renders its detail line through `Trans` so the
+  // sign-in command can be marked up as a literal. Key is enough to assert against here.
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
 vi.mock('@/contexts/UserSystemContext', () => ({

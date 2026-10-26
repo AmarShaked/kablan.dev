@@ -22,6 +22,7 @@ import type { LocalImageMetadata } from '@/components/ui/wysiwyg/context/task-at
 import BranchSelector from '@/components/tasks/BranchSelector';
 import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
 import { AgentRunControls } from '@/components/tasks/AgentRunControls';
+import { AgentReadinessRow } from '@/components/AgentReadinessRow';
 import { firstRunSelection } from '@/utils/agentRun';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import { useProjects } from '@/hooks/useProjects';
@@ -687,6 +688,16 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                             </form.Field>
                           )}
                         </div>
+                        {/* The last moment before a worktree and a branch get created, which is
+                            why the row shows in every state here rather than only when it's bad. */}
+                        <form.Field name="agentSelection">
+                          {(field) => (
+                            <AgentReadinessRow
+                              agent={field.state.value.executor}
+                              className="mt-2"
+                            />
+                          )}
+                        </form.Field>
                         {!isSingleRepo && (
                           <form.Field name="repoBranches">
                             {(field) => {

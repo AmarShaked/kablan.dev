@@ -33,8 +33,7 @@ import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal, type NoProps } from '@/lib/modals';
 import { useEditorAvailability } from '@/hooks/useEditorAvailability';
 import { EditorAvailabilityIndicator } from '@/components/EditorAvailabilityIndicator';
-import { useAgentAvailability } from '@/hooks/useAgentAvailability';
-import { AgentAvailabilityIndicator } from '@/components/AgentAvailabilityIndicator';
+import { AgentReadinessRow } from '@/components/AgentReadinessRow';
 
 export type OnboardingResult = {
   profile: ExecutorProfileId;
@@ -57,7 +56,6 @@ const OnboardingDialogImpl = NiceModal.create<NoProps>(() => {
   const [customCommand, setCustomCommand] = useState<string>('');
 
   const editorAvailability = useEditorAvailability(editorType);
-  const agentAvailability = useAgentAvailability(profile.executor);
 
   const handleComplete = () => {
     modal.resolve({
@@ -175,7 +173,7 @@ const OnboardingDialogImpl = NiceModal.create<NoProps>(() => {
                 return null;
               })()}
             </div>
-            <AgentAvailabilityIndicator availability={agentAvailability} />
+            <AgentReadinessRow agent={profile.executor} />
           </div>
         </div>
 

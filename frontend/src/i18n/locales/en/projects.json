@@ -20,8 +20,9 @@
     "createFirst": "Create your first project",
     "eyebrow": "NO PROJECTS YET",
     "headline": "Point Kablan at a repository.",
-    "body": "A project is one or more git repositories you want agents to work in. Add one and you can start handing it tasks straight away.",
+    "body": "A project is one or more git repositories you want agents to work in. Kablan runs a coding agent that's already on this machine — your agent, your account, your hardware.",
     "steps": {
+      "signin": "Sign in to a coding agent on this machine. Kablan drives your CLI — it doesn't replace it.",
       "point": "Add a project pointing at a repository on this machine.",
       "describe": "Create a task describing what you want changed.",
       "review": "Review the agent's diff, then merge it or throw it away."

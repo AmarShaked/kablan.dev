@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import DiffViewSwitch from '@/components/DiffViewSwitch';
 import DiffCard from '@/components/DiffCard';
 import { useDiffSummary } from '@/hooks/useDiffSummary';
+import {
+  emptyDiffReasonKeys,
+  useEmptyDiffReason,
+} from '@/hooks/useEmptyDiffReason';
 import { NewCardHeader } from '@/components/ui/new-card';
 import { ChevronsUp, ChevronsDown } from 'lucide-react';
 import {
@@ -172,6 +176,8 @@ function DiffsPanelContent({
   loading,
   t,
 }: DiffsPanelContentProps) {
+  const emptyDiffReason = useEmptyDiffReason();
+
   return (
     <div className="h-full flex flex-col relative">
       {diffs.length > 0 && (
@@ -234,8 +240,8 @@ function DiffsPanelContent({
             <Loader />
           </div>
         ) : diffs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            {t('diff.noChanges')}
+          <div className="flex items-center justify-center h-full px-6 text-center text-sm text-muted-foreground">
+            {t(emptyDiffReasonKeys[emptyDiffReason])}
           </div>
         ) : (
           diffs.map((diff, idx) => {
