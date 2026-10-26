@@ -44,8 +44,34 @@ jobs:
             echo "::notice::VK_PRIVATE_DEPLOY_KEY is not set; skipping backend-remote-checks."
           fi
 
+  # One job per check, not four behind a single `npx concurrently --kill-others-on-fail`.
+  # That flag SIGTERMs the survivors the moment anything fails, so the log showed exactly
+  # one failure no matter how many existed. On 26 Oct it hid three independent pre-existing
+  # failures on main from each other — fmt (KAB-34), i18n (KAB-38) and lint (KAB-9) — and
+  # every fix looked like it had not worked, because clearing one only surfaced the next
+  # (KAB-46). A job per check also means a name per check on the checks list, so a PR author
+  # can see which of these is their change and which is inherited debt without opening a log.
   frontend-checks:
+    name: frontend-checks (${{ matrix.check }})
     runs-on: *runner_label
+    strategy:
+      # Independent checks: one going red must not cancel the others. That is the
+      # whole point of this job, and fail-fast defaults to true.
+      fail-fast: false
+      matrix:
+        include:
+          - check: lint
+            run: cd frontend && npm run lint
+          - check: i18n
+            run: ./scripts/check-i18n.sh
+          - check: fmt
+            run: cd frontend && npm run format:check
+          - check: build
+            run: cd frontend && npm run build
+          # 45 test files under frontend/src ran in no workflow before this leg. `build` type-checks
+          # them, which is why they stayed green-looking while nothing asserted their behaviour.
+          - check: test
+            run: cd frontend && npm run test
     steps:
       - uses: actions/checkout@v6
 
@@ -55,18 +81,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Run frontend checks
+      # check-i18n.sh reads GITHUB_BASE_REF, which GitHub already sets on pull_request and
+      # which the script itself defaults to main when empty (scripts/check-i18n.sh:184).
+      # Passing `${{ github.base_ref }}` through the shell here is both redundant and a
+      # place for a fork's branch name to end up inside a command line.
+      - name: Run ${{ matrix.check }}
         env:
           NODE_OPTIONS: --max-old-space-size=8192
-        run: |
-          npx concurrently \
-            --kill-others-on-fail \
-            --names "lint,i18n,fmt,build" \
-            --timings \
-            "cd frontend && npm run lint" \
-            "GITHUB_BASE_REF=${{ github.base_ref || 'main' }} ./scripts/check-i18n.sh" \
-            "cd frontend && npm run format:check" \
-            "cd frontend && npm run build"
+        run: ${{ matrix.run }}
 
   # The install path gets its own job, and its own name on the checks list, because it is
   # the only thing standing between `npx kablan` and a machine that is not ours. Inside
