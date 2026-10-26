@@ -69,13 +69,35 @@ nothing else, and prints what is left with its size:
 
 | Path | What it is |
 | --- | --- |
-| `~/.kablan/bin` | Cached binaries, one directory per version you have run. Safe to delete. |
+| `~/.kablan/bin` | Cached binaries: the version you just ran and one previous, about 45MB each. Safe to delete. |
 | `~/Library/Application Support/dev.kablan.Kablan` | Your projects, tasks, settings and the database. Deleting this deletes your Kablan history. |
 | `~/Library/Logs/Kablan` | Logs. Safe to delete. |
 
-The binary cache is the one that grows: it keeps every version you have ever run, so on a machine
-that has followed a few releases it is usually the largest of the three. If you are uninstalling
-to reclaim disk, that is the one to delete — and deleting it costs you nothing but a download.
+## The binary cache
+
+Each release is downloaded once into `~/.kablan/bin/v<version>/<platform>/` and reused from there.
+
+The cache used to keep every version it had ever downloaded — on the machine the cold-start audit
+ran on that had reached 1.8GB across 39 versions, nearly four times the database. It no longer
+does. When a session ends, the wrapper keeps the version you just ran and the one before it,
+deletes the rest, and prints what it removed and how much that reclaimed:
+
+```
+Pruned 8 cached versions from ~/.kablan/bin, reclaiming 358 MB: v0.11.3, v0.10.13, ...
+  Kept v0.11.6, v0.11.5. Set KABLAN_NO_PRUNE=1 to keep them all.
+```
+
+Three things are never deleted:
+
+- a version with a Kablan running out of it right now. Before deleting anything the wrapper reads
+  the process table, and if it cannot — there is no `/bin/ps` on Windows — it deletes nothing at
+  all rather than guess.
+- anything in `~/.kablan/bin` that is not a version directory.
+- `KABLAN_LOCAL=1` binaries, which came from `./local-build.sh` and not from a release.
+
+The sweep runs after the session, never before it, so a download that failed cannot trigger one.
+`npx kablan --mcp` does not sweep: its stdout is a protocol stream and the next ordinary run
+catches up. Set `KABLAN_NO_PRUNE=1` to keep every version you have ever run.
 
 Linux keeps its data in `~/.local/share/kablan` (or `$XDG_DATA_HOME/kablan`), Windows in
 `%APPDATA%\kablan\Kablan\data`.
@@ -97,6 +119,7 @@ Platforms: macOS on Apple silicon and Intel, Linux x64, Windows x64.
 | `HOST` | Host to bind. Defaults to `127.0.0.1`. |
 | `KABLAN_LOCAL=1` | Use binaries from `npx-cli/dist/` instead of a release, for development. |
 | `KABLAN_DEBUG=1` | Verbose wrapper output. |
+| `KABLAN_NO_PRUNE=1` | Keep every cached version instead of the current one and one previous. |
 
 ## MCP
 

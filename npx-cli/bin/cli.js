@@ -16,6 +16,7 @@ const {
   APP_NAME,
 } = require("./install-app");
 const { createInstallLogger, installLogPath } = require("./install-log");
+const { pruneVersionCache, describePrune } = require("./prune-cache");
 
 const CLI_VERSION = require("../package.json").version;
 
@@ -144,7 +145,34 @@ function createProgressReporter(deps = {}) {
   };
 }
 
-async function extractAndRun(baseName, launch) {
+/**
+ * Sweep the version cache, and say what went.
+ *
+ * Wrapped because this is housekeeping at the end of a session that already succeeded: a cache
+ * we cannot tidy is not a reason to fail a run the user got everything out of. Output goes to
+ * stderr, where the download progress already goes, so that it cannot land in a stdout someone
+ * is piping.
+ */
+function sweepCache() {
+  try {
+    for (const line of describePrune(pruneVersionCache(), os.homedir())) {
+      console.error(line);
+    }
+  } catch (err) {
+    if (process.env.KABLAN_DEBUG) {
+      console.error(`Warning: could not prune the binary cache: ${err.message}`);
+    }
+  }
+}
+
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.pruneAfter] sweep the cache once `launch` has come back — which, for
+ *   the server, is after a session that started and ended. Deliberately not before: a prune at
+ *   startup races a second instance that is mid-download, and a failed download must never be
+ *   the thing that triggers one.
+ */
+async function extractAndRun(baseName, launch, { pruneAfter = false } = {}) {
   const cacheDir = versionCacheDir();
   const binName = getBinaryName(baseName);
   const binPath = path.join(cacheDir, binName);
@@ -203,7 +231,67 @@ async function extractAndRun(baseName, launch) {
     } catch {}
   }
 
-  return launch(binPath);
+  const result = await launch(binPath);
+  if (pruneAfter) sweepCache();
+  return result;
+}
+
+/** Build `Kablan.app` around a freshly extracted binary, and say what that means afterwards. */
+function installFromBinary(bin) {
+  const log = createInstallLogger();
+  log(`Installing ${CLI_VERSION}`);
+  const { app, stopped } = installMacApp(bin, CLI_VERSION, log);
+  log(summariseStopped(stopped));
+  log(`Installed ${app}`);
+  console.log("\nOpen it from Launchpad or Spotlight — it starts Kablan in the background");
+  console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
+  console.log(`Install log: ${installLogPath()}`);
+  console.log(
+    "\nThe app updates itself: each time you open it, it runs the newest published" +
+      "\nrelease. There is no update command. Finder's Get Info shows " +
+      CLI_VERSION +
+      "," +
+      "\nwhich is the bundled copy used only when npx cannot reach the registry —" +
+      "\nre-run `npx kablan@latest --install` to refresh that copy." +
+      "\n\nRemove with `npx kablan --uninstall`."
+  );
+}
+
+/** SIGINT and SIGTERM, however the shell reports them back to us. */
+function endedBySignal(err) {
+  return (
+    err.signal === "SIGINT" ||
+    err.signal === "SIGTERM" ||
+    err.status === 130 ||
+    err.status === 143
+  );
+}
+
+/**
+ * Run the server in the foreground until it ends.
+ *
+ * Two things here exist so that the cache sweep afterwards actually happens, because Ctrl-C —
+ * not a clean shutdown from inside the app — is how nearly every `npx kablan` session ends:
+ *
+ *   - the no-op SIGINT listener. The terminal sends SIGINT to the whole foreground group, this
+ *     wrapper included, and with no listener Node takes the default disposition and dies at 130
+ *     alongside the server. Nothing after execSync ever ran.
+ *   - treating a signalled exit as an ordinary end of session. The shell reports it as status
+ *     130, which execSync raises as "Command failed" — which this wrapper used to print as
+ *     `Fatal error: Command failed: ...` to anyone who pressed Ctrl-C.
+ *
+ * A server that exits for any other reason still throws, and still reaches the handler in main.
+ */
+function runServer(bin) {
+  const ignoreSigint = () => {};
+  process.on("SIGINT", ignoreSigint);
+  try {
+    execSync(`"${bin}"`, { stdio: "inherit" });
+  } catch (err) {
+    if (!endedBySignal(err)) throw err;
+  } finally {
+    process.removeListener("SIGINT", ignoreSigint);
+  }
 }
 
 /**
@@ -249,12 +337,15 @@ What you need
 
 Where things go
   Binaries   ${tildePath(path.join(CACHE_DIR, BINARY_TAG), home)}/<platform>
+             This version and one previous are kept; older ones are deleted
+             when a session ends, and say so.
   Data       ${tildePath(dataDir(), home)}
              Projects, tasks, settings and the database.${logs}
 
 Environment
-  KABLAN_DEBUG=1   Print stack traces, and warn about cache problems
-  KABLAN_LOCAL=1   Use binaries built by ./local-build.sh instead of the release
+  KABLAN_DEBUG=1      Print stack traces, and warn about cache problems
+  KABLAN_LOCAL=1      Use binaries built by ./local-build.sh instead of the release
+  KABLAN_NO_PRUNE=1   Keep every cached version, including ones nothing will run again
 
 Bugs: https://github.com/AmarShaked/kablan.dev/issues`;
 }
@@ -303,25 +394,7 @@ async function main() {
   fs.mkdirSync(versionCacheDir(), { recursive: true });
 
   if (args.includes("--install")) {
-    await extractAndRun("kablan", (bin) => {
-      const log = createInstallLogger();
-      log(`Installing ${CLI_VERSION}`);
-      const { app, stopped } = installMacApp(bin, CLI_VERSION, log);
-      log(summariseStopped(stopped));
-      log(`Installed ${app}`);
-      console.log("\nOpen it from Launchpad or Spotlight — it starts Kablan in the background");
-      console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
-      console.log(`Install log: ${installLogPath()}`);
-      console.log(
-        "\nThe app updates itself: each time you open it, it runs the newest published" +
-          "\nrelease. There is no update command. Finder's Get Info shows " +
-          CLI_VERSION +
-          "," +
-          "\nwhich is the bundled copy used only when npx cannot reach the registry —" +
-          "\nre-run `npx kablan@latest --install` to refresh that copy." +
-          "\n\nRemove with `npx kablan --uninstall`."
-      );
-    });
+    await extractAndRun("kablan", installFromBinary, { pruneAfter: true });
     return;
   }
 
@@ -340,6 +413,9 @@ async function main() {
       .catch(() => {});
   }
 
+  // No cache sweep in MCP mode: `launch` here returns as soon as the child is spawned, so the
+  // sweep would land during the client's initialize handshake, and deleting a gigabyte takes
+  // long enough to be worth not doing there. The next ordinary `npx kablan` sweeps it.
   if (isMcpMode) {
     await extractAndRun("kablan-mcp", (bin) => {
       const proc = spawn(bin, [], { stdio: "inherit" });
@@ -356,13 +432,7 @@ async function main() {
   } else {
     const modeLabel = LOCAL_DEV_MODE ? " (local dev)" : "";
     console.log(`Starting kablan v${CLI_VERSION}${modeLabel}...`);
-    await extractAndRun("kablan", (bin) => {
-      if (platform === "win32") {
-        execSync(`"${bin}"`, { stdio: "inherit" });
-      } else {
-        execSync(`"${bin}"`, { stdio: "inherit" });
-      }
-    });
+    await extractAndRun("kablan", runServer, { pruneAfter: true });
   }
 }
 
