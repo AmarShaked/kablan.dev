@@ -46,7 +46,20 @@ serving the version it started with, which makes an update look like it did noth
 stopped is printed, and appended to `~/Library/Logs/Kablan/install.log`. A server you built
 yourself is left alone.
 
-- Update: `npx kablan@latest --install`
+### What the icon runs
+
+The launcher prefers the published wrapper: opening the app runs `npx -y kablan@latest`, so a
+double-click gets the newest release rather than whatever was current on the day you installed.
+The checksummed copy inside the bundle is the fallback for a machine without node, or one that
+cannot reach the registry.
+
+Two consequences worth knowing:
+
+- There is no update step. `npx kablan@latest --install` rebuilds the bundle — it refreshes the
+  offline fallback binary and the icon, not the version a double-click runs.
+- `CFBundleShortVersionString` in `Info.plist` is the version of that fallback copy. It does not
+  describe what the icon launches when npx is available.
+
 - Remove: `npx kablan --uninstall`
 
 ## Uninstalling, and what it leaves

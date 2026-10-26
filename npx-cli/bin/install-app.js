@@ -542,6 +542,8 @@ function describeLeftovers(deps = {}) {
 module.exports = {
   installMacApp,
   uninstallMacApp,
+  launcherScript,
+  infoPlist,
   stopRunningApps,
   classify,
   ownedRoots,

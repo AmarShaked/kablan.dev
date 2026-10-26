@@ -312,7 +312,15 @@ async function main() {
       console.log("\nOpen it from Launchpad or Spotlight — it starts Kablan in the background");
       console.log("and opens your browser. Logs: ~/Library/Logs/Kablan/kablan.log");
       console.log(`Install log: ${installLogPath()}`);
-      console.log("\nUpdate with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.");
+      console.log(
+        "\nThe app updates itself: each time you open it, it runs the newest published" +
+          "\nrelease. There is no update command. Finder's Get Info shows " +
+          CLI_VERSION +
+          "," +
+          "\nwhich is the bundled copy used only when npx cannot reach the registry —" +
+          "\nre-run `npx kablan@latest --install` to refresh that copy." +
+          "\n\nRemove with `npx kablan --uninstall`."
+      );
     });
     return;
   }
