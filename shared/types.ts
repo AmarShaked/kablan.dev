@@ -55,6 +55,20 @@ exists: boolean, content: string, };
 
 export type SaveEnvFile = { name: string, content: string, };
 
+export type RepoWorkingCopy = { 
+/**
+ * Tracked files with uncommitted modifications.
+ */
+uncommitted_count: number, 
+/**
+ * Untracked files.
+ */
+untracked_count: number, 
+/**
+ * False when the repo has no git remote, so Kablan cannot push or open a pull request.
+ */
+has_remote: boolean, };
+
 export type WorkspaceEnvFile = { name: string, 
 /**
  * False when this worktree has no such file yet — the UI still offers it, so one can be

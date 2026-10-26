@@ -54,6 +54,10 @@ pub enum GitServiceError {
     WorktreeDirty(String, String),
     #[error("Rebase in progress; resolve or abort it before retrying")]
     RebaseInProgress,
+    #[error(
+        "This repository has no git remote, so there is nowhere to push. Add one with `git remote add origin <url>` and try again."
+    )]
+    NoRemoteConfigured,
 }
 /// Service for managing Git operations in task execution workflows
 #[derive(Clone)]
@@ -232,7 +236,7 @@ impl GitService {
             .into_iter()
             .next()
             .map(|(name, url)| GitRemote { name, url })
-            .ok_or_else(|| GitServiceError::InvalidRepository("No remotes configured".to_string()))
+            .ok_or(GitServiceError::NoRemoteConfigured)
     }
 
     /// Initialize a new git repository with a main branch and initial commit

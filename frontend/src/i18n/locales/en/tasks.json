@@ -762,5 +762,13 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
+  },
+  "workingCopyWarnings": {
+    "uncommitted_one": "1 uncommitted change in your repo won't be visible to the agent — it starts from the last commit.",
+    "uncommitted_other": "{{count}} uncommitted changes in your repo won't be visible to the agent — it starts from the last commit.",
+    "uncommittedInRepo_one": "1 uncommitted change in {{repo}} won't be visible to the agent — it starts from the last commit.",
+    "uncommittedInRepo_other": "{{count}} uncommitted changes in {{repo}} won't be visible to the agent — it starts from the last commit.",
+    "noRemote": "This repo has no git remote, so Kablan can't push or open a pull request from it.",
+    "noRemoteInRepo": "{{repo}} has no git remote, so Kablan can't push or open a pull request from it."
   }
 }

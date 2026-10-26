@@ -696,5 +696,13 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
+  },
+  "workingCopyWarnings": {
+    "uncommitted_one": "リポジトリにコミットされていない変更が1件あります。エージェントからは見えません（最後のコミットから開始します）。",
+    "uncommitted_other": "リポジトリにコミットされていない変更が{{count}}件あります。エージェントからは見えません（最後のコミットから開始します）。",
+    "uncommittedInRepo_one": "{{repo}}にコミットされていない変更が1件あります。エージェントからは見えません（最後のコミットから開始します）。",
+    "uncommittedInRepo_other": "{{repo}}にコミットされていない変更が{{count}}件あります。エージェントからは見えません（最後のコミットから開始します）。",
+    "noRemote": "このリポジトリにはgitリモートがないため、KablanはプッシュもPRの作成もできません。",
+    "noRemoteInRepo": "{{repo}}にはgitリモートがないため、KablanはプッシュもPRの作成もできません。"
   }
 }

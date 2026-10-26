@@ -21,6 +21,7 @@ import {
   Project,
   Repo,
   RepoWithTargetBranch,
+  RepoWorkingCopy,
   WorkspaceEnvFile,
   SaveWorkspaceEnvFile,
   CreateProject,
@@ -1040,6 +1041,11 @@ export const repoApi = {
   getBranches: async (repoId: string): Promise<GitBranch[]> => {
     const response = await makeRequest(`/api/repos/${repoId}/branches`);
     return handleApiResponse<GitBranch[]>(response);
+  },
+
+  getWorkingCopy: async (repoId: string): Promise<RepoWorkingCopy> => {
+    const response = await makeRequest(`/api/repos/${repoId}/working-copy`);
+    return handleApiResponse<RepoWorkingCopy>(response);
   },
 
   init: async (data: {

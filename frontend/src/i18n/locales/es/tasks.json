@@ -696,5 +696,13 @@
   "taskForm": {
     "loadingBranches": "Loading branches...",
     "selectBranch": "Select branch"
+  },
+  "workingCopyWarnings": {
+    "uncommitted_one": "1 cambio sin confirmar en tu repositorio no será visible para el agente: empieza desde el último commit.",
+    "uncommitted_other": "{{count}} cambios sin confirmar en tu repositorio no serán visibles para el agente: empieza desde el último commit.",
+    "uncommittedInRepo_one": "1 cambio sin confirmar en {{repo}} no será visible para el agente: empieza desde el último commit.",
+    "uncommittedInRepo_other": "{{count}} cambios sin confirmar en {{repo}} no serán visibles para el agente: empieza desde el último commit.",
+    "noRemote": "Este repositorio no tiene un remoto de git, así que Kablan no puede hacer push ni abrir un PR desde él.",
+    "noRemoteInRepo": "{{repo}} no tiene un remoto de git, así que Kablan no puede hacer push ni abrir un PR desde él."
   }
 }

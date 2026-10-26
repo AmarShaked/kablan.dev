@@ -696,5 +696,13 @@
   "taskForm": {
     "loadingBranches": "Chargement des branches...",
     "selectBranch": "Sélectionner une branche"
+  },
+  "workingCopyWarnings": {
+    "uncommitted_one": "1 modification non validée dans votre dépôt ne sera pas visible par l'agent : il part du dernier commit.",
+    "uncommitted_other": "{{count}} modifications non validées dans votre dépôt ne seront pas visibles par l'agent : il part du dernier commit.",
+    "uncommittedInRepo_one": "1 modification non validée dans {{repo}} ne sera pas visible par l'agent : il part du dernier commit.",
+    "uncommittedInRepo_other": "{{count}} modifications non validées dans {{repo}} ne seront pas visibles par l'agent : il part du dernier commit.",
+    "noRemote": "Ce dépôt n'a pas de dépôt distant git, Kablan ne peut donc pas y pousser ni ouvrir une PR.",
+    "noRemoteInRepo": "{{repo}} n'a pas de dépôt distant git, Kablan ne peut donc pas y pousser ni ouvrir une PR."
   }
 }
