@@ -256,24 +256,24 @@ export function ProjectHeader() {
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2">
-          {shouldShowSharedToggle && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Switch
-                      checked={showSharedTasks}
-                      onCheckedChange={handleSharedToggle}
-                      aria-label={t('tasks:filters.sharedToggleAria')}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {t('tasks:filters.sharedToggleTooltip')}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+        {shouldShowSharedToggle && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Switch
+                    checked={showSharedTasks}
+                    onCheckedChange={handleSharedToggle}
+                    aria-label={t('tasks:filters.sharedToggleAria')}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t('tasks:filters.sharedToggleTooltip')}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     </header>
   );

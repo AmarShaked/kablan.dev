@@ -61,7 +61,12 @@ export function McpSettings() {
     if (initial && profiles[initial]) {
       setSelectedProfile(profiles[initial]);
     }
-  }, [config?.last_agent_selection, profiles, selectedProfile, configuredAgents]);
+  }, [
+    config?.last_agent_selection,
+    profiles,
+    selectedProfile,
+    configuredAgents,
+  ]);
 
   // Load existing MCP configuration when selected profile changes
   useEffect(() => {

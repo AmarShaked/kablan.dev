@@ -43,9 +43,10 @@ describe('setProfileFormData', () => {
       'PLAN',
       { plan: true, model: 'opus' }
     );
-    expect(
-      profileFormData(next, BaseCodingAgent.CLAUDE_CODE, 'PLAN')
-    ).toEqual({ plan: true, model: 'opus' });
+    expect(profileFormData(next, BaseCodingAgent.CLAUDE_CODE, 'PLAN')).toEqual({
+      plan: true,
+      model: 'opus',
+    });
   });
 });
 
@@ -75,9 +76,9 @@ describe('renameProfile', () => {
       'DEFAULT',
       'THINK',
     ]);
-    expect(
-      profileFormData(next, BaseCodingAgent.CLAUDE_CODE, 'THINK')
-    ).toEqual({ plan: true });
+    expect(profileFormData(next, BaseCodingAgent.CLAUDE_CODE, 'THINK')).toEqual(
+      { plan: true }
+    );
   });
 
   it('does not overwrite an existing name', () => {
@@ -103,11 +104,7 @@ describe('deleteProfile', () => {
   });
 
   it('drops a spare profile', () => {
-    const next = deleteProfile(
-      sample(),
-      BaseCodingAgent.CLAUDE_CODE,
-      'PLAN'
-    );
+    const next = deleteProfile(sample(), BaseCodingAgent.CLAUDE_CODE, 'PLAN');
     expect(profileNames(next, BaseCodingAgent.CLAUDE_CODE)).toEqual([
       'DEFAULT',
     ]);

@@ -117,10 +117,8 @@ impl ClaudeCode {
         } else if let Some(mode) = &self.requested_permission_mode {
             builder = builder.extend_params([format!("--permission-mode={mode}")]);
         } else if plan {
-            builder = builder.extend_params([format!(
-                "--permission-mode={}",
-                PermissionMode::Plan
-            )]);
+            builder =
+                builder.extend_params([format!("--permission-mode={}", PermissionMode::Plan)]);
         }
         if self.dangerously_skip_permissions.unwrap_or(false) {
             builder = builder.extend_params(["--dangerously-skip-permissions"]);
@@ -2263,9 +2261,7 @@ mod tests {
         let params = agent.build_command_builder().await.unwrap().params.unwrap();
         assert!(params.iter().any(|p| p == "--permission-mode=plan"));
         assert!(!params.iter().any(|p| p.contains("bypass")));
-        assert!(!params
-            .iter()
-            .any(|p| p == "--dangerously-skip-permissions"));
+        assert!(!params.iter().any(|p| p == "--dangerously-skip-permissions"));
     }
 
     #[tokio::test]
@@ -2275,12 +2271,12 @@ mod tests {
         }))
         .unwrap();
         let params = agent.build_command_builder().await.unwrap().params.unwrap();
-        assert!(params
-            .iter()
-            .any(|p| p == "--dangerously-skip-permissions"));
-        assert!(!params
-            .iter()
-            .any(|p| p.starts_with("--permission-prompt-tool")));
+        assert!(params.iter().any(|p| p == "--dangerously-skip-permissions"));
+        assert!(
+            !params
+                .iter()
+                .any(|p| p.starts_with("--permission-prompt-tool"))
+        );
     }
 
     fn patches_to_entries(patches: &[json_patch::Patch]) -> Vec<NormalizedEntry> {

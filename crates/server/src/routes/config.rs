@@ -126,7 +126,8 @@ async fn get_user_system_info(
     ResponseJson(ApiResponse::success(user_system_info))
 }
 
-async fn get_agent_models() -> ResponseJson<ApiResponse<executors::model_cache::ModelCacheResponse>> {
+async fn get_agent_models() -> ResponseJson<ApiResponse<executors::model_cache::ModelCacheResponse>>
+{
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let response =
         executors::model_cache::cache_response(&utils::assets::model_cache_path(), &today);
@@ -144,9 +145,7 @@ pub async fn remember_agent_selection(
     config.last_agent_selection = selection.clone();
     let snapshot = config.clone();
     drop(config);
-    if let Err(err) =
-        save_config_to_file(&snapshot, &utils::assets::config_path()).await
-    {
+    if let Err(err) = save_config_to_file(&snapshot, &utils::assets::config_path()).await {
         tracing::error!("Failed to save last agent selection: {err}");
     }
 }

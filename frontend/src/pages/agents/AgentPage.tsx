@@ -145,7 +145,6 @@ export function AgentPage() {
           <UsageSection />
         </div>
       )}
-
     </div>
   );
 }

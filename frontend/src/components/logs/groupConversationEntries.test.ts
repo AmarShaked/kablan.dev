@@ -121,7 +121,12 @@ describe('groupConversationEntries', () => {
       patchKey: `p${seq}`,
       executionProcessId: 'proc-1',
     };
-    const entries = [read('a.ts'), thinking, search('foo'), command('git status')];
+    const entries = [
+      read('a.ts'),
+      thinking,
+      search('foo'),
+      command('git status'),
+    ];
     const grouped = groupConversationEntries(entries);
     expect(grouped).toHaveLength(1);
     expect(isAggregatedGroup(grouped[0])).toBe(true);

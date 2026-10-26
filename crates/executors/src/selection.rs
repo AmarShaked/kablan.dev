@@ -106,11 +106,7 @@ pub fn resolve_coding_agent(
 pub fn coding_agent_from_selection(selection: &AgentRunSelection) -> Result<CodingAgent, String> {
     let permission = adjust_permission(selection.executor, selection.permission);
     let mut fields = serde_json::Map::new();
-    if let Some(model) = selection
-        .model
-        .as_deref()
-        .filter(|model| !model.is_empty())
-    {
+    if let Some(model) = selection.model.as_deref().filter(|model| !model.is_empty()) {
         fields.insert("model".to_string(), Value::String(model.to_string()));
     }
     apply_permission_fields(selection.executor, permission, &mut fields);
@@ -293,7 +289,9 @@ fn model_field(fields: &Value) -> Option<String> {
 
 fn permission_from_saved(variant_name: &str, fields: Option<&Value>) -> PermissionLevel {
     if let Some(fields) = fields {
-        if flag(fields, "plan") || text_is(fields, "agent", "plan") || text_is(fields, "mode", "plan")
+        if flag(fields, "plan")
+            || text_is(fields, "agent", "plan")
+            || text_is(fields, "mode", "plan")
         {
             return PermissionLevel::Plan;
         }
@@ -426,13 +424,12 @@ mod tests {
             adjust_permission(BaseCodingAgent::Gemini, PermissionLevel::Plan),
             PermissionLevel::Manual
         );
-        assert!(!supported_permissions(BaseCodingAgent::CursorAgent)
-            .contains(&PermissionLevel::Auto));
-        let agent = coding_agent_from_selection(&selection(
-            BaseCodingAgent::Gemini,
-            PermissionLevel::Plan,
-        ))
-        .unwrap();
+        assert!(
+            !supported_permissions(BaseCodingAgent::CursorAgent).contains(&PermissionLevel::Auto)
+        );
+        let agent =
+            coding_agent_from_selection(&selection(BaseCodingAgent::Gemini, PermissionLevel::Plan))
+                .unwrap();
         let CodingAgent::Gemini(Gemini { yolo, .. }) = agent else {
             panic!("expected gemini");
         };
@@ -458,14 +455,15 @@ mod tests {
             BaseCodingAgent::Droid,
             PermissionLevel::AcceptEdits,
         ))
-        .unwrap()
-        else {
+        .unwrap() else {
             panic!("expected droid");
         };
         assert_eq!(autonomy, crate::executors::droid::Autonomy::Medium);
 
         let CodingAgent::Opencode(Opencode {
-            agent, auto_approve, ..
+            agent,
+            auto_approve,
+            ..
         }) = coding_agent_from_selection(&selection(
             BaseCodingAgent::Opencode,
             PermissionLevel::Plan,
@@ -480,11 +478,8 @@ mod tests {
         let CodingAgent::Amp(Amp {
             dangerously_allow_all,
             ..
-        }) = coding_agent_from_selection(&selection(
-            BaseCodingAgent::Amp,
-            PermissionLevel::Bypass,
-        ))
-        .unwrap()
+        }) = coding_agent_from_selection(&selection(BaseCodingAgent::Amp, PermissionLevel::Bypass))
+            .unwrap()
         else {
             panic!("expected amp");
         };
@@ -502,11 +497,11 @@ mod tests {
         };
         assert_eq!(allow_all_tools, Some(true));
 
-        let CodingAgent::QwenCode(QwenCode { yolo, .. }) = coding_agent_from_selection(
-            &selection(BaseCodingAgent::QwenCode, PermissionLevel::Manual),
-        )
-        .unwrap()
-        else {
+        let CodingAgent::QwenCode(QwenCode { yolo, .. }) = coding_agent_from_selection(&selection(
+            BaseCodingAgent::QwenCode,
+            PermissionLevel::Manual,
+        ))
+        .unwrap() else {
             panic!("expected qwen");
         };
         assert_eq!(yolo, Some(false));
@@ -534,7 +529,8 @@ mod tests {
         assert_eq!(pinned.model.as_deref(), Some("claude-fable-5-1"));
         assert_eq!(pinned.permission, PermissionLevel::Bypass);
 
-        let plan = selection_from_legacy(BaseCodingAgent::ClaudeCode, Some("PLAN"), Some(&profiles));
+        let plan =
+            selection_from_legacy(BaseCodingAgent::ClaudeCode, Some("PLAN"), Some(&profiles));
         assert_eq!(plan.permission, PermissionLevel::Plan);
         assert!(plan.model.is_none());
 

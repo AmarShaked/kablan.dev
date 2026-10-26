@@ -136,9 +136,7 @@ export function ExecutorConfigForm({
               type="submit"
               disabled={!isDirty || validationErrors.length > 0 || isSaving}
             >
-              {isSaving && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Configuration
             </Button>
           </div>

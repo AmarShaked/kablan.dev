@@ -25,7 +25,10 @@ describe('useTodos', () => {
     const { result } = renderHook(() =>
       useTodos([
         todoEntry(
-          [todo('Create Linear ticket', 'completed'), todo('Open the MR', 'in_progress')],
+          [
+            todo('Create Linear ticket', 'completed'),
+            todo('Open the MR', 'in_progress'),
+          ],
           '2026-09-03T10:00:00Z'
         ),
       ])
@@ -41,7 +44,10 @@ describe('useTodos', () => {
     const { result } = renderHook(() =>
       useTodos([
         todoEntry(
-          [todo('Create Linear ticket', 'completed'), todo('Open the MR', 'completed')],
+          [
+            todo('Create Linear ticket', 'completed'),
+            todo('Open the MR', 'completed'),
+          ],
           '2026-09-03T10:00:00Z'
         ),
       ])
@@ -55,7 +61,10 @@ describe('useTodos', () => {
     const { result } = renderHook(() =>
       useTodos([
         todoEntry(
-          [todo('Create Linear ticket', 'completed'), todo('Backport it', 'cancelled')],
+          [
+            todo('Create Linear ticket', 'completed'),
+            todo('Backport it', 'cancelled'),
+          ],
           '2026-09-03T10:00:00Z'
         ),
       ])

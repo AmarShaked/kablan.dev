@@ -9,9 +9,9 @@ import {
 
 describe('agent run selection', () => {
   it('drops a permission the new agent does not offer and selects Manual', () => {
-    expect(
-      adjustPermission(BaseCodingAgent.GEMINI, PermissionLevel.PLAN)
-    ).toBe(PermissionLevel.MANUAL);
+    expect(adjustPermission(BaseCodingAgent.GEMINI, PermissionLevel.PLAN)).toBe(
+      PermissionLevel.MANUAL
+    );
     expect(supportedPermissions(BaseCodingAgent.CURSOR_AGENT)).not.toContain(
       PermissionLevel.AUTO
     );

@@ -27,9 +27,7 @@ use utils::{response::ApiResponse, shell::resolve_executable_path};
 use uuid::Uuid;
 
 use crate::{
-    DeploymentImpl,
-    error::ApiError,
-    pocketbase::PocketBaseClient,
+    DeploymentImpl, error::ApiError, pocketbase::PocketBaseClient,
     routes::task_attempts::WorkspaceRepoInput,
 };
 
@@ -56,13 +54,12 @@ pub async fn agent_turn(
     Path(chat_id): Path<String>,
     Json(payload): Json<AgentTurnRequest>,
 ) -> Result<ResponseJson<ApiResponse<AgentTurnResponse>>, ApiError> {
-    let agent = BaseCodingAgent::from_str_loose(&payload.agent).map_err(|e| {
-        ApiError::BadRequest(format!("Unknown agent '{}': {e}", payload.agent))
-    })?;
+    let agent = BaseCodingAgent::from_str_loose(&payload.agent)
+        .map_err(|e| ApiError::BadRequest(format!("Unknown agent '{}': {e}", payload.agent)))?;
 
-    let pb = PocketBaseClient::from_env().await.map_err(|e| {
-        ApiError::BadRequest(format!("PocketBase service auth failed: {e}"))
-    })?;
+    let pb = PocketBaseClient::from_env()
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("PocketBase service auth failed: {e}")))?;
 
     let trigger = pb
         .get_message(&payload.message_id)
@@ -108,11 +105,7 @@ trait BaseCodingAgentParse {
 impl BaseCodingAgentParse for BaseCodingAgent {
     fn from_str_loose(s: &str) -> Result<BaseCodingAgent, String> {
         use std::str::FromStr;
-        let normalized = s
-            .trim()
-            .replace('-', "_")
-            .replace(' ', "_")
-            .to_ascii_uppercase();
+        let normalized = s.trim().replace(['-', ' '], "_").to_ascii_uppercase();
         let aliases = match normalized.as_str() {
             "CLAUDE" | "CLAUDECODE" => "CLAUDE_CODE",
             "CURSOR" | "CURSORAGENT" => "CURSOR_AGENT",
@@ -134,13 +127,7 @@ async fn run_agent_turn(
 ) -> anyhow::Result<()> {
     let agent_name = agent.to_string();
     let status = pb
-        .create_agent_message(
-            &chat_id,
-            &agent_name,
-            "Working on it…",
-            None,
-            None,
-        )
+        .create_agent_message(&chat_id, &agent_name, "Working on it…", None, None)
         .await?;
     let status_id = status.id;
 
@@ -174,9 +161,7 @@ async fn run_agent_turn(
 
         match decision {
             AgentDecision::Reply(text) => {
-                let _ = pb
-                    .update_agent_message(&status_id, &text, None, None)
-                    .await;
+                let _ = pb.update_agent_message(&status_id, &text, None, None).await;
                 return Ok(());
             }
             AgentDecision::ListProjects => {
@@ -299,12 +284,11 @@ async fn decide_next_action(
     round: usize,
 ) -> AgentDecision {
     // Prefer a CLI-backed decision for Claude; otherwise use heuristics.
-    if *agent == BaseCodingAgent::ClaudeCode {
-        if let Ok(Some(decision)) =
+    if *agent == BaseCodingAgent::ClaudeCode
+        && let Ok(Some(decision)) =
             ask_claude_for_decision(user_message, history, tool_notes, project_cwd).await
-        {
-            return decision;
-        }
+    {
+        return decision;
     }
 
     heuristic_decision(user_message, tool_notes, round).await
@@ -383,10 +367,10 @@ Tool notes:
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    if let Some(dir) = project_cwd {
-        if dir.is_dir() {
-            cmd.current_dir(dir);
-        }
+    if let Some(dir) = project_cwd
+        && dir.is_dir()
+    {
+        cmd.current_dir(dir);
     }
 
     let output = tokio::time::timeout(Duration::from_secs(90), cmd.output()).await??;
@@ -465,14 +449,14 @@ async fn heuristic_decision(
         if looks_like_info && !looks_like_task {
             return AgentDecision::Reply(format_pinned_project_reply(notes));
         }
-        if looks_like_task {
-            if let Some(id) = extract_uuid(notes).or_else(|| extract_uuid(user_message)) {
-                return AgentDecision::CreateAndStart {
-                    project_id: id,
-                    title: title_from_message(user_message),
-                    description: Some(user_message.to_string()),
-                };
-            }
+        if looks_like_task
+            && let Some(id) = extract_uuid(notes).or_else(|| extract_uuid(user_message))
+        {
+            return AgentDecision::CreateAndStart {
+                project_id: id,
+                title: title_from_message(user_message),
+                description: Some(user_message.to_string()),
+            };
         }
         if !looks_like_task {
             return AgentDecision::Reply(format_pinned_project_reply(notes));
@@ -529,7 +513,9 @@ fn format_pinned_project_reply(notes: &str) -> String {
             } else if let Some(rest) = line.strip_prefix("- ") {
                 // "- Name path=`…` default_branch=`…` repo_id=`…`"
                 if let (Some(path), Some(branch)) = (
-                    rest.split("path=`").nth(1).and_then(|s| s.split('`').next()),
+                    rest.split("path=`")
+                        .nth(1)
+                        .and_then(|s| s.split('`').next()),
                     rest.split("default_branch=`")
                         .nth(1)
                         .and_then(|s| s.split('`').next()),
@@ -566,10 +552,7 @@ async fn load_pinned_project_context(
     } else {
         lines.push("Repositories:".into());
         for repo in &repos {
-            let branch = repo
-                .default_target_branch
-                .as_deref()
-                .unwrap_or("main");
+            let branch = repo.default_target_branch.as_deref().unwrap_or("main");
             let label = if repo.display_name.trim().is_empty() {
                 repo.name.as_str()
             } else {
@@ -594,8 +577,7 @@ fn extract_uuid(s: &str) -> Option<Uuid> {
         r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
     )
     .ok()?;
-    re.find(s)
-        .and_then(|m| Uuid::parse_str(m.as_str()).ok())
+    re.find(s).and_then(|m| Uuid::parse_str(m.as_str()).ok())
 }
 
 fn title_from_message(s: &str) -> String {
@@ -736,7 +718,7 @@ async fn create_and_start_task(
         model: None,
         permission: executors::selection::PermissionLevel::Bypass,
     };
-    crate::routes::config::remember_agent_selection(&deployment, &agent_selection).await;
+    crate::routes::config::remember_agent_selection(deployment, &agent_selection).await;
     let is_attempt_running = match deployment
         .container()
         .start_workspace(&workspace, agent_selection.clone())

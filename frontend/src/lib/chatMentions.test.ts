@@ -21,9 +21,9 @@ describe('chatMentions', () => {
   });
 
   it('extracts multi-word @Claude Code', () => {
-    expect(
-      extractAgentMention('@Claude Code you are here?', agents)
-    ).toBe(BaseCodingAgent.CLAUDE_CODE);
+    expect(extractAgentMention('@Claude Code you are here?', agents)).toBe(
+      BaseCodingAgent.CLAUDE_CODE
+    );
   });
 
   it('extracts enum-style mention', () => {

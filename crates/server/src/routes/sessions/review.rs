@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axum::{extract::State, response::Json as ResponseJson, Extension, Json};
+use axum::{Extension, Json, extract::State, response::Json as ResponseJson};
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessRunReason},
@@ -11,8 +11,8 @@ use db::models::{
 use deployment::Deployment;
 use executors::{
     actions::{
-        review::{RepoReviewContext as ExecutorRepoReviewContext, ReviewRequest as ReviewAction},
         ExecutorAction, ExecutorActionType,
+        review::{RepoReviewContext as ExecutorRepoReviewContext, ReviewRequest as ReviewAction},
     },
     executors::build_review_prompt,
     profile::ExecutorProfileId,
@@ -23,7 +23,7 @@ use services::services::container::ContainerService;
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
-use crate::{error::ApiError, DeploymentImpl};
+use crate::{DeploymentImpl, error::ApiError};
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct StartReviewRequest {

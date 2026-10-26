@@ -41,7 +41,10 @@ export function extractAgentMention(
   return null;
 }
 
-export function stripMentionToken(text: string, agent: BaseCodingAgent): string {
+export function stripMentionToken(
+  text: string,
+  agent: BaseCodingAgent
+): string {
   const aliases = mentionAliases(agent)
     .map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');

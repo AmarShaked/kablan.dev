@@ -329,45 +329,45 @@ export function AgentSettings() {
               aria-label={t('settings.agents.title')}
               className="flex min-w-0 flex-1 flex-wrap items-stretch gap-1"
             >
-            {configuredAgents.map((executor) => {
-              const selected = selectedExecutorType === executor;
-              const connected = isConnected(executor);
-              return (
-                <button
-                  key={executor}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  className={cn(
-                    'flex items-center gap-2 shrink-0 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
-                    selected
-                      ? 'border-primary text-foreground font-medium'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  )}
-                  onClick={() => {
-                    setSelectedExecutorType(executor);
-                    const configs = Object.keys(
-                      localParsedProfiles?.executors?.[executor] || {}
-                    );
-                    setSelectedConfiguration(configs[0] || 'DEFAULT');
-                  }}
-                >
-                  <AgentIcon agent={executor} className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{agentLabel(executor)}</span>
-                  <span
+              {configuredAgents.map((executor) => {
+                const selected = selectedExecutorType === executor;
+                const connected = isConnected(executor);
+                return (
+                  <button
+                    key={executor}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
                     className={cn(
-                      'h-1.5 w-1.5 rounded-full shrink-0',
-                      connected ? 'bg-green-500' : 'bg-muted-foreground/40'
+                      'flex items-center gap-2 shrink-0 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
+                      selected
+                        ? 'border-primary text-foreground font-medium'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
-                    title={
-                      connected
-                        ? t('settings.agents.connected')
-                        : t('settings.agents.notConnected')
-                    }
-                  />
-                </button>
-              );
-            })}
+                    onClick={() => {
+                      setSelectedExecutorType(executor);
+                      const configs = Object.keys(
+                        localParsedProfiles?.executors?.[executor] || {}
+                      );
+                      setSelectedConfiguration(configs[0] || 'DEFAULT');
+                    }}
+                  >
+                    <AgentIcon agent={executor} className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{agentLabel(executor)}</span>
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full shrink-0',
+                        connected ? 'bg-green-500' : 'bg-muted-foreground/40'
+                      )}
+                      title={
+                        connected
+                          ? t('settings.agents.connected')
+                          : t('settings.agents.notConnected')
+                      }
+                    />
+                  </button>
+                );
+              })}
             </div>
             <Button
               variant="outline"
@@ -393,8 +393,7 @@ export function AgentSettings() {
                       ? t('settings.agents.connected')
                       : t('settings.agents.notConnected')}
                   </span>
-                  {savedAgent?.executor ===
-                    selectedExecutorType && (
+                  {savedAgent?.executor === selectedExecutorType && (
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                       {t('settings.agents.editor.isDefault')}
                     </span>
@@ -404,10 +403,7 @@ export function AgentSettings() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={
-                      savedAgent?.executor ===
-                      selectedExecutorType
-                    }
+                    disabled={savedAgent?.executor === selectedExecutorType}
                     onClick={() =>
                       handleMakeDefault(selectedExecutorType, 'DEFAULT')
                     }
@@ -513,4 +509,3 @@ export function AgentSettings() {
     </div>
   );
 }
-

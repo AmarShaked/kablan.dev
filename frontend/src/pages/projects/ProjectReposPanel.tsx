@@ -63,9 +63,7 @@ function ConfigField({
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
-      ) : null}
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -89,9 +87,7 @@ function ToggleRow({
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0 space-y-1">
         <Label htmlFor={id}>{label}</Label>
-        {hint ? (
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        ) : null}
+        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       <Switch
         id={id}
@@ -262,8 +258,11 @@ export function ProjectReposPanel({ projectId }: { projectId: string }) {
 
   const handleRemove = async () => {
     if (!repo) return;
-    const confirmName =
-      (draft?.display_name.trim() || repo.display_name || repo.name).trim();
+    const confirmName = (
+      draft?.display_name.trim() ||
+      repo.display_name ||
+      repo.name
+    ).trim();
     try {
       const result = await ConfirmDialog.show({
         title: `Remove ${confirmName}?`,
@@ -329,8 +328,7 @@ export function ProjectReposPanel({ projectId }: { projectId: string }) {
           <div className="space-y-0.5 px-1 pb-2">
             {repositories.map((item) => {
               const active = item.id === selected;
-              const name =
-                drafts[item.id]?.display_name ?? item.display_name;
+              const name = drafts[item.id]?.display_name ?? item.display_name;
               return (
                 <button
                   key={item.id}
@@ -433,16 +431,12 @@ export function ProjectReposPanel({ projectId }: { projectId: string }) {
                 >
                   <BranchSelector
                     branches={branches}
-                    selectedBranch={
-                      draft.default_target_branch || null
-                    }
+                    selectedBranch={draft.default_target_branch || null}
                     onBranchSelect={(name) =>
                       patchDraft({ default_target_branch: name })
                     }
                     placeholder={
-                      branchesLoading
-                        ? 'Loading branches…'
-                        : 'Select a branch'
+                      branchesLoading ? 'Loading branches…' : 'Select a branch'
                     }
                   />
                 </ConfigField>
@@ -533,9 +527,7 @@ export function ProjectReposPanel({ projectId }: { projectId: string }) {
                   onClick={() => void handleSave()}
                   disabled={saving || !dirty}
                 >
-                  {saving && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save
                 </Button>
                 <div className="flex-1" />

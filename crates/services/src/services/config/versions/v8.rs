@@ -50,15 +50,9 @@ pub enum IntegrationProvider {
 }
 
 /// Linear personal API key, stored like `github.pat` in local `config.json`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 pub struct LinearConfig {
     pub api_key: Option<String>,
-}
-
-impl Default for LinearConfig {
-    fn default() -> Self {
-        Self { api_key: None }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]

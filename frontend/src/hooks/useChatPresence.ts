@@ -9,7 +9,10 @@ export const PRESENCE_ONLINE_MS = 60_000;
 const HEARTBEAT_MS = 25_000;
 const EXPIRE_TICK_MS = 15_000;
 
-function isFresh(lastSeen: string | null | undefined, now = Date.now()): boolean {
+function isFresh(
+  lastSeen: string | null | undefined,
+  now = Date.now()
+): boolean {
   if (!lastSeen) return false;
   const t = Date.parse(lastSeen);
   if (Number.isNaN(t)) return false;
@@ -29,10 +32,7 @@ export function useChatPresence(peerUserIds: string[]) {
     () => [...new Set(peerUserIds.filter(Boolean))].sort().join(','),
     [peerUserIds]
   );
-  const peers = useMemo(
-    () => (peerKey ? peerKey.split(',') : []),
-    [peerKey]
-  );
+  const peers = useMemo(() => (peerKey ? peerKey.split(',') : []), [peerKey]);
 
   const bumpSelf = useCallback(async (client: PocketBase, userId: string) => {
     const iso = new Date().toISOString();
@@ -80,9 +80,7 @@ export function useChatPresence(peerUserIds: string[]) {
     let unsub: (() => Promise<void>) | undefined;
 
     const applyRecord = (record: RecordModel) => {
-      const lastSeen = record.last_seen
-        ? String(record.last_seen)
-        : '';
+      const lastSeen = record.last_seen ? String(record.last_seen) : '';
       setLastSeenByUser((prev) => {
         if ((prev[record.id] ?? '') === lastSeen) return prev;
         return { ...prev, [record.id]: lastSeen };
@@ -141,8 +139,7 @@ export function useChatPresence(peerUserIds: string[]) {
   }, [lastSeenByUser, now]);
 
   const isOnline = useCallback(
-    (userId: string | null | undefined) =>
-      !!userId && onlineIds.has(userId),
+    (userId: string | null | undefined) => !!userId && onlineIds.has(userId),
     [onlineIds]
   );
 

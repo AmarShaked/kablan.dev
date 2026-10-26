@@ -76,9 +76,7 @@ export function ConnectAgentEmpty({
                     ? 'Listening for a completed login on this machine…'
                     : step.body}
                 </p>
-                {step.command ? (
-                  <CommandCopy command={step.command} />
-                ) : null}
+                {step.command ? <CommandCopy command={step.command} /> : null}
               </div>
             </li>
           );
@@ -128,9 +126,12 @@ export function useConnectionCheck(
 
     void poll();
     const interval = window.setInterval(() => void poll(), 2000);
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) setChecking(false);
-    }, 5 * 60 * 1000);
+    const timeout = window.setTimeout(
+      () => {
+        if (!cancelled) setChecking(false);
+      },
+      5 * 60 * 1000
+    );
 
     return () => {
       cancelled = true;

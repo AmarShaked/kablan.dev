@@ -74,7 +74,9 @@ export function issueToTaskDraft(issue: IntegrationIssue): TaskFromIssueDraft {
   };
 }
 
-function mapStatusType(value: string | null | undefined): LinearStatusType | null {
+function mapStatusType(
+  value: string | null | undefined
+): LinearStatusType | null {
   switch (value) {
     case 'triage':
     case 'backlog':

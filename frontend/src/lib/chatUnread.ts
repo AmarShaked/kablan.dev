@@ -49,9 +49,6 @@ export function setChatLastRead(
   writeJson(lastReadKey(userId), map);
 }
 
-export function getChatLastRead(
-  userId: string,
-  chatId: string
-): string | null {
+export function getChatLastRead(userId: string, chatId: string): string | null {
   return getChatLastReadMap(userId)[chatId] ?? null;
 }

@@ -70,9 +70,7 @@ impl PocketBaseClient {
         let http = Client::new();
         let token = Self::authenticate(&http, &base_url, &email, &password)
             .await
-            .with_context(|| {
-                format!("PocketBase service auth failed for {email} at {base_url}")
-            })?;
+            .with_context(|| format!("PocketBase service auth failed for {email} at {base_url}"))?;
         Ok(Self {
             http,
             base_url,
@@ -98,9 +96,7 @@ impl PocketBaseClient {
         if !res.status().is_success() {
             let status = res.status();
             let text = res.text().await.unwrap_or_default();
-            return Err(anyhow!(
-                "service user login failed ({status}): {text}"
-            ));
+            return Err(anyhow!("service user login failed ({status}): {text}"));
         }
         let auth: AuthResponse = res.json().await?;
         Ok(auth.token)
@@ -135,7 +131,11 @@ impl PocketBaseClient {
         let path = format!(
             "/api/collections/messages/records?page=1&perPage={limit}&sort=created&filter={filter}"
         );
-        let res = self.authed(reqwest::Method::GET, &path).await.send().await?;
+        let res = self
+            .authed(reqwest::Method::GET, &path)
+            .await
+            .send()
+            .await?;
         if !res.status().is_success() {
             return Err(anyhow!("Failed to list messages: {}", res.status()));
         }

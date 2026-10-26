@@ -1,8 +1,7 @@
 import type { TaskAcrossProjects } from '@/hooks/useAllTasks';
 
 const now = Date.now();
-const ago = (minutes: number) =>
-  new Date(now - minutes * 60_000).toISOString();
+const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
 
 const MOCK_PROJECTS = {
   api: {
@@ -26,12 +25,7 @@ function mockTask(
   partial: Partial<TaskAcrossProjects> &
     Pick<
       TaskAcrossProjects,
-      | 'id'
-      | 'title'
-      | 'status'
-      | 'projectId'
-      | 'projectName'
-      | 'projectIcon'
+      'id' | 'title' | 'status' | 'projectId' | 'projectName' | 'projectIcon'
     >
 ): TaskAcrossProjects {
   return {
@@ -152,7 +146,8 @@ export const WARZONE_MOCK_TASKS: TaskAcrossProjects[] = [
     projectIcon: MOCK_PROJECTS.web.icon,
     has_unseen_turns: true,
     last_turn_prompt: 'Tighten spacing under the CTA',
-    last_turn_summary: 'Warzone link moved; waiting on your eye for the separator.',
+    last_turn_summary:
+      'Warzone link moved; waiting on your eye for the separator.',
     updated_at: ago(15),
   }),
   mockTask({
