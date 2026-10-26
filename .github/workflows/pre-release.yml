@@ -28,10 +28,16 @@ env:
   PNPM_VERSION: 10.13.1
   RUST_TOOLCHAIN: nightly-2025-12-04
   CARGO_XWIN_VERSION: 0.20.2
+  # This repo is owned by a user account, so the GitHub larger-runner labels inherited from
+  # upstream (`ubuntu-latest-m`, `ubuntu-latest-x64-l`, `ubuntu-latest-arm64-l`,
+  # `macos-15-xlarge`) cannot be scheduled here — they are an org/enterprise feature. A label
+  # nothing can pick up leaves every job queued forever instead of failing. Same bug test.yml
+  # had with its Blacksmith label.
+  RUNNER_LABEL: &runner_label ubuntu-latest
 
 jobs:
   bump-version:
-    runs-on: ubuntu-latest-m
+    runs-on: *runner_label
     outputs:
       new_tag: ${{ steps.version.outputs.new_tag }}
       new_version: ${{ steps.version.outputs.new_version }}
@@ -152,7 +158,7 @@ jobs:
 
   build-frontend:
     needs: bump-version
-    runs-on: ubuntu-latest-x64-l
+    runs-on: *runner_label
     env:
       VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY: ${{ secrets.PUBLIC_REACT_VIRTUOSO_LICENSE_KEY }}
       VITE_VK_SHARED_API_BASE: ${{ secrets.VK_SHARED_API_BASE }}
@@ -205,25 +211,32 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       # Platform matrix - keep target/name in sync with package-npx-cli job
+      #
+      # Every Linux host here cross-compiles rather than building natively: the musl targets go
+      # through `cargo zigbuild` and the MSVC targets through `cargo xwin`. That includes
+      # aarch64-unknown-linux-musl, which is why the arm64 host this matrix used to ask for is
+      # not needed — an x64 runner produces the same artifact. macOS builds natively for arm64
+      # and cross-compiles x86_64 with the SDK Xcode already ships, exactly as before;
+      # `macos-15` is arm64 like `macos-15-xlarge` was, just not a larger runner.
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest-x64-l
+            os: *runner_label
             name: linux-x64
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest-arm64-l
+            os: *runner_label
             name: linux-arm64
           - target: x86_64-pc-windows-msvc
-            os: ubuntu-latest-x64-l
+            os: *runner_label
             name: windows-x64
           - target: x86_64-apple-darwin
-            os: macos-15-xlarge
+            os: macos-15
             name: macos-x64
           - target: aarch64-apple-darwin
-            os: macos-15-xlarge
+            os: macos-15
             name: macos-arm64
           - target: aarch64-pc-windows-msvc
-            os: ubuntu-latest-x64-l
+            os: *runner_label
             name: windows-arm64
     env:
       CARGO_INCREMENTAL: "0"
@@ -489,7 +502,7 @@ jobs:
 
   package-npx-cli:
     needs: [bump-version, build-frontend, build-backend]
-    runs-on: ubuntu-latest-m
+    runs-on: *runner_label
     strategy:
       # NOTE: This matrix must be kept in sync with build-backend job above
       # GitHub Actions doesn't support YAML anchors, so duplication is unavoidable
@@ -581,7 +594,7 @@ jobs:
 
   upload-to-r2:
     needs: [bump-version, package-npx-cli]
-    runs-on: ubuntu-latest-m
+    runs-on: *runner_label
     steps:
       - uses: actions/checkout@v6
         with:
@@ -675,7 +688,7 @@ jobs:
 
   create-prerelease:
     needs: [bump-version, build-frontend, upload-to-r2]
-    runs-on: ubuntu-latest-m
+    runs-on: *runner_label
     steps:
       - uses: actions/checkout@v6
         with:
