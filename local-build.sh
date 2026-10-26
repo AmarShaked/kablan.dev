@@ -42,9 +42,16 @@ fi
 echo "🔍 Detected platform: $PLATFORM"
 echo "🔧 Using target directory: $CARGO_TARGET_DIR"
 
-# Set API base URL for remote features
-export VK_SHARED_API_BASE="https://api.vibekanban.com"
-export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
+# Remote features are disabled unless VK_SHARED_API_BASE is set in the
+# environment, which matches the release workflow and `pnpm run dev`.
+# To build against a shared API server, export it first (crates/remote/README.md).
+if [ -n "${VK_SHARED_API_BASE:-}" ]; then
+  export VK_SHARED_API_BASE
+  export VITE_VK_SHARED_API_BASE="${VITE_VK_SHARED_API_BASE:-$VK_SHARED_API_BASE}"
+  echo "🌐 Shared API base: $VK_SHARED_API_BASE"
+else
+  echo "🌐 No shared API base set; remote features disabled in this build"
+fi
 
 echo "🧹 Cleaning previous builds..."
 rm -rf npx-cli/dist
