@@ -32,3 +32,4 @@ tempfile = "3.8"
 [features]
 # Passthrough: see crates/executors for what this costs.
 codex = ["executors/codex"]
+default = ["codex"]

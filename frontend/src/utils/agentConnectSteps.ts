@@ -68,6 +68,26 @@ export function agentConnectSteps(agent: BaseCodingAgent): AgentConnectStep[] {
           body: 'Kablan looks for ~/.gemini/oauth_creds.json. Come back here and check again.',
         },
       ];
+    case BaseCodingAgent.CODEX:
+      return [
+        {
+          n: '1',
+          title: 'Install Codex CLI',
+          body: 'Optional — Kablan runs Codex through npx if it is not on your PATH.',
+          command: 'npm i -g @openai/codex',
+        },
+        {
+          n: '2',
+          title: 'Sign in',
+          body: 'Run this in a terminal and complete the ChatGPT login.',
+          command: 'codex login',
+        },
+        {
+          n: '3',
+          title: 'Check connection',
+          body: 'Kablan looks for ~/.codex/auth.json. Come back here and check again.',
+        },
+      ];
     case BaseCodingAgent.AMP:
       return [
         {

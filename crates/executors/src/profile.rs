@@ -482,3 +482,47 @@ pub fn to_default_variant(id: &ExecutorProfileId) -> ExecutorProfileId {
         variant: None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `from_defaults` panics on a parse failure, and the first thing that touches it is the
+    /// server boot. An executor key the binary was not built with — `CODEX` without the
+    /// `codex` feature — is exactly that failure, and it reaches the user as a crash on
+    /// first run rather than as a build error. The `compile_error!` in lib.rs stops the one
+    /// feature set that hits it today; this catches the next entry someone adds.
+    #[test]
+    fn embedded_defaults_parse_under_this_feature_set() {
+        let configs = ExecutorConfigs::from_defaults();
+        assert!(
+            !configs.executors.is_empty(),
+            "embedded default_profiles.json parsed to zero executors"
+        );
+    }
+
+    /// The `codex` feature and the `CODEX` entry in default_profiles.json have to move
+    /// together in both directions: the entry without the feature panics the boot, and the
+    /// feature without the entry leaves Codex selectable over the API but with no profile
+    /// behind it.
+    #[test]
+    fn codex_profile_entry_tracks_the_codex_feature() {
+        let configs = ExecutorConfigs::from_defaults();
+        let has_codex_entry = configs
+            .executors
+            .keys()
+            .any(|agent| agent.to_string() == "CODEX");
+
+        assert_eq!(
+            has_codex_entry,
+            cfg!(feature = "codex"),
+            "codex feature is {}, but the CODEX entry in default_profiles.json is {}",
+            if cfg!(feature = "codex") { "on" } else { "off" },
+            if has_codex_entry {
+                "present"
+            } else {
+                "missing"
+            }
+        );
+    }
+}
