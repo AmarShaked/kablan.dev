@@ -454,7 +454,12 @@
       <strong>Platforms.</strong> Verified on clean machines &mdash; macOS (Apple silicon),
       Linux x64 and Windows x64. The macOS cold start downloads 15MB and is listening in about
       six seconds. Linux needs <strong>glibc 2.34 or newer</strong> (Ubuntu 22.04+, Debian 12+,
-      Rocky 9, Amazon Linux 2023); older distributions and Alpine will not start it. The macOS
+      Rocky 9, Amazon Linux 2023); older distributions and Alpine will not start it. The Windows
+      machine we verified on already had the Visual C++ runtime, and
+      <span class="mono">kablan.exe</span> imports
+      <span class="mono">VCRUNTIME140.dll</span> &mdash; a bare Windows install may need the
+      <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe">Visual C++ Redistributable</a>,
+      which we have not been able to test. The macOS
       Intel build is published but has not been run yet. There is no ARM64 Linux or ARM64
       Windows build in this release, so Graviton, a Raspberry Pi, an ARM Linux container or a
       Snapdragon machine gets a 404 today &mdash; both are in the pipeline for the next
