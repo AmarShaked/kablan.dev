@@ -1,6 +1,10 @@
 packages:
   - frontend
   - remote-frontend
+  # npx-cli ships adm-zip as a real runtime dependency. Without it here, root
+  # `pnpm install` never creates npx-cli/node_modules and `npm run test:cli`
+  # dies at require() before any assertion runs.
+  - npx-cli
 
 onlyBuiltDependencies:
   - '@sentry/cli'
