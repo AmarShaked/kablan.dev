@@ -42,6 +42,20 @@ vi.mock('react-i18next', () => ({
   Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
+// Readiness drives the submit button's label, so it has to be pinned here — otherwise these
+// tests go through the real hook, the fetch fails, and every button reads "Start anyway".
+const agentAvailability = vi.hoisted(() => ({
+  current: { status: 'login_detected' } as { status: string },
+}));
+
+vi.mock('@/hooks/useAgentAvailability', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAgentAvailability')>()),
+  useAgentAvailability: () => ({
+    availability: agentAvailability.current,
+    recheck: vi.fn(),
+  }),
+}));
+
 vi.mock('@/contexts/UserSystemContext', () => ({
   useUserSystem: () => ({
     system: {

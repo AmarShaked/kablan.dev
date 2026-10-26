@@ -9,6 +9,7 @@ import {
 } from 'react';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Check, FolderGit2, GitBranch, Paperclip, X } from 'lucide-react';
 import type {
   AgentRunSelection,
@@ -19,6 +20,11 @@ import type {
 
 import { projectIcon } from '@/components/projects/projectIcons';
 import { AgentRunControls } from '@/components/tasks/AgentRunControls';
+import { AgentAvailabilityIndicator } from '@/components/AgentAvailabilityIndicator';
+import {
+  isAgentKnownNotReady,
+  useAgentAvailability,
+} from '@/hooks/useAgentAvailability';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -28,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { cn } from '@/lib/utils';
 import {
   useImageUpload,
   useProjectRepos,
@@ -146,6 +153,14 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+
+  const { t } = useTranslation('tasks');
+
+  // Read here rather than inside a row component, because the row and the button have to
+  // agree: the button reads "Start anyway" exactly when the row is amber.
+  const { availability: agentAvailability, recheck: recheckAgent } =
+    useAgentAvailability(selection.executor);
+  const agentNotReady = isAgentKnownNotReady(agentAvailability);
   const agentTouched = useRef(false);
 
   const preventNavigate = props.mode === 'create' && !!props.preventNavigate;
@@ -441,6 +456,14 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
             }}
           />
 
+          {/* The last moment before a worktree and a branch get created, so this shows in
+              every state rather than only when something is wrong. */}
+          <AgentAvailabilityIndicator
+            availability={agentAvailability}
+            agent={selection.executor}
+            onRecheck={recheckAgent}
+          />
+
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <div className="flex items-center justify-between gap-3">
@@ -465,12 +488,24 @@ const NewTaskDialogImpl = NiceModal.create<NewTaskDialogProps>((props) => {
             </button>
             <Button
               type="button"
+              // Warn, don't block. Readiness is deliberately absent from this condition:
+              // detection is one `stat` on a credentials file, so a hard block would turn
+              // every false negative into a user who cannot use Kablan at all.
               disabled={
                 !title.trim() || !projectId || !branchesReady || submitting
               }
               onClick={() => void start()}
+              className={cn(
+                agentNotReady &&
+                  !submitting &&
+                  'bg-warning text-warning-foreground hover:bg-warning/90'
+              )}
             >
-              {submitting ? 'Starting' : 'Start'}
+              {submitting
+                ? t('taskFormDialog.startingShort')
+                : agentNotReady
+                  ? t('taskFormDialog.startAnyway')
+                  : t('taskFormDialog.start')}
             </Button>
           </div>
         </div>

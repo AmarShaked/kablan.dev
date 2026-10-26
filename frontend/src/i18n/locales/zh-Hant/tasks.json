@@ -516,7 +516,10 @@
       "description": "您有未儲存的變更。確定要放棄嗎？",
       "continueEditing": "繼續編輯",
       "discardChanges": "放棄變更"
-    }
+    },
+    "startAnyway": "Start anyway",
+    "start": "Start",
+    "startingShort": "Starting"
   },
   "terminal": {
     "selectWorkspace": "選擇一個工作區以開啟終端機"

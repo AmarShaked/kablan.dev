@@ -593,7 +593,10 @@
       "description": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir les abandonner ?",
       "continueEditing": "Continuer la modification",
       "discardChanges": "Abandonner les modifications"
-    }
+    },
+    "startAnyway": "Start anyway",
+    "start": "Start",
+    "startingShort": "Starting"
   },
   "terminal": {
     "selectWorkspace": "Sélectionnez un espace de travail pour ouvrir le terminal"

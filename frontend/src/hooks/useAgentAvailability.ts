@@ -29,6 +29,20 @@ export function isAgentReady(availability: AgentAvailabilityState): boolean {
   );
 }
 
+/**
+ * The two states that warrant warning the user, which is **not** the negation of
+ * `isAgentReady`. While the check is still in flight we have no answer yet, and relabelling
+ * the start button on a state that resolves in a moment would make it flicker and would be
+ * claiming something we don't know.
+ */
+export function isAgentKnownNotReady(
+  availability: AgentAvailabilityState
+): boolean {
+  return (
+    availability?.status === 'not_found' || availability?.status === 'error'
+  );
+}
+
 export function useAgentAvailability(
   agent: BaseCodingAgent | null | undefined
 ): AgentAvailabilityResult {

@@ -1,7 +1,7 @@
 import { BaseCodingAgent } from 'shared/types';
 import { AgentAvailabilityIndicator } from '@/components/AgentAvailabilityIndicator';
 import {
-  isAgentReady,
+  isAgentKnownNotReady,
   useAgentAvailability,
 } from '@/hooks/useAgentAvailability';
 import { useUserSystem } from '@/contexts/UserSystemContext';
@@ -40,16 +40,10 @@ export function AgentReadinessRow({
     resolved as BaseCodingAgent
   );
 
-  // On a screen that only speaks up for problems, `checking` is not a problem — rendering it
-  // would flash a spinner above the headline and then vanish.
-  if (
-    onlyWhenNotReady &&
-    (!availability ||
-      availability.status === 'checking' ||
-      isAgentReady(availability))
-  ) {
-    return null;
-  }
+  // Deliberately "known not ready" rather than "not ready": while the check is in flight there
+  // is no problem to report yet, and a spinner that appears above the headline and then vanishes
+  // is worse than saying nothing.
+  if (onlyWhenNotReady && !isAgentKnownNotReady(availability)) return null;
 
   return (
     <AgentAvailabilityIndicator
