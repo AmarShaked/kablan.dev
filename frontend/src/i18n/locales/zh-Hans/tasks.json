@@ -696,5 +696,13 @@
   "taskForm": {
     "loadingBranches": "加载分支中...",
     "selectBranch": "选择分支"
+  },
+  "workingCopyWarnings": {
+    "uncommitted_one": "仓库中有 1 处未提交的更改，代理看不到它们——任务从最后一次提交开始。",
+    "uncommitted_other": "仓库中有 {{count}} 处未提交的更改，代理看不到它们——任务从最后一次提交开始。",
+    "uncommittedInRepo_one": "{{repo}} 中有 1 处未提交的更改，代理看不到它们——任务从最后一次提交开始。",
+    "uncommittedInRepo_other": "{{repo}} 中有 {{count}} 处未提交的更改，代理看不到它们——任务从最后一次提交开始。",
+    "noRemote": "该仓库没有 git 远程，因此 Kablan 无法推送或发起 PR。",
+    "noRemoteInRepo": "{{repo}} 没有 git 远程，因此 Kablan 无法推送或发起 PR。"
   }
 }
