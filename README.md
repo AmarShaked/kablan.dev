@@ -15,8 +15,9 @@ the app, and merge or open a PR when it looks right.
 npx kablan
 ```
 
-Nothing to install and no account. Kablan opens in your browser and drives each agent's own
-CLI, so it uses the subscription you already have and never sees your model credentials.
+No install step and no account. Kablan opens in your browser and drives each agent's own CLI,
+so it uses the subscription you already have and never sees your model credentials — which
+also means you need that agent installed and signed in first. See [Install](#install).
 
 <p align="center">
   <img src="landing/images/task-view.png" alt="Kablan task view: the project’s tasks on the left, the agent conversation in the middle, and attempt details on the right" />
@@ -62,12 +63,30 @@ See [NOTICE](NOTICE) for what this fork changes.
 
 ## Install
 
+You need Node 18 or newer, git, and a coding agent CLI that is **already installed and signed
+in** — `claude`, `codex`, or whichever you use. Kablan drives the agent's own CLI and holds no
+model credentials of its own, so a task started against an agent you have not authenticated
+will fail.
+
 ```bash
 npx kablan
 ```
 
 The wrapper downloads the binary for your platform from this repository's latest release,
-caches it under `~/.kablan/bin`, and runs it. Kablan opens in your browser.
+checks it against the published checksum, caches it under `~/.kablan/bin`, and runs it. Kablan
+opens in your browser.
+
+### Platforms
+
+Verified: **macOS on Apple Silicon**. A cold start on a clean machine downloads 15MB, is
+listening in about six seconds, and opens the browser itself.
+
+Builds for macOS x64, Linux x64 and Windows x64 are published and checksum correctly, but
+nobody has run them on a clean machine yet — treat them as untested rather than supported.
+
+There is no ARM64 Linux or ARM64 Windows build in the release, so Graviton, Raspberry Pi, an
+ARM Linux container and Snapdragon/Surface ARM machines get a 404 on the download. If that is
+you, [open an issue](https://github.com/AmarShaked/kablan.dev/issues) — it moves the decision.
 
 ### As a Mac app
 

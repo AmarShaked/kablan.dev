@@ -1,23 +1,45 @@
 ---
 title: "Install & Run Kablan"
-description: "Complete installation guide for Kablan on macOS, Linux, and Windows"
+description: "How to install and run Kablan, and which platforms are verified"
 sidebarTitle: "Installation"
 ---
 
 ## Supported Systems
 
-We build and test Kablan on the following systems:
+Kablan v0.11.6 publishes binaries for six platform targets, but only one of them has been run
+end to end on a clean machine. The honest state:
 
-- macOS (Intel and Apple Silicon)
-- Linux
-- Windows
+| Platform | Binary published | Run on a clean machine |
+|---|---|---|
+| macOS arm64 (Apple Silicon) | yes | **yes — verified** |
+| macOS x64 (Intel) | yes | not yet |
+| Linux x64 | yes | not yet |
+| Windows x64 | yes | not yet |
+| Linux arm64 | **no** | — |
+| Windows arm64 | **no** | — |
+
+"Not yet" means the binary is published and checksums correctly, but nobody has started it on a
+machine that did not already have Kablan on it. Expect rough edges, and
+[tell us](https://github.com/AmarShaked/kablan.dev/issues) what you hit.
+
+<Warning>
+There is no ARM64 Linux or ARM64 Windows build in the release. On AWS Graviton, a Raspberry Pi,
+an ARM Linux container (including one running on an Apple Silicon Mac), or a Snapdragon/Surface
+ARM machine, `npx kablan` fails with a download 404. Whether to build these is an open
+decision — [the issue tracker](https://github.com/AmarShaked/kablan.dev/issues) is where to
+weigh in.
+</Warning>
 
 ## Prerequisites
 
 Before installing Kablan, ensure you have:
 
-- **Node.js**: Latest LTS version recommended
-- **Coding agent authentication**: Authenticate with your preferred coding agents outside of Kablan
+- **Node.js 18 or newer** — the version the npx wrapper requires.
+- **git** — every task is checked out into its own worktree, so git does the real work.
+- **A coding agent CLI, installed and already signed in.** This is the one that actually
+  catches people out. Kablan launches your agent's own CLI and holds no model credentials, so
+  if `claude` or `codex` is installed but not authenticated, your first task will fail. Sign in
+  outside Kablan first — see [supported coding agents](/supported-coding-agents).
 
 ## Safety Notice
 

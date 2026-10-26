@@ -242,7 +242,9 @@
     </div>
     <p class="note">
       No account and no telemetry. Kablan drives each agent&rsquo;s own CLI, so it uses the
-      subscription you already have and never sees your model credentials.
+      subscription you already have and never sees your model credentials &mdash; which also
+      means you need that agent installed and signed in before you start.
+      <a href="#download">What you need</a>.
     </p>
 
     <figure class="shot">
@@ -438,9 +440,24 @@
       </div>
     </div>
 
+    <div class="way" style="margin-top:28px">
+      <h3>What you need</h3>
+      <p>
+        Node 18 or newer, git, and a coding agent CLI that is <strong>already installed and
+        signed in</strong> &mdash; <span class="mono">claude</span>,
+        <span class="mono">codex</span>, or whichever you use. Kablan launches your agent&rsquo;s
+        own CLI, so a task started against an agent you have not authenticated will fail.
+      </p>
+    </div>
+
     <p class="note">
-      Needs Node 18 or newer. macOS on Apple silicon and Intel, Linux x64, Windows x64.
-      Update with <span class="mono">npx kablan@latest</span>; remove the app with
+      <strong>Platforms.</strong> Verified on macOS (Apple silicon) &mdash; a cold start
+      downloads 15MB and is listening in about six seconds. Builds for macOS Intel, Linux x64
+      and Windows x64 are published but have not yet been run on a clean machine, so treat them
+      as untested. There is no ARM64 Linux or ARM64 Windows build, so Graviton, a Raspberry Pi,
+      an ARM Linux container or a Snapdragon machine will fail to download &mdash;
+      <a href="https://github.com/AmarShaked/kablan.dev/issues">say so on the tracker</a> if
+      that is you. Update with <span class="mono">npx kablan@latest</span>; remove the app with
       <span class="mono">npx kablan --uninstall</span>.
     </p>
   </section>
