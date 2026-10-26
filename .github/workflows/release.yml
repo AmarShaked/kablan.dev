@@ -3,12 +3,15 @@ name: Release
 # Builds the CLI binaries, publishes them on a GitHub release, and pushes the npm wrapper that
 # downloads them.
 #
-#   npm version 0.5.0 --workspaces false   # or edit npx-cli/package.json
+#   ./scripts/set-version.sh 0.5.0
+#   git commit -am "chore(release): 0.5.0"
 #   git tag v0.5.0 && git push origin v0.5.0
 #
-# The tag and the package version must match: the wrapper derives its release tag from its own
-# version, so a mismatch would publish a package that downloads nothing. The verify job below
-# fails the run before anything is published if they disagree.
+# The tag, the package version and the crate versions must all agree. The wrapper derives its
+# release tag from its own version, so a mismatch there publishes a package that downloads
+# nothing; the server reports crates/utils' CARGO_PKG_VERSION as APP_VERSION, so a mismatch there
+# publishes an app that misreports which version it is. The verify job fails the run before
+# anything is published if any of them disagree.
 on:
   push:
     tags: ["v*"]
@@ -31,6 +34,28 @@ jobs:
             exit 1
           fi
           echo "version $PKG"
+
+      # crates/utils' CARGO_PKG_VERSION is APP_VERSION — what the running server reports about
+      # itself, and what local-deployment compares against to decide whether to show release
+      # notes after an upgrade. Releasing without bumping it ships an app that reports a version
+      # no release has, and an upgrade notice that cannot fire. 0.11.6 shipped reporting 0.1.8.
+      - name: Tag must match the crate versions
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          failed=
+          for crate in utils server; do
+            FILE="crates/$crate/Cargo.toml"
+            # The version in [package], which is the first one in the file; a dependency's
+            # version further down is a different thing.
+            CRATE=$(awk '/^version = "/ { match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit }' "$FILE")
+            if [ "$TAG" != "$CRATE" ]; then
+              echo "::error file=$FILE::tag v$TAG does not match $FILE version $CRATE — run ./scripts/set-version.sh $TAG"
+              failed=1
+            else
+              echo "$FILE $CRATE"
+            fi
+          done
+          [ -z "$failed" ]
 
   build:
     needs: verify
