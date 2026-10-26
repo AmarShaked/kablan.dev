@@ -17,7 +17,10 @@
   "empty": {
     "title": "還沒有專案",
     "description": "先建立您的第一個專案。",
-    "createFirst": "建立您的第一個專案"
+    "createFirst": "建立您的第一個專案",
+    "steps": {
+      "signin": "Sign in to a coding agent on this machine. Kablan drives your CLI — it doesn't replace it."
+    }
   },
   "projectNotFound": "您要查找的專案不存在或已被刪除。",
   "viewProject": "查看專案",

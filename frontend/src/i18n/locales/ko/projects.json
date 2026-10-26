@@ -17,7 +17,10 @@
   "empty": {
     "title": "아직 프로젝트가 없습니다",
     "description": "첫 번째 프로젝트를 만들어 시작하세요.",
-    "createFirst": "첫 번째 프로젝트 생성"
+    "createFirst": "첫 번째 프로젝트 생성",
+    "steps": {
+      "signin": "Sign in to a coding agent on this machine. Kablan drives your CLI — it doesn't replace it."
+    }
   },
   "projectNotFound": "찾으시는 프로젝트가 존재하지 않거나 삭제되었습니다.",
   "viewProject": "프로젝트 보기",

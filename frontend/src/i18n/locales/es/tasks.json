@@ -153,17 +153,20 @@
     "label": "Rama base"
   },
   "diff": {
-    "collapseAll": "Collapse all diffs",
-    "errorLoadingDiff": "Failed to load diff: {{error}}",
-    "expandAll": "Expand all diffs",
-    "ignoreWhitespace": "Ignorar cambios de espacios en blanco",
-    "filesChanged_one": "{{count}} file changed",
-    "filesChanged_other": "{{count}} files changed",
-    "noChanges": "No changes have been made yet",
     "viewModes": {
       "inline": "Inline view",
       "split": "Split view"
     },
+    "ignoreWhitespace": "Ignorar cambios de espacios en blanco",
+    "errorLoadingDiff": "Failed to load diff: {{error}}",
+    "expandAll": "Expand all diffs",
+    "collapseAll": "Collapse all diffs",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "noChanges": "No changes have been made yet",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "Archivo grande",
       "linesChanged": "{{count}} líneas cambiadas",

@@ -157,6 +157,9 @@
     "filesChanged_one": "{{count}} 個檔案已變更",
     "filesChanged_other": "{{count}} 個檔案已變更",
     "noChanges": "尚未進行任何變更",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "大型檔案",
       "linesChanged": "{{count}} 行已變更",

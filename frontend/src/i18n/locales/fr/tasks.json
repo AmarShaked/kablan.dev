@@ -154,6 +154,9 @@
     "filesChanged_one": "{{count}} fichier modifié",
     "filesChanged_other": "{{count}} fichiers modifiés",
     "noChanges": "Aucune modification n'a encore été effectuée",
+    "noChangesRunning": "No changes yet — the agent is still working.",
+    "noChangesFailed": "This run ended without changing anything.",
+    "noChangesFinished": "The agent finished without changing any files. Read its messages to see why.",
     "largeDiff": {
       "title": "Fichier volumineux",
       "linesChanged": "{{count}} lignes modifiées",

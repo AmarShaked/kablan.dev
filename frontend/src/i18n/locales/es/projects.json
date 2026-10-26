@@ -17,7 +17,10 @@
   "empty": {
     "title": "Aún no hay proyectos",
     "description": "Comienza creando tu primer proyecto.",
-    "createFirst": "Crear tu primer proyecto"
+    "createFirst": "Crear tu primer proyecto",
+    "steps": {
+      "signin": "Sign in to a coding agent on this machine. Kablan drives your CLI — it doesn't replace it."
+    }
   },
   "projectNotFound": "El proyecto que buscas no existe o ha sido eliminado.",
   "viewProject": "Ver Proyecto",

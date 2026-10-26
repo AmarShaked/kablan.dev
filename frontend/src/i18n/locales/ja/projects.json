@@ -17,7 +17,10 @@
   "empty": {
     "title": "プロジェクトがありません",
     "description": "最初のプロジェクトを作成して始めましょう。",
-    "createFirst": "最初のプロジェクトを作成"
+    "createFirst": "最初のプロジェクトを作成",
+    "steps": {
+      "signin": "Sign in to a coding agent on this machine. Kablan drives your CLI — it doesn't replace it."
+    }
   },
   "projectNotFound": "お探しのプロジェクトは存在しないか、削除されました。",
   "viewProject": "プロジェクトを表示",
