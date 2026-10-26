@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { Plus, Settings } from 'lucide-react';
+import { FolderPlus, Plus, Settings } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjectRepos } from '@/hooks';
 import { useOpenProjectInEditor } from '@/hooks/useOpenProjectInEditor';
 import { openTaskForm } from '@/lib/openTaskForm';
+import { ProjectFormDialog } from '@/components/dialogs/projects/ProjectFormDialog';
 import { IdeIcon, getIdeName } from '@/components/ide/IdeIcon';
 import { useUserSystem } from '@/contexts/UserSystemContext';
 import {
@@ -29,6 +30,23 @@ import {
  * the same place whatever the middle of the screen is doing. It is a column of icons,
  * so each one says what it is on hover rather than in a label.
  */
+
+/**
+ * Tasks, Archive, and the projects list are not inside one project, so the project rail
+ * used to vanish and the page ran to the window edge. They get the same column.
+ */
+export function globalRail(
+  pathname: string,
+  search: string
+): 'tasks' | 'archive' | 'projects' | null {
+  if (pathname === '/tasks') {
+    return new URLSearchParams(search).get('archive') === 'archived'
+      ? 'archive'
+      : 'tasks';
+  }
+  if (pathname === '/' || pathname === '/local-projects') return 'projects';
+  return null;
+}
 
 /** One rail button. Plain, not the shared Button: its size variants add padding a rail does not want. */
 function RailButton({
@@ -73,9 +91,11 @@ export function RightRail() {
   const { config } = useUserSystem();
   const navigate = useNavigate();
   const location = useLocation();
-  // Nothing here is about the app, only about a project — so with no project open there is
-  // nothing to show, and an empty rail would just be a stripe.
-  if (!projectId) return null;
+  const global = projectId
+    ? null
+    : globalRail(location.pathname, location.search);
+  // Agents, settings, and the rest are not these lists. An empty column there would just be a stripe.
+  if (!projectId && !global) return null;
 
   // The same condition the header used: with several repositories there is no single thing to
   // open, and the choice belongs in the attempt rather than here.
@@ -84,10 +104,32 @@ export function RightRail() {
   return (
     <TooltipProvider>
       <aside
-        aria-label="Project actions"
+        aria-label={projectId ? 'Project actions' : 'Actions'}
         className="flex h-full w-14 shrink-0 flex-col items-center gap-2 bg-muted/30 py-3"
       >
-        {canOpenInIde && (
+        {global === 'projects' && (
+          <RailButton
+            label="New project"
+            onClick={() => {
+              ProjectFormDialog.show({}).catch(() => {});
+            }}
+          >
+            <FolderPlus className="h-4 w-4" />
+          </RailButton>
+        )}
+
+        {global && (
+          <RailButton
+            label="New task"
+            onClick={() => {
+              openTaskForm({ mode: 'create' }).catch(() => {});
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </RailButton>
+        )}
+
+        {projectId && canOpenInIde && (
           <RailButton
             label={`Open in ${getIdeName(config?.editor?.editor_type)}`}
             onClick={() => openInEditor()}
@@ -99,20 +141,24 @@ export function RightRail() {
           </RailButton>
         )}
 
-        <RailButton
-          label="Project settings"
-          active={isProjectSettingsPath(location.pathname)}
-          onClick={() => navigate(buildProjectSettingsPath(projectId))}
-        >
-          <Settings className="h-4 w-4" />
-        </RailButton>
+        {projectId && (
+          <RailButton
+            label="Project settings"
+            active={isProjectSettingsPath(location.pathname)}
+            onClick={() => navigate(buildProjectSettingsPath(projectId))}
+          >
+            <Settings className="h-4 w-4" />
+          </RailButton>
+        )}
 
-        <RailButton
-          label="New task"
-          onClick={() => openTaskForm({ mode: 'create', projectId })}
-        >
-          <Plus className="h-4 w-4" />
-        </RailButton>
+        {projectId && (
+          <RailButton
+            label="New task"
+            onClick={() => openTaskForm({ mode: 'create', projectId })}
+          >
+            <Plus className="h-4 w-4" />
+          </RailButton>
+        )}
       </aside>
     </TooltipProvider>
   );

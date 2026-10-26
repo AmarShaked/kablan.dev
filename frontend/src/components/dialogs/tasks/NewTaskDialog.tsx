@@ -38,7 +38,6 @@ import {
 import { useProjects } from '@/hooks/useProjects';
 import { defineModal } from '@/lib/modals';
 import { repoKeys } from '@/lib/queryKeys';
-import { cn } from '@/lib/utils';
 import { firstRunSelection } from '@/utils/agentRun';
 import type { TaskFormDialogProps } from './TaskFormDialog';
 
@@ -554,13 +553,25 @@ function BranchChip({
   disabled: boolean;
   onSelect: (branch: string) => void;
 }) {
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLowerCase();
+  const branches = needle
+    ? config.branches.filter((branch) =>
+        branch.name.toLowerCase().includes(needle)
+      )
+    : config.branches;
   const label = config.targetBranch
     ? showRepo
       ? `${config.repoDisplayName} · ${config.targetBranch}`
       : config.targetBranch
     : 'Branch';
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) setQuery('');
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <ChipButton
           icon={<GitBranch className="h-3.5 w-3.5" />}
@@ -570,20 +581,45 @@ function BranchChip({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="max-h-64 w-64 overflow-y-auto"
+        className="w-64 p-0"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          searchRef.current?.focus();
+        }}
       >
-        {config.branches.map((branch) => (
-          <DropdownMenuItem
-            key={branch.name}
-            onClick={() => onSelect(branch.name)}
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            <span className="min-w-0 flex-1 truncate">{branch.name}</span>
-            {branch.name === config.targetBranch && (
-              <Check className={cn('h-3.5 w-3.5')} />
-            )}
-          </DropdownMenuItem>
-        ))}
+        <div
+          className="border-b p-1.5"
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search branches"
+            aria-label="Search branches"
+            className="h-7 w-full bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto p-1">
+          {branches.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">
+              No matching branch
+            </p>
+          ) : (
+            branches.map((branch) => (
+              <DropdownMenuItem
+                key={branch.name}
+                onClick={() => onSelect(branch.name)}
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                <span className="min-w-0 flex-1 truncate">{branch.name}</span>
+                {branch.name === config.targetBranch && (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+              </DropdownMenuItem>
+            ))
+          )}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

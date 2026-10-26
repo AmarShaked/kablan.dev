@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { ProjectHeader } from '@/components/layout/ProjectHeader';
 import { ProjectsSidebar } from '@/components/layout/ProjectsSidebar';
 import { RightRail } from '@/components/layout/RightRail';
+import { SilenceButton } from '@/components/layout/SilenceButton';
 import { PageBoundary } from '@/components/routing/RouteRecovery';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
@@ -30,6 +31,7 @@ export function NormalLayout() {
       {/* Outside the inset, so it runs the full height of the window like the sidebar opposite
           it — the header belongs to the page between them, not to either edge. */}
       <RightRail />
+      <SilenceButton />
     </SidebarProvider>
   );
 }
