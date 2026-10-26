@@ -1,6 +1,14 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ListChecks, Moon, Plus, Settings, Sun } from 'lucide-react';
+import {
+  Archive,
+  Bug,
+  ListChecks,
+  Moon,
+  Plus,
+  Settings,
+  Sun,
+} from 'lucide-react';
 
 import { ThemeMode } from 'shared/types';
 import { projectStatsApi } from '@/lib/api';
@@ -13,6 +21,7 @@ import { Logo } from '@/components/Logo';
 import { BuildBadges } from '@/components/layout/BuildBadges';
 import { useTheme } from '@/components/ThemeProvider';
 import { useUserSystem } from '@/contexts/UserSystemContext';
+import { buildReportProblemUrl } from '@/lib/reportProblem';
 import { getActualTheme } from '@/utils/theme';
 import {
   Sidebar,
@@ -72,7 +81,7 @@ export function ProjectsSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { config, updateAndSaveConfig } = useUserSystem();
+  const { config, environment, updateAndSaveConfig } = useUserSystem();
   const { configuredAgents, isConnected } = useConfiguredAgents();
   const { enabledIntegrations, isConnected: isIntegrationConnected } =
     useConfiguredIntegrations();
@@ -412,6 +421,26 @@ export function ProjectsSidebar() {
                 <Settings />
                 <span>Settings</span>
               </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          {/*
+            The way out when Kablan is the problem. Nothing here is sent — the link opens a
+            GitHub issue form with the version, OS and agent already filled in, and the person
+            reads it and presses Submit, or doesn't.
+          */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Report a problem">
+              <a
+                href={buildReportProblemUrl({
+                  environment,
+                  executor: config?.last_agent_selection?.executor,
+                })}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Bug />
+                <span>Report a problem</span>
+              </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
