@@ -1,18 +1,40 @@
 use axum::{
+    Json,
     body::Body,
     http::HeaderValue,
     response::{IntoResponse, Response},
 };
 use reqwest::{StatusCode, header};
 use rust_embed::RustEmbed;
+use utils::response::ApiResponse;
 
 #[derive(RustEmbed)]
 #[folder = "../../frontend/dist"]
 pub struct Assets;
 
-pub async fn serve_frontend(uri: axum::extract::Path<String>) -> impl IntoResponse {
+pub async fn serve_frontend(uri: axum::extract::Path<String>) -> Response {
     let path = uri.trim_start_matches('/');
-    serve_file(path).await
+    if is_api_path(path) {
+        return api_not_found(path);
+    }
+    serve_file(path).await.into_response()
+}
+
+/// Axum flattens `nest("/api", ..)` into the outer router, so an `/api` path that
+/// matches no route falls through to the SPA catch-all below. Answering those with
+/// index.html makes a wrong API path look like a 200 returning unparseable data.
+fn is_api_path(path: &str) -> bool {
+    path == "api" || path.starts_with("api/")
+}
+
+fn api_not_found(path: &str) -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ApiResponse::<()>::error(&format!(
+            "No API route matches /{path}"
+        ))),
+    )
+        .into_response()
 }
 
 pub async fn serve_frontend_root() -> impl IntoResponse {
@@ -50,5 +72,55 @@ async fn serve_file(path: &str) -> impl IntoResponse + use<> {
                     .unwrap()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::to_bytes, extract::Path};
+
+    use super::*;
+
+    #[test]
+    fn api_paths_are_recognised() {
+        assert!(is_api_path("api"));
+        assert!(is_api_path("api/execution-processes"));
+        assert!(is_api_path("api/task-attempts/abc/execution-processes"));
+
+        assert!(!is_api_path("apidocs"));
+        assert!(!is_api_path("projects/abc/tasks"));
+        assert!(!is_api_path("assets/index-abc123.js"));
+    }
+
+    #[tokio::test]
+    async fn unknown_api_path_returns_json_404_not_the_spa() {
+        let response = serve_frontend(Path(
+            "api/task-attempts/abc/execution-processes".to_string(),
+        ))
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("application/json")
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(
+            !body.contains("<!DOCTYPE html>"),
+            "got the SPA bundle: {body}"
+        );
+        assert!(
+            body.contains("\"success\":false"),
+            "unexpected body: {body}"
+        );
+        assert!(
+            body.contains("/api/task-attempts/abc/execution-processes"),
+            "404 should name the path that missed: {body}"
+        );
     }
 }
