@@ -157,6 +157,8 @@ export function agentBlurb(agent: BaseCodingAgent): string {
       return 'Sourcegraph Amp';
     case BaseCodingAgent.GEMINI:
       return 'Google Gemini';
+    case BaseCodingAgent.CODEX:
+      return 'OpenAI Codex';
     case BaseCodingAgent.OPENCODE:
       return 'Open-source agent';
     case BaseCodingAgent.CURSOR_AGENT:
@@ -178,6 +180,8 @@ export function defaultAgentCommand(agent: BaseCodingAgent): string {
       return 'amp';
     case BaseCodingAgent.GEMINI:
       return 'gemini';
+    case BaseCodingAgent.CODEX:
+      return 'codex';
     case BaseCodingAgent.OPENCODE:
       return 'opencode';
     case BaseCodingAgent.CURSOR_AGENT:

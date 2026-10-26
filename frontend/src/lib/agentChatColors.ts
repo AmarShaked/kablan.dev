@@ -24,6 +24,11 @@ const TONES: Record<BaseCodingAgent, AgentChatTone> = {
     mention: 'bg-success/20 text-success',
     name: 'text-success',
   },
+  [Agent.CODEX]: {
+    avatar: 'bg-primary/10 text-foreground',
+    mention: 'bg-primary/10 text-foreground',
+    name: 'text-foreground',
+  },
   [Agent.AMP]: {
     avatar: 'bg-primary/10 text-foreground',
     mention: 'bg-primary/10 text-foreground',

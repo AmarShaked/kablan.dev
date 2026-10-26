@@ -27,6 +27,8 @@ export function getAgentName(
       return 'AMP';
     case BaseCodingAgent.GEMINI:
       return 'Gemini';
+    case BaseCodingAgent.CODEX:
+      return 'Codex';
     case BaseCodingAgent.OPENCODE:
       return 'OpenCode';
     case BaseCodingAgent.CURSOR_AGENT:
@@ -62,6 +64,9 @@ export function AgentIcon({ agent, className }: AgentIconProps) {
       break;
     case BaseCodingAgent.GEMINI:
       iconPath = `/agents/gemini${suffix}.svg`;
+      break;
+    case BaseCodingAgent.CODEX:
+      iconPath = `/agents/codex${suffix}.svg`;
       break;
     case BaseCodingAgent.OPENCODE:
       iconPath = `/agents/opencode${suffix}.svg`;

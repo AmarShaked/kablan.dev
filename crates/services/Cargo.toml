@@ -6,7 +6,7 @@ edition = "2024"
 [features]
 # Passthrough: see crates/executors for what this costs.
 codex = ["executors/codex"]
-default = []
+default = ["codex"]
 cloud = []
 qa-mode = ["executors/qa-mode"]
 
