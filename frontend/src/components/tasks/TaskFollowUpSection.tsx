@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { useReview } from '@/contexts/ReviewProvider';
 import { useClickedElements } from '@/contexts/ClickedElementsProvider';
 import { useEntries } from '@/contexts/EntriesContext';
-import { ContextMeter, contextIsHeavy } from '@/components/tasks/ContextMeter';
+import { contextIsHeavy } from '@/components/tasks/ContextMeter';
 import { useKeySubmitFollowUp, Scope } from '@/keyboard';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { useProject } from '@/contexts/ProjectContext';
@@ -568,8 +568,8 @@ export function TaskFollowUpSection({
   const editorPlaceholder = useMemo(
     () =>
       hasExtraContext
-        ? '(Optional) Add additional instructions... Type @ to insert tags or search files.'
-        : 'Continue working on this task... Type @ to insert tags or search files.',
+        ? 'Add more detail, or ask a question'
+        : 'Describe a change or ask a question',
     [hasExtraContext]
   );
 
@@ -679,15 +679,10 @@ export function TaskFollowUpSection({
         </div>
       </div>
 
-      {/* The composer, as one capsule.
-          The primary control on the right is a single button whose job changes with the state,
-          rather than a row that reflows every time the agent starts or stops:
-            idle            → Send
-            running, text   → Queue (this message runs when the current one finishes)
-            running, empty  → Stop (there is nothing to queue, so the useful act is to interrupt)
-          Cancel-queue takes the slot once something is queued, since that is the only thing you
-          can usefully do to a queued message from here. */}
-      <div className="min-h-0 shrink-0 p-3">
+      {/* The composer, as the bar in the reference: one rounded field, the add
+          control on the left and send on the right, and the run choices as a
+          quiet row underneath rather than pills inside the field. */}
+      <div className="min-h-0 shrink-0 px-3 pb-3">
         {/* The one place the context size is worth interrupting for: right where you are about
             to spend it. Above the threshold, sending costs several times what the same message
             costs on a fresh session, and the only thing that changes that is clearing. */}
@@ -712,13 +707,7 @@ export function TaskFollowUpSection({
             </button>
           </div>
         )}
-        <div
-          className={cn(
-            'flex max-h-[min(55vh,28rem)] min-h-0 flex-col overflow-hidden rounded-3xl border border-input bg-background transition-shadow',
-            'group-data-[scrolled=true]/composer:shadow-lg',
-            isTextareaFocused && 'border-ring'
-          )}
-        >
+        <div className="flex flex-col gap-1.5">
           <input
             ref={fileInputRef}
             type="file"
@@ -735,47 +724,11 @@ export function TaskFollowUpSection({
             disabled={!isEditable || isQueueLoading}
           />
           <div
-            className="min-h-0 flex-1 overflow-y-auto px-4 pt-3"
-            onFocus={() => setIsTextareaFocused(true)}
-            onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget)) {
-                setIsTextareaFocused(false);
-              }
-            }}
+            className={cn(
+              'flex min-h-11 items-center gap-1 rounded-[22px] border border-border bg-muted/40 px-1.5',
+              isTextareaFocused && 'border-foreground/25'
+            )}
           >
-            <WYSIWYGEditor
-              placeholder={editorPlaceholder}
-              value={displayMessage}
-              onChange={handleEditorChange}
-              disabled={!isEditable}
-              onPasteFiles={handlePasteFiles}
-              repoIds={repos.map((r) => r.id)}
-              projectId={projectId}
-              executor={latestProfileId?.executor ?? null}
-              taskAttemptId={workspaceId}
-              onCmdEnter={handleSubmitShortcut}
-              className="min-h-[40px]"
-            />
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 px-3 pb-2.5 pt-1">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-              {/* The context is what the next turn costs, so it sits with the controls you
-                  are about to send with. */}
-              <ContextMeter info={tokenUsageInfo} variant="row" />
-
-              <AgentRunControls
-                variant="chips"
-                showPermission
-                selection={selection}
-                onChange={(next) =>
-                  setSelection({ ...next, executor: selection.executor })
-                }
-                agentFixed
-                disabled={!isEditable}
-              />
-            </div>
-
             <ComposerMenu
               onUpload={handleAttachClick}
               tags={tags}
@@ -785,19 +738,29 @@ export function TaskFollowUpSection({
               onVariantChange={setSelectedVariant}
               disabled={!isEditable}
             />
-
-            {comments.length > 0 && (
-              <Button
-                onClick={clearComments}
-                size="sm"
-                variant="ghost"
-                className="h-8 shrink-0 rounded-full text-xs text-destructive"
+            <div
+              className="max-h-[min(40vh,16rem)] min-w-0 flex-1 overflow-y-auto py-2"
+              onFocus={() => setIsTextareaFocused(true)}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                  setIsTextareaFocused(false);
+                }
+              }}
+            >
+              <WYSIWYGEditor
+                placeholder={editorPlaceholder}
+                value={displayMessage}
+                onChange={handleEditorChange}
                 disabled={!isEditable}
-              >
-                {t('followUp.clearReviewComments')}
-              </Button>
-            )}
-
+                onPasteFiles={handlePasteFiles}
+                repoIds={repos.map((r) => r.id)}
+                projectId={projectId}
+                executor={latestProfileId?.executor ?? null}
+                taskAttemptId={workspaceId}
+                onCmdEnter={handleSubmitShortcut}
+                className="min-h-[22px]"
+              />
+            </div>
             {(() => {
               const busy = isQueueLoading || isStopping || isSendingFollowUp;
               const hasText = Boolean(
@@ -837,9 +800,13 @@ export function TaskFollowUpSection({
                 <Button
                   onClick={action.onClick}
                   disabled={action.disabled || busy}
-                  variant={action.destructive ? 'destructive' : 'default'}
+                  variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-full"
+                  className={cn(
+                    'h-7 w-7 shrink-0 rounded-full text-muted-foreground',
+                    action.destructive &&
+                      'text-destructive hover:text-destructive'
+                  )}
                   title={action.label}
                   aria-label={action.label}
                 >
@@ -852,6 +819,29 @@ export function TaskFollowUpSection({
               );
             })()}
           </div>
+
+          <AgentRunControls
+            variant="plain"
+            showPermission
+            selection={selection}
+            onChange={(next) =>
+              setSelection({ ...next, executor: selection.executor })
+            }
+            agentFixed
+            disabled={!isEditable}
+            afterPermission={
+              comments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearComments}
+                  disabled={!isEditable}
+                  className="shrink-0 rounded-md px-1.5 text-xs text-destructive hover:bg-accent"
+                >
+                  {t('followUp.clearReviewComments')}
+                </button>
+              )
+            }
+          />
         </div>
       </div>
     </div>

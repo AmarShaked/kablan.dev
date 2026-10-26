@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Check,
   FilePen,
@@ -48,16 +49,22 @@ export function AgentRunControls({
   disabled = false,
   variant = 'bar',
   showPermission = false,
+  afterPermission,
 }: {
   selection: AgentRunSelection;
   onChange: (next: AgentRunSelection) => void;
   /** Follow-ups keep the agent the task started with. */
   agentFixed?: boolean;
   disabled?: boolean;
-  /** `chips` draws each control as a small pill under the input. */
-  variant?: 'bar' | 'chips';
+  /**
+   * `chips` draws each control as a small pill. `plain` is the quiet row under
+   * the follow-up field: an icon, a word, and the model at the far end.
+   */
+  variant?: 'bar' | 'chips' | 'plain';
   /** Follow-up chips include the permission mode. New task leaves it stored. */
   showPermission?: boolean;
+  /** Sits in the plain row after the permission word. */
+  afterPermission?: ReactNode;
 }) {
   const { configuredAgents } = useConfiguredAgents();
   const { data: cache } = useQuery({
@@ -80,17 +87,30 @@ export function AgentRunControls({
     });
   };
 
+  const plain = variant === 'plain';
+  const chip = variant === 'chips';
   const agentMenu = agentFixed ? (
-    <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 text-xs text-foreground">
-      <AgentIcon agent={selection.executor} className="h-3.5 w-3.5" />
-      <span className="truncate">{agentLabel(selection.executor)}</span>
-    </span>
+    plain ? (
+      <span
+        title={agentLabel(selection.executor)}
+        aria-label={agentLabel(selection.executor)}
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground"
+      >
+        <AgentIcon agent={selection.executor} className="h-3.5 w-3.5" />
+      </span>
+    ) : (
+      <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 text-xs text-foreground">
+        <AgentIcon agent={selection.executor} className="h-3.5 w-3.5" />
+        <span className="truncate">{agentLabel(selection.executor)}</span>
+      </span>
+    )
   ) : (
     <AgentMenu
       agents={configuredAgents}
       executor={selection.executor}
       disabled={disabled}
-      chip={variant === 'chips'}
+      chip={chip}
+      plain={plain}
       onChange={chooseAgent}
     />
   );
@@ -108,10 +128,30 @@ export function AgentRunControls({
             : '…'
       }
       disabled={disabled}
-      chip={variant === 'chips'}
+      chip={chip}
+      plain={plain}
       onChange={(model) => onChange({ ...selection, model })}
     />
   );
+
+  if (plain) {
+    return (
+      <div className="flex w-full min-w-0 items-center gap-1">
+        {agentMenu}
+        {showPermission && (
+          <PermissionMenu
+            agent={selection.executor}
+            permission={selection.permission}
+            disabled={disabled}
+            plain
+            onChange={(permission) => onChange({ ...selection, permission })}
+          />
+        )}
+        {afterPermission}
+        <div className="ml-auto min-w-0">{modelMenu}</div>
+      </div>
+    );
+  }
 
   if (variant === 'chips') {
     return (
@@ -172,12 +212,14 @@ function PermissionMenu({
   permission,
   disabled,
   chip = false,
+  plain = false,
   onChange,
 }: {
   agent: BaseCodingAgent;
   permission: PermissionLevel;
   disabled: boolean;
   chip?: boolean;
+  plain?: boolean;
   onChange: (permission: PermissionLevel) => void;
 }) {
   const modes = supportedPermissions(agent);
@@ -192,12 +234,14 @@ function PermissionMenu({
           disabled={disabled}
           aria-label="Permission"
           className={
-            chip
-              ? chipTriggerClass
-              : 'h-8 shrink-0 px-2 text-sm font-normal text-foreground/80'
+            plain
+              ? 'h-6 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground'
+              : chip
+                ? chipTriggerClass
+                : 'h-8 shrink-0 px-2 text-sm font-normal text-foreground/80'
           }
         >
-          {chip && <Icon className="text-muted-foreground" />}
+          {chip && !plain && <Icon className="text-muted-foreground" />}
           {permissionLabel(permission)}
         </Button>
       </DropdownMenuTrigger>
@@ -230,12 +274,14 @@ function AgentMenu({
   executor,
   disabled,
   chip = false,
+  plain = false,
   onChange,
 }: {
   agents: BaseCodingAgent[];
   executor: BaseCodingAgent;
   disabled: boolean;
   chip?: boolean;
+  plain?: boolean;
   onChange: (executor: BaseCodingAgent) => void;
 }) {
   return (
@@ -248,13 +294,17 @@ function AgentMenu({
           disabled={disabled}
           aria-label="Agent"
           className={
-            chip
-              ? `max-w-[12rem] ${chipTriggerClass}`
-              : 'h-8 max-w-[10rem] px-2 text-sm font-normal text-foreground/80'
+            plain
+              ? 'h-6 w-6 px-0 text-muted-foreground'
+              : chip
+                ? `max-w-[12rem] ${chipTriggerClass}`
+                : 'h-8 max-w-[10rem] px-2 text-sm font-normal text-foreground/80'
           }
         >
-          {chip && <AgentIcon agent={executor} className="h-3.5 w-3.5" />}
-          <span className="truncate">{agentLabel(executor)}</span>
+          {(chip || plain) && (
+            <AgentIcon agent={executor} className="h-3.5 w-3.5" />
+          )}
+          {!plain && <span className="truncate">{agentLabel(executor)}</span>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top" className="w-56">
@@ -277,6 +327,7 @@ function ModelMenu({
   selectedLabel,
   disabled,
   chip = false,
+  plain = false,
   onChange,
 }: {
   models: ListedModel[];
@@ -286,6 +337,7 @@ function ModelMenu({
   selectedLabel: string;
   disabled: boolean;
   chip?: boolean;
+  plain?: boolean;
   onChange: (model: string | null) => void;
 }) {
   const featured = models.filter((model) => model.featured);
@@ -301,12 +353,16 @@ function ModelMenu({
           disabled={disabled}
           aria-label="Model"
           className={
-            chip
-              ? `max-w-[12rem] ${chipTriggerClass}`
-              : 'h-8 max-w-[12rem] px-2 text-sm font-normal text-foreground/80'
+            plain
+              ? 'h-6 max-w-[14rem] px-1.5 text-xs font-normal text-foreground/80'
+              : chip
+                ? `max-w-[12rem] ${chipTriggerClass}`
+                : 'h-8 max-w-[12rem] px-2 text-sm font-normal text-foreground/80'
           }
         >
-          {chip && <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />}
+          {chip && !plain && (
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
           <span className="truncate">{selectedLabel}</span>
         </Button>
       </DropdownMenuTrigger>

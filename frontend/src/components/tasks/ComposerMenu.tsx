@@ -130,7 +130,7 @@ export function ComposerMenu({
           variant="ghost"
           size="icon"
           disabled={disabled}
-          className="h-8 w-8 shrink-0 rounded-full"
+          className="h-7 w-7 shrink-0 rounded-full text-muted-foreground"
           title={t('followUp.menu.label', 'Add to message')}
           aria-label={t('followUp.menu.label', 'Add to message')}
         >
