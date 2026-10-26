@@ -553,7 +553,6 @@ function BranchChip({
   disabled: boolean;
   onSelect: (branch: string) => void;
 }) {
-  const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
   const branches = needle
@@ -579,20 +578,13 @@ function BranchChip({
           disabled={disabled}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-64 p-0"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          searchRef.current?.focus();
-        }}
-      >
+      <DropdownMenuContent align="start" className="w-64 p-0">
         <div
           className="border-b p-1.5"
           onKeyDown={(event) => event.stopPropagation()}
         >
           <input
-            ref={searchRef}
+            autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search branches"
