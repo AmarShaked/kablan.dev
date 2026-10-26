@@ -267,26 +267,6 @@
     "createNew": "Créer un nouveau projet",
     "noProjectsFound": "Aucun projet trouvé"
   },
-  "betaWorkspaces": {
-    "title": "Essayer la nouvelle interface",
-    "intro": "Nous avons reconstruit l'interface de Kablan de A à Z, et vous êtes invité à l'essayer.",
-    "newUiDescription": "La nouvelle interface est optimisée pour le travail quotidien : jongler avec les agents, prévisualiser les modifications et réviser le code. Elle débloque également des fonctionnalités non disponibles dans l'ancienne interface :",
-    "newFeatures": {
-      "multiRepo": "Modifier plusieurs dépôts en même temps",
-      "multiAgent": "Exécuter plusieurs conversations d'agents (même avec différents agents) dans un seul espace de travail",
-      "commandBar": "Navigation plus rapide avec la barre de commandes"
-    },
-    "oldUiDescription": "Pour l'instant, quelques éléments restent dans l'interface actuelle :",
-    "oldFeatures": {
-      "kanban": "Gestion des tâches sur le tableau kanban",
-      "settings": "Modification des paramètres",
-      "projects": "Gestion des projets"
-    },
-    "transition": "Pendant la transition au cours des prochaines semaines, vous passerez d'une interface à l'autre.",
-    "optOutNote": "Vous souhaitez vous désinscrire ? Vous pouvez revenir à l'interface actuelle à tout moment dans les Paramètres.",
-    "joinBeta": "Rejoindre la bêta",
-    "maybeLater": "Peut-être plus tard"
-  },
   "workspacesGuide": {
     "welcome": {
       "title": "Bienvenue",

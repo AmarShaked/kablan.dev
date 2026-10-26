@@ -277,13 +277,6 @@
           "description": "オンボーディングフローをリセットします。",
           "button": "リセット"
         }
-      },
-      "beta": {
-        "title": "ベータ機能",
-        "description": "リリース前の実験的な機能を試す。",
-        "workspaces": {
-          "label": "ワークスペースベータを有効化"
-        }
       }
     },
     "agents": {

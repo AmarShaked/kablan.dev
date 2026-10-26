@@ -277,13 +277,6 @@
           "description": "重設入門流程。",
           "button": "重設"
         }
-      },
-      "beta": {
-        "title": "Beta 功能",
-        "description": "在正式發布前試用實驗性功能。",
-        "workspaces": {
-          "label": "啟用工作區 Beta"
-        }
       }
     },
     "agents": {

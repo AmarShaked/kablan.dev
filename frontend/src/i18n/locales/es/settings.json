@@ -277,13 +277,6 @@
           "description": "Restablece el flujo de Introducción.",
           "button": "Restablecer"
         }
-      },
-      "beta": {
-        "title": "Funciones Beta",
-        "description": "Prueba funciones experimentales antes de su lanzamiento.",
-        "workspaces": {
-          "label": "Habilitar Beta de Workspaces"
-        }
       }
     },
     "agents": {
