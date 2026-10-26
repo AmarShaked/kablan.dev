@@ -16,6 +16,9 @@ const { createInstallLogger } = require("../bin/install-log");
  * process.
  */
 
+const HOME = "/Users/x";
+const UID = 501;
+
 /** A machine whose process table is `processes`, with pids that die when signalled. */
 function fakeMachine(processes, { ignoresSigterm = [] } = {}) {
   const living = new Set(processes.map((p) => p.pid));
@@ -27,6 +30,8 @@ function fakeMachine(processes, { ignoresSigterm = [] } = {}) {
     living,
     deps: {
       listProcesses: () => processes,
+      homeDir: HOME,
+      uid: UID,
       kill: (pid, signal) => {
         if (!living.has(pid)) throw new Error("ESRCH");
         signals.push({ pid, signal });
@@ -47,6 +52,11 @@ function fakeMachine(processes, { ignoresSigterm = [] } = {}) {
 const CACHED_SERVER = "/Users/x/.kablan/bin/v0.9.1/macos-arm64/kablan";
 const BUNDLE_SERVER = "/Users/x/Applications/Kablan.app/Contents/MacOS/kablan-server";
 const MCP_SERVER = "/Users/x/.kablan/bin/v0.9.1/macos-arm64/kablan-mcp";
+
+// Same binary, same shape, somebody else's: a second HOME for this user (a sandbox, a test
+// harness, a second account's home on a shared box) and a second account on the machine.
+const OTHER_HOME_SERVER = "/Users/x/sandbox/home/.kablan/bin/v0.11.6/macos-arm64/kablan";
+const OTHER_USER_SERVER = "/Users/y/.kablan/bin/v0.11.5/macos-arm64/kablan";
 
 test("stops every managed process, not just the first", () => {
   const machine = fakeMachine([
@@ -150,10 +160,10 @@ test("only the executable counts, never the arguments", () => {
   // Observed on a real machine: `ps` prints whole command lines, so the shell that launched a
   // server carries the server's path in its arguments. Matching anywhere in the line would have
   // signalled the shell — and, in a terminal, that is the user's session.
-  assert.strictEqual(classify(`/bin/zsh -c nohup ${CACHED_SERVER}`), null);
-  assert.strictEqual(classify(`tail -f ${CACHED_SERVER}`), null);
-  assert.strictEqual(classify(`/usr/bin/vim ${CACHED_SERVER}`), null);
-  assert.strictEqual(classify(`${CACHED_SERVER} --mcp`), "server", "args of our own are fine");
+  assert.strictEqual(classify(`/bin/zsh -c nohup ${CACHED_SERVER}`, HOME), null);
+  assert.strictEqual(classify(`tail -f ${CACHED_SERVER}`, HOME), null);
+  assert.strictEqual(classify(`/usr/bin/vim ${CACHED_SERVER}`, HOME), null);
+  assert.strictEqual(classify(`${CACHED_SERVER} --mcp`, HOME), "server", "args of our own are fine");
   assert.strictEqual(executableOf("/bin/zsh -c foo"), "/bin/zsh");
   assert.strictEqual(executableOf(CACHED_SERVER), CACHED_SERVER);
 });
@@ -171,11 +181,75 @@ test("a shell holding the path in its arguments is never signalled", () => {
 });
 
 test("classify names the kinds it knows and refuses the rest", () => {
-  assert.strictEqual(classify(CACHED_SERVER), "server");
-  assert.strictEqual(classify(MCP_SERVER), "MCP server");
-  assert.strictEqual(classify(BUNDLE_SERVER), "installed app");
-  assert.strictEqual(classify("/Users/x/Projects/kablan-app/target/debug/server"), null);
-  assert.strictEqual(classify("/usr/bin/vim"), null);
+  assert.strictEqual(classify(CACHED_SERVER, HOME), "server");
+  assert.strictEqual(classify(MCP_SERVER, HOME), "MCP server");
+  assert.strictEqual(classify(BUNDLE_SERVER, HOME), "installed app");
+  assert.strictEqual(classify("/Users/x/Projects/kablan-app/target/debug/server", HOME), null);
+  assert.strictEqual(classify("/usr/bin/vim", HOME), null);
+});
+
+test("a bundle dragged to /Applications is still ours", () => {
+  // --install only ever writes ~/Applications, but a copy moved to /Applications that survives
+  // an update is the silent-old-version failure this whole mechanism exists to prevent. The uid
+  // test, not the path, is what keeps another account's copy out of this.
+  assert.strictEqual(
+    classify("/Applications/Kablan.app/Contents/MacOS/kablan-server", HOME),
+    "installed app"
+  );
+  assert.strictEqual(classify("/Applications/Kablan Notes.app/Contents/MacOS/Notes", HOME), null);
+});
+
+test("a cache under another HOME is not ours to stop", () => {
+  // F5: classify matched `/.kablan/bin/` anywhere in the path, and every HOME's cache contains
+  // that — so an install under one HOME SIGTERMed servers installed under another.
+  assert.strictEqual(classify(OTHER_HOME_SERVER, HOME), null);
+  assert.strictEqual(classify(OTHER_USER_SERVER, HOME), null);
+  assert.strictEqual(
+    classify("/Users/y/Applications/Kablan.app/Contents/MacOS/kablan-server", HOME),
+    null
+  );
+  assert.strictEqual(classify(CACHED_SERVER, HOME), "server", "our own is still ours");
+});
+
+test("a server under another HOME is left running", () => {
+  const machine = fakeMachine([
+    { pid: 100, command: CACHED_SERVER, uid: UID },
+    { pid: 200, command: OTHER_HOME_SERVER, uid: UID },
+  ]);
+
+  const { stopped } = stopRunningApps(machine.deps);
+
+  assert.deepStrictEqual(stopped.map((s) => s.pid), [100]);
+  assert.deepStrictEqual(machine.signals, [{ pid: 100, signal: "SIGTERM" }]);
+  assert.ok(machine.living.has(200), "the other HOME's server should still be running");
+});
+
+test("our own path under another account is skipped, not signalled", () => {
+  // A shared machine: the path test cannot see the difference once two accounts' bundles sit in
+  // /Applications, so ownership is the uid.
+  const machine = fakeMachine([
+    { pid: 100, command: "/Applications/Kablan.app/Contents/MacOS/kablan-server", uid: 502 },
+    { pid: 200, command: CACHED_SERVER, uid: UID },
+  ]);
+
+  const { stopped, skipped } = stopRunningApps(machine.deps);
+
+  assert.deepStrictEqual(stopped.map((s) => s.pid), [200]);
+  assert.deepStrictEqual(skipped, [{ pid: 100, reason: "another user" }]);
+  assert.ok(machine.living.has(100), "another account's server should still be running");
+});
+
+test("a process table with no uid column falls back to the path test", () => {
+  // `ps` on every platform we ship to reports a uid. If one ever does not, listing nothing — or
+  // stopping nothing — would be worse than the guarantee the paths alone already give.
+  const machine = fakeMachine([
+    { pid: 100, command: CACHED_SERVER, uid: undefined },
+    { pid: 200, command: OTHER_HOME_SERVER, uid: undefined },
+  ]);
+
+  const { stopped } = stopRunningApps(machine.deps);
+
+  assert.deepStrictEqual(stopped.map((s) => s.pid), [100]);
 });
 
 test("versionFromPath reads the cached version, and copes when it cannot", () => {

@@ -70,7 +70,15 @@ window — and opens your browser; output goes to `~/Library/Logs/Kablan/kablan.
 Because the bundle is assembled on your machine rather than downloaded, macOS does not quarantine
 it, so there is no "unidentified developer" prompt and nothing to notarise.
 
-Update with `npx kablan@latest --install`, remove with `npx kablan --uninstall`.
+The app keeps itself current: opening it runs the newest published release, so there is no update
+step. What Finder's Get Info shows is the version of the copy inside the bundle, which runs only
+when npx cannot reach the registry — `npx kablan@latest --install` refreshes that copy, not the
+version you get by double-clicking. Remove with `npx kablan --uninstall`.
+
+Uninstalling removes the app and nothing else. It prints what is left and how large it is: the
+binary cache in `~/.kablan/bin`, and your projects, tasks and database in
+`~/Library/Application Support/dev.kablan.Kablan`. Deleting the second one deletes your Kablan
+history; see [npx-cli/README.md](npx-cli/README.md#uninstalling-and-what-it-leaves).
 
 Authenticate with your coding agent of choice first — Kablan drives the agent's own CLI, it does
 not hold your model credentials.
