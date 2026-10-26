@@ -11,7 +11,11 @@
 <meta property="og:title" content="Kablan — a board for your coding agents" />
 <meta property="og:description" content="Come in, start a task, and let the agent you already pay for work in its own git worktree. Review, run, merge." />
 <meta property="og:type" content="website" />
-<meta property="og:image" content="https://kablan.dev/images/task-view.png" />
+<!-- Absolute URLs, because Open Graph scrapers do not resolve relative ones. These point at
+     the Vercel host until kablan.dev is registered; swap both when it is. -->
+<meta property="og:url" content="https://landing-jade-gamma-26.vercel.app/" />
+<meta property="og:image" content="https://landing-jade-gamma-26.vercel.app/social-preview.png" />
+<meta name="twitter:card" content="summary_large_image" />
 
 <link rel="stylesheet" href="fonts.css" />
 
@@ -464,7 +468,7 @@
       Windows build in this release, so Graviton, a Raspberry Pi, an ARM Linux container or a
       Snapdragon machine gets a 404 today &mdash; both are in the pipeline for the next
       release. Full detail in
-      <a href="https://docs.kablan.dev/getting-started">the install docs</a>. Update with
+      <a href="https://site-ruddy-eta-58.vercel.app/getting-started">the install docs</a>. Update with
       <span class="mono">npx kablan@latest</span>; remove the app with
       <span class="mono">npx kablan --uninstall</span>.
     </p>
