@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 use workspace_utils::{
     approvals::ApprovalStatus, diff::create_unified_diff, log_msg::LogMsg, msg_store::MsgStore,
-    path::make_path_relative,
+    path::make_path_relative, shell::resolve_executable_path_blocking,
 };
 
 use self::{
@@ -55,6 +55,34 @@ fn base_command(claude_code_router: bool) -> &'static str {
     } else {
         "npx -y @anthropic-ai/claude-code@2.1.306"
     }
+}
+
+/// The executable Kablan actually launches. Claude Code is run through `npx` at a pinned
+/// version rather than from a `claude` on PATH, so this is the program whose absence means
+/// the agent cannot run at all.
+fn runner_executable(command: &str) -> &str {
+    command.split_whitespace().next().unwrap_or(command)
+}
+
+/// True when `~/.claude.json` carries a signed-in `oauthAccount` object.
+/// Parsed shallowly: the file also holds per-project history and grows large.
+fn claude_json_has_oauth_account(contents: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(contents)
+        .ok()
+        .and_then(|value| value.get("oauthAccount").cloned())
+        .is_some_and(|account| account.is_object())
+}
+
+/// The auth file's mtime. This is when the file last changed, not when the user
+/// authenticated — the two coincide at login and drift apart afterwards.
+fn file_modified_unix_secs(path: &std::path::Path) -> Option<i64> {
+    std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs() as i64)
 }
 
 use derivative::Derivative;
@@ -276,20 +304,41 @@ impl StandardCodingAgentExecutor for ClaudeCode {
     }
 
     fn get_availability_info(&self) -> AvailabilityInfo {
-        let auth_file_path = dirs::home_dir().map(|home| home.join(".claude.json"));
-
-        if let Some(path) = auth_file_path
-            && let Some(timestamp) = std::fs::metadata(&path)
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-        {
-            return AvailabilityInfo::LoginDetected {
-                last_auth_timestamp: timestamp,
-            };
+        // Two separate questions, and the old check answered neither: can this agent run,
+        // and is anyone signed in? Reading only `~/.claude.json` conflated them, so a clean
+        // machine with a working Claude Code reported NotFound and a stale file on a machine
+        // that could not run it reported LoginDetected.
+        let command = self
+            .cmd
+            .base_command_override
+            .as_deref()
+            .unwrap_or_else(|| base_command(self.claude_code_router.unwrap_or(false)));
+        if resolve_executable_path_blocking(runner_executable(command)).is_none() {
+            return AvailabilityInfo::NotFound;
         }
-        AvailabilityInfo::NotFound
+
+        let Some(path) = dirs::home_dir().map(|home| home.join(".claude.json")) else {
+            return AvailabilityInfo::InstallationFound;
+        };
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            // No auth file at all: Claude Code has never run here. Runnable, not signed in.
+            return AvailabilityInfo::InstallationFound;
+        };
+
+        // Claude Code writes ~/.claude.json on first run for settings and project history,
+        // so the file existing only means the CLI has run — a signed-out user has one too.
+        // `oauthAccount` is the signed-in account, and is absent until a login succeeds.
+        if !claude_json_has_oauth_account(&contents) {
+            return AvailabilityInfo::InstallationFound;
+        }
+
+        match file_modified_unix_secs(&path) {
+            Some(timestamp) => AvailabilityInfo::LoginDetected {
+                last_auth_timestamp: timestamp,
+            },
+            // Signed in, but the mtime is unreadable; still better than reporting NotFound.
+            None => AvailabilityInfo::InstallationFound,
+        }
     }
 
     async fn available_slash_commands(
@@ -3051,5 +3100,53 @@ mod tests {
         let control_request_json = r#"{"type":"control_request","request_id":"f559d907-b139-475b-addd-79c05591eb99","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"./gradlew :web:testApi","timeout":300000,"description":"Run API tests"},"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"./gradlew :web:testApi:"}],"behavior":"allow","destination":"localSettings"}],"tool_use_id":"toolu_014PR3WXsJfiftSCbjcjEbeM"}}"#;
         let parsed: ClaudeJson = serde_json::from_str(control_request_json).unwrap();
         assert!(matches!(parsed, ClaudeJson::ControlRequest { .. }));
+    }
+
+    #[test]
+    fn availability_checks_the_program_kablan_actually_launches() {
+        // Both variants run through npx, so npx is what has to exist — not a `claude` binary.
+        assert_eq!(runner_executable(base_command(false)), "npx");
+        assert_eq!(runner_executable(base_command(true)), "npx");
+
+        // An override names its own program.
+        assert_eq!(runner_executable("claude --dangerously-skip"), "claude");
+        assert_eq!(runner_executable("claude"), "claude");
+    }
+
+    #[test]
+    fn signed_in_claude_json_has_an_oauth_account() {
+        let contents = r#"{
+            "userID": "abc123",
+            "numStartups": 12,
+            "oauthAccount": {
+                "accountUuid": "0000-0000",
+                "emailAddress": "dev@example.com",
+                "organizationName": "Example"
+            }
+        }"#;
+        assert!(claude_json_has_oauth_account(contents));
+    }
+
+    #[test]
+    fn signed_out_claude_json_is_not_a_login() {
+        // Claude Code writes this on first run, before anyone signs in.
+        let contents = r#"{
+            "numStartups": 1,
+            "hasCompletedOnboarding": false,
+            "mcpServers": {},
+            "projects": {}
+        }"#;
+        assert!(!claude_json_has_oauth_account(contents));
+    }
+
+    #[test]
+    fn logged_out_claude_json_with_null_account_is_not_a_login() {
+        assert!(!claude_json_has_oauth_account(r#"{"oauthAccount": null}"#));
+    }
+
+    #[test]
+    fn unreadable_claude_json_is_not_a_login() {
+        assert!(!claude_json_has_oauth_account(""));
+        assert!(!claude_json_has_oauth_account("{ truncated"));
     }
 }
