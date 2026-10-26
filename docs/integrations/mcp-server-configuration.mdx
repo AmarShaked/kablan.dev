@@ -14,20 +14,32 @@ MCP servers provide additional functionality to coding agents through standardiz
 
 ## Accessing MCP Server Configuration
 
-1. Navigate to **Settings** in the Kablan interface
-2. Click on **MCP Servers** in the settings menu
-3. Select the coding agent you want to configure MCP servers for
+1. Press `G` then `S` to open **Settings**, or open the command bar with `Cmd/Ctrl + K` and choose **Settings**
+2. Select **MCP** in the settings sidebar
+3. Choose the coding agent you want to configure MCP servers for
 
 <Frame>
-<img src="/images/vk-mcp-server-config.jpeg" alt="MCP Server configuration page showing available servers and one-click installation options" />
+<img src="/images/settings-beta-mcp.png" alt="The MCP section of Kablan Settings, showing the agent selector, the server configuration JSON editor, and the popular servers below it" />
 </Frame>
+
+Each agent keeps its own MCP configuration, because each agent reads its own config file. Switching the agent in the dropdown switches which file you are editing.
 
 ## Popular MCP Servers
 
-Kablan provides one-click installation for popular MCP servers, including Playwright, Exa, Chrome DevTools, Dev Manager, and Headroom.
+Kablan ships one-click cards for seven servers. Clicking a card inserts its block into the JSON for the selected agent — you still press **Save Settings**, and you still supply any API key the server needs.
+
+| Server | What it does |
+|---|---|
+| Kablan | Create, update and delete Kablan tasks from inside the agent |
+| Context7 | Up-to-date library documentation and code examples (needs `CONTEXT7_API_KEY`) |
+| Playwright | Browser automation |
+| Exa | Web search and code context retrieval (needs `EXA_API_KEY`) |
+| Chrome DevTools | Drive and inspect a Chrome instance |
+| Dev Manager | Manage local dev servers |
+| Headroom | Context management, run through `uvx` |
 
 <Frame>
-<img src="/images/vk-popular-mcp-servers.png" alt="Popular MCP servers available for one-click installation" />
+<img src="/images/settings-beta-popular-mcp-servers.png" alt="The popular MCP server cards: Kablan, Context7, Playwright, Exa, Chrome DevTools, Dev Manager and Headroom" />
 </Frame>
 
 ## Adding Custom MCP Servers
@@ -36,11 +48,11 @@ You can also add your own MCP servers by configuring them manually:
 
 <Steps>
 <Step title="Select Coding Agent">
-Choose the coding agent you want to configure MCP servers for from the MCP Servers settings page.
+Choose the coding agent you want to configure MCP servers for from the agent dropdown in the **MCP** section.
 </Step>
 
 <Step title="Update Server Configuration JSON">
-In the Server Configuration JSON field displayed in the UI, add your custom MCP server configuration. The JSON will show the current configuration for the selected agent, and you can modify it to include additional servers.
+In the Server Configuration JSON editor, add your custom MCP server configuration. The JSON shows the current configuration for the selected agent, and you can modify it to include additional servers.
 
 Example addition:
 ```json

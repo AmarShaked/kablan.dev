@@ -1,142 +1,153 @@
 ---
 title: "Global Settings"
-description: "Configure application-wide settings including themes, agents, and more"
+description: "Configure application-wide settings including appearance, agents, editor, git, and notifications"
 sidebarTitle: "Settings"
 ---
 
-You can configure application-wide settings via the **Settings** page. To access it, click the ⚙️ icon in the sidebar or select "Settings" from the top-right menu.
+Settings are application-wide and apply to every project.
+
+## Opening Settings
+
+Press `G` then `S`, or open the command bar with `Cmd/Ctrl + K` and choose **Settings**. You can also click the ⚙️ icon in the top bar.
 
 <Frame>
-<img src="/images/vk-settings.png" alt="Kablan global settings page showing theme options, agent configuration, and settings" />
+<img src="/images/settings-beta-general.png" alt="The Kablan Settings dialog open on the General section, showing Appearance, Theme, Language, and Editor options" />
 </Frame>
 
-## Themes
+Settings open as a dialog over your current view, so you do not lose your place. Changes are saved with the **Save Settings** button; the dialog warns you if you try to close it with unsaved changes.
 
-Switch between light and dark themes to suit your preference.
+<Note>
+In v0.11.6 the sidebar also lists **Organization Settings** and **Remote Projects**. Those belong to a hosted backend that `npx kablan` does not ship, and they report that a remote client is not configured. Nothing on this page depends on them, and they are hidden from the next release on.
+</Note>
 
-## Default Agent Configuration
+## Appearance
 
-Choose the default agent and variant for new task attempts. This profile is pre-selected when creating new task attempts and follow-ups.
+- **Theme** — Light or Dark.
+- **Language** — Browser Default follows your system language.
+- **Time** — 12-hour or 24-hour timestamps.
 
-1. **Select an agent** (e.g., Claude Code, Gemini CLI, Codex)
-2. **Choose a variant** if available (e.g., Default, Plan, Router)
+## Default Coding Agent
+
+Choose the agent and variant pre-selected when you create a new task attempt or follow-up.
+
+1. **Default Agent Configuration** — e.g. Claude Code, Codex, Gemini CLI.
+2. **Variant** — e.g. Default, Plan, Router, where the agent offers them.
 
 <Tip>
-You can override the default agent configuration per attempt in the create attempt dialog.
+This is only a default. You can override the agent and variant per attempt in the create attempt dialog.
 </Tip>
 
-## Editor Integration
+## Editor
 
-Configure integration with your preferred code editor for a seamless development workflow.
+### Editor Type
 
-### Selecting Your Editor
+Choose the editor Kablan opens your worktree in:
 
-Choose from various supported editors:
-- **VS Code** - Microsoft's popular code editor
-- **Cursor** - VSCode fork with AI-native features
-- **Windsurf** - VSCode fork optimised for collaborative development
-- **Antigravity** - Google's AI-native code editor
-- **Neovim**, **Emacs**, **Sublime Text** - Other popular editors
-- **Custom** - Use a custom shell command
+- **VS Code**, **Cursor**, **Windsurf** — VS Code and its forks
+- **Zed**, **Neovim**, **Emacs**, **Sublime Text**
+- **Antigravity**
+- **Custom** — any shell command
 
-### Remote SSH Configuration
+### Custom Editor Command
+
+With **Custom** selected, give a shell command. It receives the file or directory path as an argument.
+
+```bash
+# Open with IntelliJ IDEA
+idea
+
+# Open with Sublime Text at an explicit path
+/Applications/Sublime\ Text.app/Contents/SharedSupport/bin/subl
+
+# Open with your own script
+~/scripts/open-editor.sh
+```
+
+### Remote SSH
+
+If Kablan runs on a different machine from your browser — a VPS, or a box you reach through a tunnel — Kablan can mint a `vscode-remote` URL so your local editor opens the remote checkout over SSH instead of assuming localhost.
 
 <Frame>
-<img src="/images/vk-editor-ssh.png" alt="Kablan settings editor section showing ssh configuration options." />
+<img src="/images/settings-beta-editor.png" alt="Editor settings showing the Editor Type dropdown and the Remote SSH Host field" />
 </Frame>
 
-When running Kablan on a remote server (e.g., accessed via Cloudflare tunnel, ngrok, or as a systemctl service), you can configure VSCode-based editors to open projects via SSH instead of assuming localhost.
+Available for **VS Code**, **Cursor**, and **Windsurf**.
 
-This feature is available for **VS Code**, **Cursor**, and **Windsurf** editors.
+- **Remote SSH Host** (optional) — hostname or IP, e.g. `example.com`, `192.168.1.100`, `my-server`.
+- **Remote SSH User** (optional) — falls back to your SSH config or default user.
 
-#### When to Use Remote SSH
+Leave the host empty and Kablan spawns a local command as usual.
 
-Enable remote SSH configuration when:
-- Kablan runs on a remote server (VPS, cloud instance, etc.)
-- You access the web UI through a tunnel or reverse proxy
-- Your code files are on a different machine than your browser
-- You want your local editor to connect to the remote server via SSH
+With a host set, **Open in Editor** generates a URL like `vscode://vscode-remote/ssh-remote+user@host/path/to/project`, which your local editor opens and connects over SSH. This works for both the project and an individual task worktree.
 
-#### Configuration Fields
+Before you rely on it, check that `ssh user@host` connects without prompting for a password, and that you have the Remote-SSH extension installed in your editor.
 
-1. **Remote SSH Host** (Optional)
-   - The hostname or IP address of your remote server
-   - Examples: `example.com`, `192.168.1.100`, `my-server`
-   - Must be accessible via SSH from your local machine
+## Git
 
-2. **Remote SSH User** (Optional)
-   - The SSH username for connecting to the remote server
-   - If not specified, SSH will use your default user or SSH config
-
-#### How It Works
-
-When remote SSH is configured, clicking "Open in VSCode" (or Cursor/Windsurf):
-1. Generates a special protocol URL like: `vscode://vscode-remote/ssh-remote+user@host/path/to/project`
-2. Opens in your default browser, which launches your local editor
-3. Your editor connects to the remote server via SSH
-4. The project or task worktree opens in the remote context
-
-This works for both project-level and task worktree opening.
-
-#### Prerequisites
-
-- SSH access configured between your local machine and remote server
-- SSH keys or credentials set up (no password prompts)
-- VSCode Remote-SSH extension installed (or equivalent for Cursor/Windsurf)
-- The remote server path must be accessible via SSH
-
-<Tip>
-Test your SSH connection first with `ssh user@host` to ensure it works without prompting for passwords.
-</Tip>
-
-## Git Configuration
-
-Configure git branch naming preferences.
+<Frame>
+<img src="/images/settings-beta-git.png" alt="Git settings showing the Branch Prefix and Workspace Directory fields" />
+</Frame>
 
 ### Branch Prefix
 
-Set a prefix for auto-generated branch names (e.g., `vk` results in `vk/task-name`). Leave empty for no prefix.
+Kablan creates a git branch for every task. This sets the prefix on the generated name.
+
+| Prefix | Resulting branch |
+|--------|------------------|
+| `vk` | `vk/1a2b-implement-auth` |
+| `feature` | `feature/1a2b-implement-auth` |
+| *(empty)* | `1a2b-implement-auth` |
+
+<Tip>
+Match whatever your repo already uses, so Kablan's branches sort alongside your own.
+</Tip>
+
+### Workspace Directory
+
+Where Kablan keeps the per-task git worktrees. They are created in a `.kablan-workspaces` subdirectory of this path.
+
+Leave it empty for the system default. Set it if you want worktrees on a different disk.
+
+<Warning>
+Changing this needs an app restart, and existing worktrees stay where they are.
+</Warning>
+
+## Pull Requests
+
+Configure what happens when Kablan opens a PR for a task branch.
+
+- **Auto-generate PR description by default** — have the agent draft the description rather than opening with an empty body.
+- **Custom prompt** — supply your own prompt for that draft, if the default does not match how your team writes PRs.
+
+## Commits
+
+Configure commit behaviour on task branches.
+
+- **Commit reminder** — prompt you when a task has finished with changes left uncommitted.
+- **Custom prompt** — supply your own prompt for generated commit messages.
 
 ## Notifications
 
-Toggle sound effects and push notifications to stay informed about task status changes.
+Useful when you have several agents running and are not watching the tab.
 
-## Telemetry
+- **Sound Notifications** — audio when a task finishes, needs attention, or errors. You can preview the sound from the settings row.
+- **Push Notifications** — browser notifications when Kablan is not in focus. Your browser asks permission the first time you enable this.
 
-Enable or disable telemetry data collection to help improve Kablan.
+## Message Input
 
-## Task Tags
+Choose whether `Enter` or `Cmd/Ctrl + Enter` sends a message in the chat input, and which one inserts a newline.
 
-Manage global task tags to accelerate task creation across all projects. Task tags allow you to define reusable text snippets that can be inserted into task descriptions using @mentions.
+## Tags
 
-<Card title="Learn more about task tags" icon="tag" href="/configuration-customisation/creating-task-tags">
-  Complete guide to creating and managing task tags
+Reusable text snippets you can insert into a task description with `@tag_name` — useful for instructions you retype often.
+
+<Card title="Creating task tags" icon="tag" href="/configuration-customisation/creating-task-tags">
+  How to create, edit, and use tags
 </Card>
-
-## Agent Settings (Profiles & Variants)
-
-Define and customise agent variants under **Settings → Agents**. Variants let you maintain multiple configurations for the same agent (for example, a Claude Code "PLAN" variant).
-
-<Card title="Agent Profiles & Variants" icon="robot" href="/configuration-customisation/agent-configurations">
-  Detailed guide with examples for configuring agent variants
-</Card>
-
-## Beta Features
-
-Enable or disable beta features to try new functionality before general release.
-
-### Workspaces <Badge color="orange">Beta</Badge>
-
-The new Workspaces UI is a complete redesign of the task execution experience with multi-repository support, multiple agent sessions, and an integrated preview browser. When enabled, you can access it by clicking on any task attempt.
-
-To enable or disable Workspaces:
-1. Find the **Beta Features** section on this page
-2. Toggle **Enable Workspaces Beta**
 
 ## Safety & Disclaimers
 
-Manage acknowledgments and reset options for onboarding, safety disclaimers, and telemetry notices.
+Reset acknowledgments you have already dismissed:
 
-- **Onboarding**: Reset the onboarding process to rerun the initial setup.
-- **Safety Disclaimer**: Reset or review the safety disclaimer prompt.
-- **Telemetry Notice**: Reset or review the telemetry data collection acknowledgment.
+- **Onboarding** — run the initial setup again.
+- **Safety Disclaimer** — show the safety warning again.

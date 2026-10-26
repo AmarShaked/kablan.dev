@@ -17,33 +17,79 @@ Each project represents a git repository. After creation, you can configure it w
 
 
 <Note>
-After creating a project, you need to press the settings button in the top right to configure project scripts and settings.
+A new project runs with no scripts at all. Configure them before your first task and the agent starts in a repository that already has its dependencies.
 </Note>
 
-## Project Settings
+## Repository Settings
 
-Once you've created a project, you can access the project settings by clicking the settings button in the top right corner. From here, you can configure various aspects of your project.
+Press `G` then `S` to open **Settings**, or open the command bar with `Cmd/Ctrl + K` and choose **Settings**. Select **Repositories** in the sidebar, then pick your repository from the dropdown.
 
-### Setup Scripts
+<Frame>
+<img src="/images/settings-beta-repositories.png" alt="The Repositories section of Kablan Settings, with the repository selector, general settings, and the scripts below them" />
+</Frame>
 
-Setup scripts will be run before the coding agent is executed. This is useful for installing dependencies, for example you might run `npm install` or `cargo build`. This will save you time as your agent won't need to figure out that these commands haven't already been run.
+Everything here is per-repository, and applies to every task that uses it. Changes save with the **Save Settings** button.
+
+### General Settings
+
+- **Display Name** — a friendly name for the repository.
+- **Repository Path** — where it lives on disk.
+- **Default Working Directory** — a subdirectory the agent runs in, for monorepos. Leave empty for the repository root.
+- **Default Target Branch** — the base branch new worktrees branch off, and the branch pull requests target.
+
+### Setup Script
+
+Runs inside the worktree after it is created and before the coding agent starts. Use it to install dependencies or prepare the environment.
+
+| Project | Command |
+|---|---|
+| Node.js | `npm install` |
+| Python | `pip install -r requirements.txt` |
+| Rust | `cargo fetch` |
+| Several steps | `npm install && npm run build:deps` |
 
 <Note>
-Each time a coding agent is executed it runs in a [git worktree](https://git-scm.com/docs/git-worktree) which is unlikely to contain your dependencies, configs, .env etc.
+Each task runs in its own [git worktree](https://git-scm.com/docs/git-worktree), which is a fresh checkout — it will not have your `node_modules`, your build cache, or your `.env`.
 </Note>
 
-### Dev Server Scripts
+**Run setup script in parallel with coding agent** starts the agent without waiting for setup to finish. Useful when installs are slow and the agent spends its first minute reading code anyway.
 
-The dev server script is run when you press the "Start Dev Server" button from the [Preview](/core-features/testing-your-application) section. It's useful for quickly reviewing work after a coding agent has run.
+### Dev Server Script
 
-### Cleanup Scripts
+Starts a development server for the repository, from the **Start Dev Server** button in the [Preview](/core-features/testing-your-application) section.
 
-Cleanup scripts run after a coding agent finishes it's turn. You can use these to tidy up the workspace, remove temporary files, or perform any post-execution cleanup. For example, you might run `npm run format` to ensure your code is formatted correctly. Treat it like a git pre-commit hook.
+| Framework | Command |
+|---|---|
+| Vite | `npm run dev` |
+| Next.js | `npm run dev` |
+| Create React App | `npm start` |
+| Django | `python manage.py runserver` |
+| Rails | `rails server` |
 
+### Cleanup Script
+
+Runs inside the worktree after the coding agent finishes, and only if it changed something. Treat it like a pre-commit hook — formatters, linters, tests.
+
+| Language or tool | Command |
+|---|---|
+| Prettier | `npx prettier --write .` |
+| ESLint | `npx eslint --fix .` |
+| Rust | `cargo fmt` |
+| Black | `black .` |
+| Ruff | `ruff check --fix .` |
+| Go | `go fmt ./...` |
+
+### Archive Script
+
+Runs when the workspace is archived. Use it to stop services the task started or release resources — `docker compose down`, `pg_ctl stop`, killing a process still holding a port.
+
+<Warning>
+Make archive and cleanup scripts safe to run when there is nothing to clean up. Append `|| true` to commands that fail when the resource is already gone.
+</Warning>
 
 ### Copy Files
 
-Comma-separated list of files to copy from the original project directory to the worktree. These files will be copied after the worktree is created but before the setup script runs. Useful for environment-specific files like `.env`, configuration files, and local settings.
+Comma-separated list of files to copy from the original repository directory into the worktree, after it is created and before the setup script runs. Glob patterns work. Useful for environment-specific files like `.env` and local config.
 
 <Warning>
 Make sure these files are gitignored or they could get committed!
