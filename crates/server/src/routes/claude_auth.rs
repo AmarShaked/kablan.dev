@@ -155,7 +155,7 @@ async fn run_status() -> Result<String, ApiError> {
         .map_err(|err| ApiError::BadRequest(format!("Could not run Claude auth status: {err}")))?;
 
     if !output.status.success() {
-        let reason = strip_str(&String::from_utf8_lossy(&output.stderr))
+        let reason = strip_str(String::from_utf8_lossy(&output.stderr))
             .trim()
             .to_string();
         return Err(ApiError::BadRequest(if reason.is_empty() {
@@ -308,7 +308,7 @@ fn https_token(line: &str) -> Option<String> {
     let end = rest
         .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '…'))
         .unwrap_or(rest.len());
-    let url = rest[..end].trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ']'));
+    let url = rest[..end].trim_end_matches(['.', ',', ')', ']']);
     if url.len() > "https://".len() {
         Some(url.to_string())
     } else {

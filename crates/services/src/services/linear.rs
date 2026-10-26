@@ -619,7 +619,7 @@ impl LinearClient {
                     .into_iter()
                     .filter_map(|n| {
                         let name = n.name?.trim().to_string();
-                        (!name.is_empty()).then(|| LinearIdName { id: n.id, name })
+                        (!name.is_empty()).then_some(LinearIdName { id: n.id, name })
                     })
                     .collect()
             })
@@ -632,7 +632,7 @@ impl LinearClient {
                     .into_iter()
                     .filter_map(|n| {
                         let name = n.name?.trim().to_string();
-                        (!name.is_empty()).then(|| LinearIdName { id: n.id, name })
+                        (!name.is_empty()).then_some(LinearIdName { id: n.id, name })
                     })
                     .collect()
             })

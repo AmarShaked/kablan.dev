@@ -105,11 +105,7 @@ trait BaseCodingAgentParse {
 impl BaseCodingAgentParse for BaseCodingAgent {
     fn from_str_loose(s: &str) -> Result<BaseCodingAgent, String> {
         use std::str::FromStr;
-        let normalized = s
-            .trim()
-            .replace('-', "_")
-            .replace(' ', "_")
-            .to_ascii_uppercase();
+        let normalized = s.trim().replace(['-', ' '], "_").to_ascii_uppercase();
         let aliases = match normalized.as_str() {
             "CLAUDE" | "CLAUDECODE" => "CLAUDE_CODE",
             "CURSOR" | "CURSORAGENT" => "CURSOR_AGENT",
@@ -288,12 +284,11 @@ async fn decide_next_action(
     round: usize,
 ) -> AgentDecision {
     // Prefer a CLI-backed decision for Claude; otherwise use heuristics.
-    if *agent == BaseCodingAgent::ClaudeCode {
-        if let Ok(Some(decision)) =
+    if *agent == BaseCodingAgent::ClaudeCode
+        && let Ok(Some(decision)) =
             ask_claude_for_decision(user_message, history, tool_notes, project_cwd).await
-        {
-            return decision;
-        }
+    {
+        return decision;
     }
 
     heuristic_decision(user_message, tool_notes, round).await
@@ -372,10 +367,10 @@ Tool notes:
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    if let Some(dir) = project_cwd {
-        if dir.is_dir() {
-            cmd.current_dir(dir);
-        }
+    if let Some(dir) = project_cwd
+        && dir.is_dir()
+    {
+        cmd.current_dir(dir);
     }
 
     let output = tokio::time::timeout(Duration::from_secs(90), cmd.output()).await??;
@@ -454,14 +449,14 @@ async fn heuristic_decision(
         if looks_like_info && !looks_like_task {
             return AgentDecision::Reply(format_pinned_project_reply(notes));
         }
-        if looks_like_task {
-            if let Some(id) = extract_uuid(notes).or_else(|| extract_uuid(user_message)) {
-                return AgentDecision::CreateAndStart {
-                    project_id: id,
-                    title: title_from_message(user_message),
-                    description: Some(user_message.to_string()),
-                };
-            }
+        if looks_like_task
+            && let Some(id) = extract_uuid(notes).or_else(|| extract_uuid(user_message))
+        {
+            return AgentDecision::CreateAndStart {
+                project_id: id,
+                title: title_from_message(user_message),
+                description: Some(user_message.to_string()),
+            };
         }
         if !looks_like_task {
             return AgentDecision::Reply(format_pinned_project_reply(notes));
@@ -723,7 +718,7 @@ async fn create_and_start_task(
         model: None,
         permission: executors::selection::PermissionLevel::Bypass,
     };
-    crate::routes::config::remember_agent_selection(&deployment, &agent_selection).await;
+    crate::routes::config::remember_agent_selection(deployment, &agent_selection).await;
     let is_attempt_running = match deployment
         .container()
         .start_workspace(&workspace, agent_selection.clone())
