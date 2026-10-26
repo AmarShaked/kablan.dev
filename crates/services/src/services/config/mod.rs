@@ -65,3 +65,72 @@ pub async fn save_config_to_file(
     std::fs::write(config_path, raw_config)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A machine that has never run Kablan has no config file. The config we invent for it must
+    /// leave both first-run gates closed, or the user never sees the disclaimer or onboarding.
+    #[tokio::test]
+    async fn a_missing_config_file_leaves_both_first_run_gates_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_config_from_file(&dir.path().join("config.json")).await;
+
+        assert!(
+            !config.disclaimer_acknowledged,
+            "a fresh install must still be shown the disclaimer"
+        );
+        assert!(
+            !config.onboarding_acknowledged,
+            "a fresh install must still be shown onboarding"
+        );
+    }
+
+    /// First boot writes the config straight back out (see `LocalDeployment::new`). Reading it
+    /// again must not flip the gates — that would skip onboarding from the second boot onwards.
+    #[tokio::test]
+    async fn writing_the_first_run_config_and_reading_it_back_keeps_the_gates_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+
+        let first_boot = load_config_from_file(&path).await;
+        save_config_to_file(&first_boot, &path).await.unwrap();
+        let reloaded = load_config_from_file(&path).await;
+
+        assert_eq!(reloaded.config_version, "v9");
+        assert!(!reloaded.disclaimer_acknowledged);
+        assert!(!reloaded.onboarding_acknowledged);
+    }
+
+    /// An unreadable or corrupt config falls back to the default rather than to "already seen".
+    #[tokio::test]
+    async fn a_corrupt_config_falls_back_to_the_closed_gates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, "{ not json").unwrap();
+
+        let config = load_config_from_file(&path).await;
+
+        assert!(!config.disclaimer_acknowledged);
+        assert!(!config.onboarding_acknowledged);
+    }
+
+    /// Someone who did acknowledge keeps that across a reload; the gates are sticky, not pinned.
+    #[tokio::test]
+    async fn an_acknowledged_config_is_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+
+        let config = Config {
+            disclaimer_acknowledged: true,
+            onboarding_acknowledged: true,
+            ..Config::default()
+        };
+        save_config_to_file(&config, &path).await.unwrap();
+
+        let reloaded = load_config_from_file(&path).await;
+        assert!(reloaded.disclaimer_acknowledged);
+        assert!(reloaded.onboarding_acknowledged);
+    }
+}
