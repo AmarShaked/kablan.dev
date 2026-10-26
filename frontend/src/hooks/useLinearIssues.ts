@@ -1,7 +1,14 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { linearApi, type LinearIssueListParams } from '@/lib/api';
-import { mapApiLinearIssue, getNextLinearPageParam } from '@/lib/integrations/linear';
+import {
+  mapApiLinearIssue,
+  getNextLinearPageParam,
+} from '@/lib/integrations/linear';
 import {
   linearIssuesQueryParams,
   type LinearFilters,
@@ -10,8 +17,7 @@ import {
 export const linearQueryKeys = {
   all: ['linear'] as const,
   meta: ['linear', 'meta'] as const,
-  issues: (filters: LinearFilters) =>
-    ['linear', 'issues', filters] as const,
+  issues: (filters: LinearFilters) => ['linear', 'issues', filters] as const,
 };
 
 export function useLinearMeta(enabled: boolean) {
@@ -43,9 +49,7 @@ export function useLinearIssuesInfinite(
     enabled,
     select: (data) => ({
       ...data,
-      issues: data.pages.flatMap((page) =>
-        page.issues.map(mapApiLinearIssue)
-      ),
+      issues: data.pages.flatMap((page) => page.issues.map(mapApiLinearIssue)),
       viewer: data.pages[0]?.viewer ?? null,
       totalCount: data.pages[0]?.total_count ?? null,
     }),
@@ -54,6 +58,5 @@ export function useLinearIssuesInfinite(
 
 export function useInvalidateLinearQueries() {
   const queryClient = useQueryClient();
-  return () =>
-    queryClient.invalidateQueries({ queryKey: linearQueryKeys.all });
+  return () => queryClient.invalidateQueries({ queryKey: linearQueryKeys.all });
 }

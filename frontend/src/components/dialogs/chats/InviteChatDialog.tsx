@@ -109,7 +109,10 @@ const InviteChatDialogImpl = NiceModal.create<NoProps>(() => {
           <Button variant="outline" onClick={close} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={busy || !email.trim()}>
+          <Button
+            onClick={() => void submit()}
+            disabled={busy || !email.trim()}
+          >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Open chat
           </Button>

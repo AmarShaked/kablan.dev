@@ -85,12 +85,12 @@ describe('linearFiltersActive', () => {
     expect(
       linearFiltersActive({ ...DEFAULT_LINEAR_FILTERS, assignee: 'all' })
     ).toBe(true);
-    expect(
-      linearFiltersActive({ ...DEFAULT_LINEAR_FILTERS, team: 't1' })
-    ).toBe(true);
-    expect(
-      linearFiltersActive({ ...DEFAULT_LINEAR_FILTERS, q: 'sso' })
-    ).toBe(true);
+    expect(linearFiltersActive({ ...DEFAULT_LINEAR_FILTERS, team: 't1' })).toBe(
+      true
+    );
+    expect(linearFiltersActive({ ...DEFAULT_LINEAR_FILTERS, q: 'sso' })).toBe(
+      true
+    );
   });
 });
 

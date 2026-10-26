@@ -25,9 +25,9 @@ describe('profileFieldGroup', () => {
 
 describe('profileFieldCopy', () => {
   it('uses a Cursor-specific model hint', () => {
-    expect(profileFieldCopy('model', BaseCodingAgent.CURSOR_AGENT).hint).toMatch(
-      /composer-1/
-    );
+    expect(
+      profileFieldCopy('model', BaseCodingAgent.CURSOR_AGENT).hint
+    ).toMatch(/composer-1/);
   });
 });
 

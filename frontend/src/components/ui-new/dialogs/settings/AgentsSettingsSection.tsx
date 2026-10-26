@@ -516,9 +516,7 @@ export function AgentsSettingsSection() {
             </div>
             <AgentActionsDropdown
               executorType={selectedExecutorType}
-              isDefault={
-                savedAgent?.executor === selectedExecutorType
-              }
+              isDefault={savedAgent?.executor === selectedExecutorType}
               canRemove={configuredAgents.length > 1}
               defaultConfig={
                 savedAgent?.executor === selectedExecutorType

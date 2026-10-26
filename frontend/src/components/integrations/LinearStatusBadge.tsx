@@ -29,8 +29,7 @@ function StatusIcon({
     fill: 'none',
     'aria-hidden': true as const,
   };
-  const isDuplicate =
-    type === 'canceled' && /duplicate/i.test(name.trim());
+  const isDuplicate = type === 'canceled' && /duplicate/i.test(name.trim());
 
   switch (type) {
     case 'triage':

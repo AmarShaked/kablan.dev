@@ -14,10 +14,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import {
-  displayNameFromUser,
-  type PbUser,
-} from '@/lib/pocketbase';
+import { displayNameFromUser, type PbUser } from '@/lib/pocketbase';
 
 type SidebarNavUserProps = {
   user: PbUser | null;

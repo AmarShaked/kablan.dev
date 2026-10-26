@@ -126,7 +126,7 @@ const ResolveConflictsDialogImpl =
             retry_process_id: null,
             force_when_dirty: null,
             perform_git_reset: null,
-        clear_context: null,
+            clear_context: null,
           });
 
           // Invalidate queries and wait for them to complete
@@ -227,7 +227,6 @@ const ResolveConflictsDialogImpl =
               </div>
 
               {error && <div className="text-sm text-destructive">{error}</div>}
-
             </div>
 
             <DialogFooter className="sm:!justify-between">

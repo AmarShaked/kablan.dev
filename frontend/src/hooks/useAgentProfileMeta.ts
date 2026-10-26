@@ -13,9 +13,7 @@ type MetaMap = ReturnType<typeof parseProfileMeta>;
 
 function readMap(): MetaMap {
   if (typeof window === 'undefined') return {};
-  return parseProfileMeta(
-    window.localStorage.getItem(AGENT_PROFILE_META_KEY)
-  );
+  return parseProfileMeta(window.localStorage.getItem(AGENT_PROFILE_META_KEY));
 }
 
 export function useAgentProfileMeta() {
@@ -24,10 +22,7 @@ export function useAgentProfileMeta() {
   const persist = useCallback((next: MetaMap) => {
     setMap(next);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(
-        AGENT_PROFILE_META_KEY,
-        JSON.stringify(next)
-      );
+      window.localStorage.setItem(AGENT_PROFILE_META_KEY, JSON.stringify(next));
     }
   }, []);
 

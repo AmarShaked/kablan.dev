@@ -4,10 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { AgentIcon } from '@/components/agents/AgentIcon';
 import { Button } from '@/components/ui/button';
 import { useConfiguredAgents } from '@/hooks/useConfiguredAgents';
-import {
-  buildAgentPath,
-  firstAgentPath,
-} from '@/lib/routes/agentRoutes';
+import { buildAgentPath, firstAgentPath } from '@/lib/routes/agentRoutes';
 import { cn } from '@/lib/utils';
 import { agentBlurb } from '@/utils/agentProfileFields';
 import { agentLabel } from '@/utils/agentLabels';
@@ -15,12 +12,8 @@ import type { BaseCodingAgent } from 'shared/types';
 
 export function AddAgentPage() {
   const navigate = useNavigate();
-  const {
-    unconfiguredAgents,
-    configuredAgents,
-    addAgent,
-    isLoading,
-  } = useConfiguredAgents();
+  const { unconfiguredAgents, configuredAgents, addAgent, isLoading } =
+    useConfiguredAgents();
   const [picked, setPicked] = useState<BaseCodingAgent | null>(null);
 
   const selected =
@@ -29,9 +22,7 @@ export function AddAgentPage() {
       : unconfiguredAgents[0]) ?? null;
 
   if (isLoading) {
-    return (
-      <p className="p-6 text-sm text-muted-foreground">Loading agents…</p>
-    );
+    return <p className="p-6 text-sm text-muted-foreground">Loading agents…</p>;
   }
 
   const handleContinue = () => {
@@ -65,9 +56,7 @@ export function AddAgentPage() {
                 onClick={() => setPicked(agent)}
                 className={cn(
                   'flex flex-col items-start gap-2.5 rounded-md border p-3.5 text-left',
-                  active
-                    ? 'border-primary bg-muted/60'
-                    : 'hover:bg-muted/40'
+                  active ? 'border-primary bg-muted/60' : 'hover:bg-muted/40'
                 )}
               >
                 <AgentIcon agent={agent} className="h-5 w-5" />

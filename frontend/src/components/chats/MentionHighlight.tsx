@@ -61,8 +61,7 @@ function MentionPart({
       <span
         className={cn(
           'inline rounded-sm text-info',
-          variant === 'message' &&
-            'mx-0.5 bg-info/15 px-1 py-0.5 font-medium',
+          variant === 'message' && 'mx-0.5 bg-info/15 px-1 py-0.5 font-medium',
           variant === 'composer' && 'font-normal'
         )}
       >

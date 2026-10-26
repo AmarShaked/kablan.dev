@@ -32,9 +32,7 @@ type SchemaProp = {
   description?: string;
 };
 
-function schemaProps(
-  agent: BaseCodingAgent
-): Array<[string, SchemaProp]> {
+function schemaProps(agent: BaseCodingAgent): Array<[string, SchemaProp]> {
   const schema = schemas[agent] as RJSFSchema | undefined;
   const properties = schema?.properties;
   if (!properties || typeof properties !== 'object') return [];
@@ -81,9 +79,7 @@ function ConfigField({
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
-      ) : null}
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -105,9 +101,7 @@ function ToggleRow({
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0 space-y-1">
         <Label htmlFor={id}>{label}</Label>
-        {hint ? (
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        ) : null}
+        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
     </div>
@@ -226,10 +220,7 @@ function SchemaField({
         : {};
     return (
       <ConfigField label={copy.label} hint={copy.hint} htmlFor={id}>
-        <EnvEditor
-          value={record}
-          onChange={(next) => onChange(next)}
-        />
+        <EnvEditor value={record} onChange={(next) => onChange(next)} />
       </ConfigField>
     );
   }
@@ -436,9 +427,9 @@ export function AgentProfileForm({
           {advancedOpen && (
             <div className="mt-4 space-y-4">
               <p className="text-sm text-muted-foreground">
-                Kablan starts this CLI for every task. Override the command
-                only if you installed the agent yourself, or need extra flags
-                and env.
+                Kablan starts this CLI for every task. Override the command only
+                if you installed the agent yourself, or need extra flags and
+                env.
               </p>
               {advanced.map(([key, prop]) => (
                 <SchemaField

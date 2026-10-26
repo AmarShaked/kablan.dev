@@ -52,8 +52,7 @@ export function useChatMessages(chatId: string | undefined) {
           const withExpand = {
             ...e.record,
             expand:
-              e.record.expand ??
-              prev.find((m) => m.id === e.record.id)?.expand,
+              e.record.expand ?? prev.find((m) => m.id === e.record.id)?.expand,
           };
           const idx = prev.findIndex((m) => m.id === e.record.id);
           if (idx === -1) return [...prev, withExpand];

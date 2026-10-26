@@ -6,9 +6,7 @@ export type ProfileMeta = {
   description: string;
 };
 
-type MetaMap = Partial<
-  Record<BaseCodingAgent, Record<string, ProfileMeta>>
->;
+type MetaMap = Partial<Record<BaseCodingAgent, Record<string, ProfileMeta>>>;
 
 export function defaultProfileDescription(name: string): string {
   switch (name) {

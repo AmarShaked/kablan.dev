@@ -217,7 +217,6 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
                 {t('startReviewDialog.includeGitContextDescription')}
               </p>
             </div>
-
           </div>
 
           <DialogFooter className="sm:!justify-between">

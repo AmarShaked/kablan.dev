@@ -294,10 +294,7 @@ export async function listChatMembers(
   });
 }
 
-function peerFromMembers(
-  members: PbChatMember[],
-  myId: string
-): PbUser | null {
+function peerFromMembers(members: PbChatMember[], myId: string): PbUser | null {
   const other = members.find((m) => m.user !== myId);
   if (!other) return null;
   if (other.expand?.user) {

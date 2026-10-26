@@ -123,11 +123,11 @@ export function groupStatesByType(
 ): { type: LinearStatusType; label: string; states: LinearWorkflowState[] }[] {
   const byType = new Map<LinearStatusType, LinearWorkflowState[]>();
   for (const state of states) {
-    const type = (LINEAR_STATUS_TYPE_ORDER.includes(
-      state.type_name as LinearStatusType
-    )
-      ? state.type_name
-      : 'unstarted') as LinearStatusType;
+    const type = (
+      LINEAR_STATUS_TYPE_ORDER.includes(state.type_name as LinearStatusType)
+        ? state.type_name
+        : 'unstarted'
+    ) as LinearStatusType;
     const list = byType.get(type) ?? [];
     list.push(state);
     byType.set(type, list);

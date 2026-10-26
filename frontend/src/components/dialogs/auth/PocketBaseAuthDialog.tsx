@@ -126,7 +126,9 @@ const PocketBaseAuthDialogImpl = NiceModal.create<NoProps>(() => {
                 setMode((m) => (m === 'signIn' ? 'signUp' : 'signIn'))
               }
             >
-              {mode === 'signIn' ? 'Create account' : 'Have an account? Sign in'}
+              {mode === 'signIn'
+                ? 'Create account'
+                : 'Have an account? Sign in'}
             </Button>
           )}
           <Button variant="outline" onClick={close} disabled={busy}>

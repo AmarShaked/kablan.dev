@@ -53,9 +53,7 @@ export function createProfile(
 ): ExecutorConfigs {
   const map = asMap(profiles);
   const sourceName = cloneFrom ?? profileNames(profiles, agent)[0];
-  const base = sourceName
-    ? profileFormData(profiles, agent, sourceName)
-    : {};
+  const base = sourceName ? profileFormData(profiles, agent, sourceName) : {};
   return {
     ...profiles,
     executors: {

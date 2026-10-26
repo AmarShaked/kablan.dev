@@ -29,7 +29,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/ENG-214',
     createdAt: '2026-09-01T10:00:00.000Z',
     updatedAt: '2026-09-07T06:12:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'eng-198',
@@ -51,7 +51,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/ENG-198',
     createdAt: '2026-08-28T14:20:00.000Z',
     updatedAt: '2026-09-06T18:40:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'eng-176',
@@ -73,7 +73,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/ENG-176',
     createdAt: '2026-08-20T09:15:00.000Z',
     updatedAt: '2026-09-05T11:05:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'eng-205',
@@ -95,7 +95,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/ENG-205',
     createdAt: '2026-09-04T16:00:00.000Z',
     updatedAt: '2026-09-07T08:20:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'des-41',
@@ -117,7 +117,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/DES-41',
     createdAt: '2026-08-22T11:30:00.000Z',
     updatedAt: '2026-09-06T14:00:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'plat-12',
@@ -139,7 +139,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/PLAT-12',
     createdAt: '2026-08-15T08:00:00.000Z',
     updatedAt: '2026-09-04T09:30:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'des-38',
@@ -161,7 +161,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/DES-38',
     createdAt: '2026-08-18T13:40:00.000Z',
     updatedAt: '2026-09-03T16:45:00.000Z',
-  comments: [],
+    comments: [],
   },
   {
     id: 'eng-190',
@@ -183,7 +183,7 @@ const ISSUES: IntegrationIssue[] = [
     url: 'https://linear.app/kablan/issue/ENG-190',
     createdAt: '2026-08-30T17:05:00.000Z',
     updatedAt: '2026-09-05T19:10:00.000Z',
-  comments: [],
+    comments: [],
   },
 ];
 

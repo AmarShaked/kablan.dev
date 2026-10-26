@@ -133,9 +133,7 @@ export function ChatPage() {
     const q = mentionQuery.toLowerCase();
     if (!q) return configuredAgents;
     return configuredAgents.filter((agent) =>
-      mentionAliases(agent).some((alias) =>
-        alias.toLowerCase().startsWith(q)
-      )
+      mentionAliases(agent).some((alias) => alias.toLowerCase().startsWith(q))
     );
   }, [autocompleteMode, configuredAgents, mentionQuery]);
 
@@ -144,9 +142,7 @@ export function ChatPage() {
     const q = mentionQuery.toLowerCase();
     if (!q) return projects;
     return projects.filter((project) =>
-      projectAliases(project).some((alias) =>
-        alias.toLowerCase().startsWith(q)
-      )
+      projectAliases(project).some((alias) => alias.toLowerCase().startsWith(q))
     );
   }, [autocompleteMode, projects, mentionQuery]);
 
@@ -592,8 +588,7 @@ function MessageRow({
       ? paths.task(message.task_project_id, message.task_id)
       : null;
 
-  const isWaiting =
-    isAgent && /^Working on it/i.test(message.body.trim());
+  const isWaiting = isAgent && /^Working on it/i.test(message.body.trim());
   const tone = isAgent ? agentChatTone(message.author_agent) : null;
 
   return (

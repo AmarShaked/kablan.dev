@@ -82,7 +82,9 @@ export function extractSelectionFromAction(
       case 'CodingAgentInitialRequest':
       case 'CodingAgentFollowUpRequest':
       case 'ReviewRequest':
-        return typ.agent_selection ?? profileToSelection(typ.executor_profile_id);
+        return (
+          typ.agent_selection ?? profileToSelection(typ.executor_profile_id)
+        );
       case 'ScriptRequest':
       default:
         curr = curr.next_action;

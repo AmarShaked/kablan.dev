@@ -20,8 +20,7 @@ export function useTaskMutations(
 ) {
   const queryClient = useQueryClient();
   const navigate = useNavigateWithSearch();
-  const navigateOnSuccess =
-    options?.navigateOnSuccess ?? Boolean(projectId);
+  const navigateOnSuccess = options?.navigateOnSuccess ?? Boolean(projectId);
 
   const invalidateQueries = (taskId?: string) => {
     // Lists, the integration page's "already a task" match, and the sidebar

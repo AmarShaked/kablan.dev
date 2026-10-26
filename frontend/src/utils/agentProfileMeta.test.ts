@@ -48,9 +48,7 @@ describe('renameProfileMeta', () => {
     expect(
       profileDescription(renamed, BaseCodingAgent.CLAUDE_CODE, 'THINK')
     ).toBe('Think first');
-    expect(
-      renamed[BaseCodingAgent.CLAUDE_CODE]?.PLAN
-    ).toBeUndefined();
+    expect(renamed[BaseCodingAgent.CLAUDE_CODE]?.PLAN).toBeUndefined();
   });
 });
 
