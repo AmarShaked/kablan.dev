@@ -278,6 +278,44 @@ function executableOf(command) {
   return space === -1 ? command : command.slice(0, space);
 }
 
+/**
+ * Which cached versions have something running out of them right now.
+ *
+ * The cache sweeper asks this before it deletes anything: another Kablan may be serving an older
+ * version this second, and a sweep that removed its binary would be a worse bug than the disk it
+ * reclaimed. Same process table and the same ownership test as stopRunningApps — the difference
+ * is that this one only looks, and that an installed app bundle is not a cache directory and so
+ * contributes no version here.
+ *
+ * Returns `null`, not an empty set, when the process table cannot be read: `defaultListProcesses`
+ * answers `[]` both when `ps` is missing — Windows, where there is no `/bin/ps` — and when it
+ * failed, and neither means "nothing of ours is running". A real process table always contains at
+ * least this process, so an empty one is a failure to read, and the sweeper treats it as a
+ * refusal rather than as permission.
+ *
+ * @param {object} [deps] seams for the tests
+ * @returns {Set<string>|null} version directory names, e.g. "v0.11.6"
+ */
+function runningCacheVersions(deps = {}) {
+  const { listProcesses = defaultListProcesses, homeDir = os.homedir() } = deps;
+
+  let processes;
+  try {
+    processes = listProcesses();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(processes) || processes.length === 0) return null;
+
+  const versions = new Set();
+  for (const { command } of processes) {
+    if (!classify(command, homeDir)) continue;
+    const version = versionFromPath(command);
+    if (version) versions.add(version);
+  }
+  return versions;
+}
+
 /** ~/.kablan/bin/v0.9.1/macos-arm64/kablan -> "v0.9.1". Best effort; null when the path differs. */
 function versionFromPath(command) {
   const match = command.match(/\/\.?[a-z]+\/bin\/(v[\d.]+)\//);
@@ -545,6 +583,7 @@ module.exports = {
   launcherScript,
   infoPlist,
   stopRunningApps,
+  runningCacheVersions,
   classify,
   ownedRoots,
   executableOf,
