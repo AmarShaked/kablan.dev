@@ -1,0 +1,254 @@
+name: Cold start
+
+# Runs `npx kablan` the way a stranger would: on a machine that has never seen Kablan.
+#
+# This exists because nobody had ever run the published wrapper on a machine that was not the
+# author's. The Linux and Windows halves of that could not be done locally — the dev machine is
+# an Apple Silicon Mac with no container or VM tooling — so they are done here, on runners that
+# are clean by construction.
+#
+# Two different questions, two different jobs:
+#
+#   binary-matrix  Does the *shipped Linux binary* execute at all on distro X? No Node involved,
+#                  so a failure is the binary's floor and nothing else. This is the broad sweep.
+#   npx-coldstart  Does the full `npx kablan` path — download, checksum, extract, launch, serve —
+#                  work end to end? This is the walk a real user takes.
+#
+# Both default to the published version in npx-cli/package.json. Override `version` on a manual
+# run to test a release candidate before it ships.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to cold-start (defaults to npx-cli/package.json)
+        required: false
+        type: string
+  # A workflow can only be dispatched once it is on the default branch, so changes to this file
+  # are tested by pushing them to a release/cold-start* branch, which runs it in place.
+  push:
+    branches: ["release/cold-start**"]
+    paths: [".github/workflows/cold-start.yml"]
+  schedule:
+    # Weekly. A release that installed fine in March can break in June without anything being
+    # published: npm, GitHub releases, and base images all move underneath us.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # Resolve the version once so every job below tests the same thing.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then V=$(node -p "require('./npx-cli/package.json').version"); fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Cold-starting kablan@$V"
+
+  # ---------------------------------------------------------------------------------------
+  # Does the shipped linux-x64 binary run on this distro?
+  #
+  # Deliberately does not involve Node or npm. If this fails, the binary's own libc floor is the
+  # reason, and the error is the dynamic loader's — which is the error a user would actually see.
+  # ---------------------------------------------------------------------------------------
+  binary-matrix:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            label: Ubuntu 24.04 (glibc 2.39)
+          - image: ubuntu:22.04
+            label: Ubuntu 22.04 LTS (glibc 2.35)
+          - image: ubuntu:20.04
+            label: Ubuntu 20.04 LTS (glibc 2.31)
+          - image: debian:12
+            label: Debian 12 bookworm (glibc 2.36)
+          - image: debian:11
+            label: Debian 11 bullseye (glibc 2.31)
+          - image: rockylinux/rockylinux:9
+            label: Rocky Linux 9 (glibc 2.34)
+          - image: amazonlinux:2023
+            label: Amazon Linux 2023 (glibc 2.34)
+          - image: alpine:3.20
+            label: Alpine 3.20 (musl, no glibc)
+    steps:
+      - name: Run the published binary on ${{ matrix.label }}
+        run: |
+          mkdir -p probe && cd probe
+          curl -fsSL -o kablan.zip \
+            "https://github.com/AmarShaked/kablan.dev/releases/download/v${{ needs.version.outputs.version }}/kablan-linux-x64.zip"
+          unzip -q kablan.zip && chmod +x kablan
+
+          # The binary may or may not have a --version flag; if it has none it starts serving and
+          # never returns. Either outcome means the loader resolved it, which is the question
+          # this job asks — so the run is bounded and exit 124 (timed out, i.e. still running)
+          # counts as a pass. No repo volume and an empty container HOME: cold by construction.
+          set +e
+          timeout 30 docker run --rm \
+            -v "$PWD/kablan:/probe/kablan:ro" \
+            "${{ matrix.image }}" /probe/kablan --version >probe.out 2>probe.err
+          STATUS=$?
+          set -e
+
+          echo "::group::exit status $STATUS"
+          echo "--- stdout ---"; cat probe.out || true
+          echo "--- stderr ---"; cat probe.err || true
+          echo "::endgroup::"
+
+          # 0   = ran and exited cleanly (printed a version, most likely)
+          # 124 = still running when the timeout fired, i.e. it booted and started serving
+          if [ $STATUS -eq 0 ] || [ $STATUS -eq 124 ]; then
+            echo "✓ ${{ matrix.label }}: binary loads and runs"
+            exit 0
+          fi
+
+          # Anything else: say precisely which failure it was, because these three look
+          # completely different to a user and have completely different fixes.
+          if grep -qE "GLIBC_[0-9.]+' not found|version \`GLIBC" probe.err; then
+            echo "::error title=${{ matrix.label }}::glibc too old for the shipped binary. $(grep -oE "GLIBC_[0-9.]+' not found" probe.err | head -1)"
+          elif grep -qiE "no such file or directory|exec format error|cannot execute" probe.err; then
+            echo "::error title=${{ matrix.label }}::no usable ELF interpreter — this is the musl/Alpine failure, and the message a user sees is 'not found'"
+          else
+            echo "::error title=${{ matrix.label }}::binary exited $STATUS. $(head -3 probe.err | tr '\n' ' ')"
+          fi
+          exit 1
+
+  # ---------------------------------------------------------------------------------------
+  # The actual user walk: npx download -> checksum -> extract -> launch -> serve.
+  # ---------------------------------------------------------------------------------------
+  npx-coldstart:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Ubuntu 24.04 x64
+          - os: windows-latest
+            label: Windows Server 2022 x64
+          - os: macos-latest
+            label: macOS arm64
+          - os: macos-13
+            label: macOS x64 (Intel)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The definition of "cold" from KAB-15, asserted rather than assumed. A runner that
+      # happened to carry state would otherwise quietly invalidate the whole run.
+      - name: Assert the machine is cold
+        shell: bash
+        run: |
+          FAIL=0
+          if [ -e "$HOME/.kablan" ]; then echo "::error::~/.kablan already exists"; FAIL=1; fi
+          if env | grep -qE '^KABLAN_'; then echo "::error::KABLAN_* env vars set: $(env | grep -E '^KABLAN_')"; FAIL=1; fi
+          for cli in claude codex kablan; do
+            if command -v "$cli" >/dev/null 2>&1; then echo "::warning::$cli is on PATH at $(command -v $cli)"; fi
+          done
+          echo "node $(node -v) / npm $(npm -v) / $(uname -sm 2>/dev/null || echo windows)"
+          exit $FAIL
+
+      - name: npx kablan@${{ needs.version.outputs.version }}
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -o pipefail
+          # The server runs until killed, so the wrapper is backgrounded and probed. A timeout
+          # bounds the case where it hangs waiting on something that will never arrive.
+          npx -y "kablan@$VERSION" > launch.log 2>&1 &
+          NPX_PID=$!
+
+          # Rust's env::temp_dir() and bash disagree about what the temp directory is called on
+          # Windows — $TEMP there is a backslash path that `test -f` will not match — so every
+          # plausible spelling is checked rather than guessed at.
+          CANDIDATES="${TMPDIR:-/tmp}/kablan/kablan.port /tmp/kablan/kablan.port"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CANDIDATES="$(cygpath -u "$TEMP" 2>/dev/null)/kablan/kablan.port $CANDIDATES"
+          fi
+
+          read_port() {
+            for f in $CANDIDATES; do
+              if [ -f "$f" ]; then tr -d '[:space:]' < "$f"; return 0; fi
+            done
+            return 1
+          }
+
+          PORT=""
+          for i in $(seq 1 90); do
+            if ! kill -0 $NPX_PID 2>/dev/null; then
+              echo "::error title=${{ matrix.label }}::wrapper exited before serving"
+              cat launch.log; exit 1
+            fi
+            PORT=$(read_port) && [ -n "$PORT" ] && break
+            PORT=""
+            sleep 2
+          done
+
+          if [ -z "$PORT" ]; then
+            echo "::error title=${{ matrix.label }}::no port file after 180s. Looked in: $CANDIDATES"
+            cat launch.log; kill $NPX_PID 2>/dev/null; exit 1
+          fi
+
+          echo "Server reported port $PORT"
+          if ! curl -fsS --max-time 20 "http://127.0.0.1:$PORT/" -o index.html; then
+            echo "::error title=${{ matrix.label }}::port $PORT did not serve HTTP"
+            cat launch.log; kill $NPX_PID 2>/dev/null; exit 1
+          fi
+
+          echo "::group::launch log"; cat launch.log; echo "::endgroup::"
+          echo "✓ ${{ matrix.label }}: served $(wc -c < index.html) bytes on :$PORT"
+          kill $NPX_PID 2>/dev/null || true
+
+      - name: Cache landed where the wrapper says it does
+        shell: bash
+        run: |
+          # A download that works but caches nowhere means every run re-downloads 17MB.
+          if [ -d "$HOME/.kablan/bin/v${{ needs.version.outputs.version }}" ]; then
+            echo "✓ cached:"; ls -la "$HOME/.kablan/bin/v${{ needs.version.outputs.version }}"/*
+          else
+            echo "::warning::nothing cached under ~/.kablan/bin/v${{ needs.version.outputs.version }}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cold-start-${{ matrix.os }}
+          path: launch.log
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------------------
+  # The wrapper names six platforms in its unsupported-platform message. The release ships four.
+  # Whichever way that gap is closed, it should not reopen silently.
+  # ---------------------------------------------------------------------------------------
+  advertised-platforms-exist:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every platform the wrapper advertises has an asset
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          BASE="https://github.com/AmarShaked/kablan.dev/releases/download/v$V"
+          MISSING=0
+          for p in linux-x64 linux-arm64 windows-x64 windows-arm64 macos-x64 macos-arm64; do
+            CODE=$(curl -sSL -o /dev/null -w '%{http_code}' "$BASE/kablan-$p.zip")
+            if [ "$CODE" = "200" ]; then
+              echo "✓ kablan-$p.zip"
+            else
+              echo "::error title=Missing asset::kablan-$p.zip is advertised by npx-cli/bin/cli.js but returns HTTP $CODE"
+              MISSING=1
+            fi
+          done
+          exit $MISSING
